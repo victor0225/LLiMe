@@ -11,7 +11,8 @@ import { HOST, parseConfig } from '../src/config.js';
 import { type Activity, type Command, type ErrorCode, MATCHING_VERSION, type NotificationOutbox, type RunState, RunStateSchema } from '../src/domain.js';
 import { EventSchema, type EventType, type RunEvent, RunSnapshotSchema } from '../src/events.js';
 import { BootstrapSchema, HttpErrorSchema, LessonStatusSchema, LESSON_TEXT_MAX_BYTES, ROUTES, MAX_JSON_BODY_BYTES, routePath, SESSION_HEADER, VoiceSnapshotSchema, type VoiceSnapshot } from '../src/routes.js';
-import { bootServer, type BootOptions, type RunRecord, type RunningServer, type ServerPorts, SHUTDOWN_DEADLINE_MS } from '../src/server.js';
+import { bootServer, type BootOptions, type RunningServer, type ServerPorts, SHUTDOWN_DEADLINE_MS } from '../src/server.js';
+import type { RunRecord } from '../src/store.js';
 
 // The configured port drives the Host and Origin checks; each test server listens on a free port and
 // requests carry the configured Host, as the browser would.
@@ -153,53 +154,53 @@ class StubEngine {
     private readonly calls: string[],
   ) {}
 
-  async createRun(input: { seed?: number }): Promise<RunRecord> {
-    this.calls.push('engine.createRun');
-    const id = `run-${this.store.runs.size + 1}`;
-    this.store.add(id, runState({ seed: input.seed ?? 42 }));
-    return this.store.getRun(id);
-  }
-
-  async command(runId: string, command: Command): Promise<RunRecord> {
+  async command(runId: string, command: Command): Promise<{ run: RunRecord; replayed: boolean }> {
     this.calls.push(`engine.command:${command.type}`);
     await this.hold;
-    const record = await this.transition(runId, command.commandId, command.revision, command);
+    const outcome = await this.transition(runId, command.commandId, command.revision, command);
     this.calls.push(`engine.command:${command.type}:done`);
-    return record;
+    return outcome;
   }
 
-  async voiceCommand(runId: string, command: { type: string; commandId: string; expectedRunRevision: number }): Promise<RunRecord> {
-    this.calls.push(`engine.voiceCommand:${command.type}`);
+  async typedCorrection(runId: string, command: { commandId: string; expectedRunRevision: number }) {
+    this.calls.push('engine.typedCorrection');
     return this.transition(runId, command.commandId, command.expectedRunRevision, command);
   }
 
-  private async transition(runId: string, commandId: string, revision: number, body: unknown): Promise<RunRecord> {
+  async activityRendered(runId: string, command: { commandId: string; expectedRunRevision: number }) {
+    this.calls.push('engine.activityRendered');
+    return this.transition(runId, command.commandId, command.expectedRunRevision, command);
+  }
+
+  private async transition(runId: string, commandId: string, revision: number, body: unknown): Promise<{ run: RunRecord; replayed: boolean }> {
     const run = await this.store.getRun(runId);
     const prior = this.receipts.get(`${runId}:${commandId}`);
     if (prior) {
       if (prior.body !== JSON.stringify(body)) throw laneError('CONFLICT', 'The same command was already committed with different content', this.conflictWithoutRevision ? undefined : run.revision);
-      return prior.record;
+      return { run: prior.record, replayed: true };
     }
     if (run.revision !== revision) throw laneError('STALE_REVISION', `The run is at revision ${run.revision}, not ${revision}`, run.revision);
     const record = this.store.commit(runId, run.state);
     this.receipts.set(`${runId}:${commandId}`, { body: JSON.stringify(body), record });
-    return record;
+    return { run: record, replayed: false };
   }
 
-  // Interrupted runs move to ERROR exactly once; their cleanup, like a stopped run's, is retried every boot.
-  async recoverInterrupted(): Promise<{ cleanupRunIds: string[] }> {
+  // Interrupted runs move to ERROR exactly once; a stopped run's cleanup is repeated every boot.
+  async recoverInterrupted(): Promise<{ interrupted: string[]; cleaned: string[] }> {
     this.calls.push('engine.recoverInterrupted');
+    const interrupted: string[] = [];
+    const cleaned: string[] = [];
     for (const [id, { record }] of this.store.runs) {
-      if (record.state.phase === 'PROCESSING' && !record.state.stopped && !this.recovered.has(id)) {
+      if (record.state.stopped) {
+        this.calls.push(`engine.cleanup:${id}`);
+        cleaned.push(id);
+      } else if (record.state.phase === 'PROCESSING' && !this.recovered.has(id)) {
         this.store.commit(id, { ...record.state, phase: 'ERROR' });
         this.recovered.add(id);
+        interrupted.push(id);
       }
     }
-    return { cleanupRunIds: [...this.store.runs.values()].filter(({ record }) => record.state.stopped || this.recovered.has(record.id)).map(({ record }) => record.id) };
-  }
-
-  async settle(): Promise<void> {
-    this.calls.push('engine.settle');
+    return { interrupted, cleaned };
   }
 }
 
@@ -221,6 +222,12 @@ function makeWorld(): World {
     },
     ports: {
       store,
+      createRun: async (input) => {
+        calls.push('store.createRun');
+        const id = `run-${store.runs.size + 1}`;
+        store.add(id, runState({ seed: input.seed ?? 42 }));
+        return store.getRun(id);
+      },
       engine,
       lessons: {
         readLesson: async (runId) => {
@@ -245,14 +252,8 @@ function makeWorld(): World {
           calls.push(`voice.command:${command.type}`);
           return { ...VOICE_SNAPSHOT, audioGate: command.type === 'audio_gate_closed' ? 'closed' : 'open' };
         },
-        closeRun: async (runId) => {
-          calls.push(`voice.closeRun:${runId}`);
-        },
       },
       runtime: {
-        interruptRun: async (runId) => {
-          calls.push(`runtime.interruptRun:${runId}`);
-        },
         interruptActiveTurns: async () => {
           calls.push('runtime.interruptActiveTurns');
         },
@@ -538,9 +539,9 @@ describe('voice routes', () => {
       const closed = await post(server, path, { type: 'audio_gate_closed', commandId: uuid(22), expectedRunRevision: 2, voiceSessionId: 'live-1' });
       assert.equal(VoiceSnapshotSchema.parse(json(closed)).audioGate, 'closed');
       await post(server, path, { type: 'close_voice', commandId: uuid(23), expectedRunRevision: 2, voiceSessionId: 'live-1' });
-      assert.deepEqual(world.calls.filter((c) => c.startsWith('engine.voiceCommand') || c.startsWith('voice.command')), [
-        'engine.voiceCommand:typed_correction',
-        'engine.voiceCommand:activity_rendered',
+      assert.deepEqual(world.calls.filter((c) => c === 'engine.typedCorrection' || c === 'engine.activityRendered' || c.startsWith('voice.command')), [
+        'engine.typedCorrection',
+        'engine.activityRendered',
         'voice.command:audio_gate_closed',
         'voice.command:close_voice',
       ]);
@@ -613,6 +614,28 @@ describe('static files', () => {
   });
 });
 
+describe('lanes not yet bound', () => {
+  test('without the engine, voice and Codex modules their routes answer NOT_READY, while runs, events and lessons work (stub store, stub inbox)', async () => {
+    const world = makeWorld();
+    world.ports = { ...world.ports, engine: undefined, voice: undefined, runtime: undefined };
+    await withServer(async (server) => {
+      const created = await post(server, routePath('createRun'), { seed: 8 });
+      assert.equal(created.status, 201);
+      const runId = RunSnapshotSchema.parse(json(created)).id;
+      assert.equal((await send(server, { path: routePath('getRun', { runId }) })).status, 200);
+      assert.equal((await eventsAfter(server, runId, '0')).status, 200);
+      assert.equal((await post(server, routePath('saveLesson', { runId }), { text: 'Today we add.' })).status, 202);
+      const unbound = [
+        await post(server, routePath('runCommand', { runId }), accept(60, 0)),
+        await post(server, routePath('createVoiceSession', { runId }), { commandId: uuid(61), expectedRevision: 0, sdpOffer: 'v=0 offer' }),
+        await send(server, { path: routePath('voiceSnapshot', { runId }) }),
+        await post(server, routePath('voiceCommand', { runId }), { type: 'close_voice', commandId: uuid(62), expectedRunRevision: 0, voiceSessionId: 'live-1' }),
+      ];
+      assert.deepEqual(unbound.map((r) => [r.status, errorOf(r).code]), Array(4).fill([503, 'NOT_READY']));
+    }, world);
+  });
+});
+
 describe('lifecycle', () => {
   test('boot runs recoverInterrupted before the first writable request; a second boot changes nothing (stub engine)', async () => {
     const world = makeWorld();
@@ -636,12 +659,9 @@ describe('lifecycle', () => {
     } finally {
       await running.shutdown();
     }
-    assert.deepEqual(world.calls.slice(0, 8), [
+    assert.deepEqual(world.calls.slice(0, 5), [
       'engine.recoverInterrupted',
-      'runtime.interruptRun:run-interrupted',
-      'voice.closeRun:run-interrupted',
-      'runtime.interruptRun:run-stopped',
-      'voice.closeRun:run-stopped',
+      'engine.cleanup:run-stopped',
       'inbox.start',
       'outbox.start',
       'engine.command:accept',
@@ -654,7 +674,7 @@ describe('lifecycle', () => {
     await second.shutdown();
     assert.equal(JSON.stringify([...world.store.runs]), afterFirstBoot, 'a second boot commits nothing');
     const secondBootCalls = world.calls.slice(callsBefore);
-    assert.ok(secondBootCalls.includes('runtime.interruptRun:run-stopped'), 'resource cleanup is retried');
+    assert.ok(secondBootCalls.includes('engine.cleanup:run-stopped'), 'resource cleanup is retried');
     assert.equal(secondBootCalls.filter((c) => c.startsWith('engine.command')).length, 0, 'no learning or model work is restarted');
   });
 
@@ -667,7 +687,7 @@ describe('lifecycle', () => {
       const report = await running.stopped;
       assert.deepEqual([report.forced, report.failures], [false, []]);
       assert.ok(performance.now() - started < SHUTDOWN_DEADLINE_MS);
-      const order = ['inbox.stop', 'outbox.stop', 'runtime.interruptActiveTurns', 'engine.settle', 'store.close', 'runtime.close'].map((c) => world.calls.indexOf(c));
+      const order = ['inbox.stop', 'outbox.stop', 'runtime.interruptActiveTurns', 'store.close', 'runtime.close'].map((c) => world.calls.indexOf(c));
       assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > (order[i - 1] ?? -1))), `shutdown order: ${world.calls.join(', ')}`);
       await assert.rejects(
         new Promise<void>((resolve, reject) => connect(running.port, HOST).once('connect', resolve).once('error', reject)),
