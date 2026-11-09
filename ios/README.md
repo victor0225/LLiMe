@@ -16,7 +16,7 @@ The WebView loads one loopback origin. Resolution order:
 1. launch argument `-LLIME_ORIGIN <url>` (each Task passes its own port)
 2. the origin from the last such launch argument, remembered so a launch the OS starts from a notification
    tap (which passes no arguments) reaches the same backend
-3. `LLIME_ORIGIN` in `Config/Info.plist` (default `http://127.0.0.1:4210`)
+3. `LLIME_ORIGIN` in `Config/Info.plist` (default `http://127.0.0.1:4317`, the server's default origin)
 
 Only `http`/`https` on `127.0.0.1` or `localhost` is accepted; anything else shows an error screen. The
 WebView only navigates within that exact origin (scheme, host and port), so it never reaches another

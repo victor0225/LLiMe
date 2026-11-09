@@ -21,7 +21,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LLIME_ORIGIN</key>
-	<string>http://127.0.0.1:4210</string>
+	<string>http://127.0.0.1:4317</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
