@@ -9,7 +9,7 @@ import { countHelpers } from '../src/ui/activity-catalog';
 import { type ActivityFixture, makeTenIndependent, makeTenSupport, numberLineIndependent, numberLineSupport } from '../src/ui/activity-fixtures';
 import { ActivityView, type NumberLineSlot } from '../web/activity/ActivityView';
 import { createEventStore, useRunEvents } from '../web/lib/event-store';
-import { Practice, sendPracticeAttempt } from '../web/student/Practice';
+import { Practice } from '../web/student/Practice';
 
 // Stories mount the real host, workspace and event store with the derived fixtures. A story server
 // stands in for the app server; the voice commands it receives and the submitted attempts are written
@@ -76,6 +76,9 @@ const DELIVERIES: { label: string; activity: Activity }[] = [
 const brokenNumberLine: NumberLineSlot = () => {
   throw new Error('Story number line failed to render');
 };
+
+// Stories have no app server for learning commands, so a number-line check is reported as not saved.
+const notSaved = async (): Promise<'failed'> => 'failed';
 
 type LogEntry = { kind: 'activity_rendered' | 'submit'; detail: unknown };
 
@@ -170,7 +173,7 @@ function Harness({ initial, numberLine, deliveries = [], independentStart = 'rea
           activity={run.activity}
           store={server.store}
           voiceSessionId={null}
-          numberLine={numberLine ?? ((shown) => <Practice activity={shown} phase={run.phase} voiceOff={false} submit={sendPracticeAttempt(server.store, shown)} />)}
+          numberLine={numberLine ?? ((shown) => <Practice activity={shown} phase={run.phase} voiceOff={false} submit={notSaved} />)}
           independentStart={independentStart}
           onSubmit={(target, attempt) => setLog((entries) => [...entries, { kind: 'submit', detail: { target, attempt } }])}
         />
