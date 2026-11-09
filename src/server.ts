@@ -223,7 +223,7 @@ export function createAppServer({ config, nonce, handlers = {}, frontend }: { co
   // Every client addresses the backend by this one host; a proxy in front of it must rewrite Host.
   const allowedHosts = new Set([`${HOST}:${config.port}`]);
   // Mutations may come from the app itself or from the configured local Vite and Storybook pages.
-  const allowedOrigins = new Set([config.appOrigin, `http://${HOST}:${config.vitePort}`, `http://${HOST}:${config.storybookPort}`]);
+  const allowedOrigins = new Set([config.appOrigin, `http://${HOST}:${config.vitePort}`, config.storybookOrigin]);
   const serveFrontend = frontend.kind === 'static' ? serveBuilt(frontend.distDir) : proxyToVite(config.vitePort);
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL) {
@@ -274,7 +274,7 @@ export function createAppServer({ config, nonce, handlers = {}, frontend }: { co
     };
     handle().catch((error: unknown) => {
       const errorId = `err_${randomBytes(8).toString('hex')}`;
-      console.error(`[${errorId}]`, error);
+      console.error(`Request failed (error ${errorId}):`, error);
       if (!res.headersSent) sendJson(res, HTTP_STATUS.internalError, INTERNAL(errorId));
       else res.destroy();
     });
