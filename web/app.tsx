@@ -1,7 +1,11 @@
 import { STUDENT_COPY } from '@core/copy';
+import { LessonNotes } from './notes/LessonNotes';
 
 // Root of every surface. Screens join here by URL path as their lanes deliver them.
 export function App() {
+  const { pathname, search } = window.location;
+  const runId = new URLSearchParams(search).get('runId');
+  if (pathname === '/lesson-notes') return <LessonNotes runId={runId} />;
   return (
     <main
       style={{
