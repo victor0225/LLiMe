@@ -14,12 +14,18 @@ export const DEFAULT_BUNDLE_ID = 'com.llime.demo';
 const SIMCTL_TIMEOUT_MS = 15_000;
 const STDERR_CAPTURE_MAX_CHARS = 4_000;
 
+// `simctl get_app_container` exits with the POSIX "no such file" code when the bundle is not installed.
+// Other non-zero exits (a shut-down device, for one) say nothing about the app and keep their own code.
+const APP_CONTAINER_MISSING_EXIT_CODE = 2;
+
 // The only variables a child needs to find Xcode. Everything else, provider keys included, stays out.
 const CHILD_ENV_ALLOWLIST = ['PATH', 'HOME', 'USER', 'TMPDIR', 'LANG', 'DEVELOPER_DIR'] as const;
 
 export const NOTIFY_ERROR_CODES = {
   rowInvalid: 'OUTBOX_ROW_INVALID',
   payloadInvalid: 'PAYLOAD_INVALID',
+  appNotInstalled: 'APP_NOT_INSTALLED',
+  preflightInterrupted: 'PREFLIGHT_INTERRUPTED',
   notStarted: 'SIMCTL_NOT_STARTED',
   interrupted: 'DISPATCH_INTERRUPTED',
   receiptFailed: 'RECEIPT_WRITE_FAILED',
@@ -63,6 +69,7 @@ export interface NotifyDeps {
   config: NotifyConfig;
 }
 
+// `injected` means the simulator accepted the push, not that the OS displayed it or the child opened it.
 export type DispatchResult =
   | { outcome: 'injected' }
   | { outcome: 'skipped'; reason: 'not_pending' }
@@ -88,6 +95,11 @@ export async function dispatchNotification(notificationId: string, deps: NotifyD
   });
   if (!payload.success) return refuse(store, notificationId, NOTIFY_ERROR_CODES.payloadInvalid);
 
+  // `simctl push` exits 0 even when the bundle is not installed, so exit 0 alone cannot be trusted
+  // to mean the app exists. Nothing has been pushed yet, so a preflight failure is a plain failure.
+  const preflightFailure = await findPreflightFailure(runSimctl, config);
+  if (preflightFailure !== null) return settleFailed(store, notificationId, preflightFailure);
+
   let result: SimctlResult;
   try {
     result = await runSimctl('xcrun', ['simctl', 'push', config.deviceUdid, config.bundleId, '-'], JSON.stringify(payload.data));
@@ -103,6 +115,26 @@ export async function dispatchNotification(notificationId: string, deps: NotifyD
       return settleFailed(store, notificationId, NOTIFY_ERROR_CODES.notStarted);
     case 'interrupted':
       return settleUnknown(store, notificationId, NOTIFY_ERROR_CODES.interrupted);
+    default:
+      return assertNever(result);
+  }
+}
+
+async function findPreflightFailure(runSimctl: SimctlRunner, config: NotifyConfig): Promise<string | null> {
+  let result: SimctlResult;
+  try {
+    result = await runSimctl('xcrun', ['simctl', 'get_app_container', config.deviceUdid, config.bundleId], '');
+  } catch {
+    return NOTIFY_ERROR_CODES.preflightInterrupted;
+  }
+  switch (result.kind) {
+    case 'exited':
+      if (result.exitCode === 0) return null;
+      return result.exitCode === APP_CONTAINER_MISSING_EXIT_CODE ? NOTIFY_ERROR_CODES.appNotInstalled : NOTIFY_ERROR_CODES.simctlExit(result.exitCode);
+    case 'not_started':
+      return NOTIFY_ERROR_CODES.notStarted;
+    case 'interrupted':
+      return NOTIFY_ERROR_CODES.preflightInterrupted;
     default:
       return assertNever(result);
   }

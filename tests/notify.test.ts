@@ -74,13 +74,17 @@ function memoryStore(rows: NotificationOutbox[], options: { failSentReceipt?: bo
   return { store, row: get, sentEvents, calls };
 }
 
-function stubSimctl(result: SimctlResult | (() => Promise<SimctlResult>) = { kind: 'exited', exitCode: 0, stderr: '' }) {
-  const invocations: { command: string; args: readonly string[]; stdin: string }[] = [];
+const EXITED_OK: SimctlResult = { kind: 'exited', exitCode: 0, stderr: '' };
+
+// `invocations` holds the pushes only; `all` holds every subprocess in order, preflight included.
+function stubSimctl(push: SimctlResult | (() => Promise<SimctlResult>) = EXITED_OK, preflight: SimctlResult | (() => Promise<SimctlResult>) = EXITED_OK) {
+  const all: { command: string; args: readonly string[]; stdin: string }[] = [];
   const run: SimctlRunner = async (command, args, stdin) => {
-    invocations.push({ command, args, stdin });
-    return typeof result === 'function' ? result() : result;
+    all.push({ command, args, stdin });
+    const answer = args[1] === 'get_app_container' ? preflight : push;
+    return typeof answer === 'function' ? answer() : answer;
   };
-  return { run, invocations };
+  return { run, all, get invocations() { return all.filter((call) => call.args[1] === 'push'); } };
 }
 
 describe('dispatchNotification', () => {
@@ -248,6 +252,56 @@ describe('dispatchNotification', () => {
     // The store port the dispatcher receives has no activity operation to call.
     const { store } = memoryStore([outboxRow()]);
     assert.deepEqual(Object.keys(store).sort(), ['claimNotification', 'listDispatchingNotifications', 'markNotificationFailed', 'markNotificationSent', 'markNotificationUnknown']);
+  });
+
+  test('the app is checked with an argument array before the push, and every simctl call names the explicit UDID (stubbed simctl)', async () => {
+    const { store } = memoryStore([outboxRow()]);
+    const simctl = stubSimctl();
+    await dispatchNotification('ntf_1', { store, runSimctl: simctl.run, config });
+
+    assert.deepEqual(
+      simctl.all.map((call) => [call.command, ...call.args]),
+      [
+        ['xcrun', 'simctl', 'get_app_container', UDID, DEFAULT_BUNDLE_ID],
+        ['xcrun', 'simctl', 'push', UDID, DEFAULT_BUNDLE_ID, '-'],
+      ],
+    );
+  });
+
+  test('a bundle that is not installed is marked failed APP_NOT_INSTALLED and nothing is pushed (stubbed simctl)', async () => {
+    const { store, row, sentEvents, calls } = memoryStore([outboxRow()]);
+    const simctl = stubSimctl(EXITED_OK, { kind: 'exited', exitCode: 2, stderr: 'No such file or directory' });
+    const result = await dispatchNotification('ntf_1', { store, runSimctl: simctl.run, config });
+
+    assert.deepEqual(result, { outcome: 'failed', code: 'APP_NOT_INSTALLED' });
+    assert.equal(simctl.invocations.length, 0);
+    assert.deepEqual(calls, ['claim', 'markFailed']);
+    assert.equal(row('ntf_1').lastErrorCode, 'APP_NOT_INSTALLED');
+    assert.equal(sentEvents.length, 0);
+  });
+
+  test('a preflight that cannot answer marks failed and nothing is pushed (stubbed simctl)', async () => {
+    const preflights: [SimctlResult | (() => Promise<SimctlResult>), string][] = [
+      [{ kind: 'exited', exitCode: 149, stderr: 'Unable to lookup in current state: Shutdown' }, 'SIMCTL_EXIT_149'],
+      [{ kind: 'not_started', reason: 'spawn ENOENT' }, 'SIMCTL_NOT_STARTED'],
+      [{ kind: 'interrupted', reason: 'timeout' }, 'PREFLIGHT_INTERRUPTED'],
+      [
+        async () => {
+          throw new Error('runner crashed');
+        },
+        'PREFLIGHT_INTERRUPTED',
+      ],
+    ];
+    for (const [preflight, code] of preflights) {
+      const { store, row, sentEvents } = memoryStore([outboxRow()]);
+      const simctl = stubSimctl(EXITED_OK, preflight);
+      const result = await dispatchNotification('ntf_1', { store, runSimctl: simctl.run, config });
+
+      assert.deepEqual(result, { outcome: 'failed', code });
+      assert.equal(simctl.invocations.length, 0, code);
+      assert.equal(row('ntf_1').status, 'failed');
+      assert.equal(sentEvents.length, 0);
+    }
   });
 
   test('an invalid outbox row is refused before any subprocess starts (stubbed simctl)', async () => {
