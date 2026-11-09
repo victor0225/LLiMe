@@ -122,7 +122,7 @@ export type AskedQuestion = { text: string; meaning: QuestionMeaning };
 
 // Carries the earlier rounds into the newest one: earlier explanations, hypotheses and questions become
 // `prior_` records linked forward by NEXT, so a later round supersedes but never erases them. The search
-// is narrowed to the newest round, so copied history never changes what is matched. A correction answers
+// is narrowed to the newest round, so carried-over history never changes what is matched. A correction answers
 // no new question, so it passes null and only the NEXT link is added.
 export function appendClarification(current: LearningCase, prior: LearningCase, question: AskedQuestion | null): LearningCase {
   const priorPrefix = `${prior.id}:`;

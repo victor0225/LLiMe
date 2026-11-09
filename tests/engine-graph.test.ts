@@ -89,7 +89,7 @@ describe('appendClarification', () => {
     assert.ok(merged.sources.some((s) => s.id === 'run_context_2:question_source' && s.text === 'Which number did you count first?'));
   });
 
-  test('searches only the newest round, so the copied history never changes the match', () => {
+  test('searches only the newest round, so carried-over history never changes the match', () => {
     assert.ok(merged.retrievalContext);
     assert.deepEqual(new Set(merged.retrievalContext.nodeIds), new Set(current.nodes.map((n) => n.id)));
     assert.deepEqual(paths(merged).map((p) => p.key).sort(), paths(current).map((p) => p.key).sort());
