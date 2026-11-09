@@ -15,3 +15,6 @@ playwright-report/
 
 # Editor and OS noise
 .DS_Store
+
+# Project skills are part of the repository even where a global excludes file ignores .claude/
+!.claude/
