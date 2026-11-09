@@ -79,6 +79,11 @@ export const STUDENT_COPY = {
   startNewRun: 'Start a new run',
   pause: 'Pause',
   doneCollapsed: 'See you next time.',
+  wordmark: 'llime',
+  // While the first run snapshot is loading; distinct from the waiting screen, which is real state.
+  loading: 'Opening your learning space…',
+  // The link has no run, or the server does not know it.
+  runUnavailable: 'This learning space isn’t available right now.',
 } as const;
 
 // The OS notification after an invitation commits. It carries no transcript, explanation or diagnosis.
@@ -148,4 +153,6 @@ export const LESSON_NOTES_COPY = {
   fileTooLarge: 'This file is larger than 16 KB.',
   notUtf8: 'This file isn\'t plain UTF-8 text.',
   textTooLarge: 'Shorten the transcript to 16 KB or less.',
+  // The page was opened without a run, or for a run the server does not know.
+  runUnavailable: 'This lesson link has no run. Open Lesson notes for a new run.',
 } as const;
