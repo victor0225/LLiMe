@@ -206,6 +206,21 @@ describe('browser voice client', () => {
     assert.equal(client.getSnapshot().status, 'disconnected');
   });
 
+  test('mocked provider: a microphone track that ends during a live session leaves listening for the unavailable recovery once and closes the session', async () => {
+    const { b, s, client } = await liveClient();
+    await client.start();
+    await settle();
+    assert.equal(client.getSnapshot().status, 'listening');
+    const ended = b.track.onended;
+    assert.ok(ended);
+    ended();
+    ended();
+    await settle();
+    assert.deepEqual([client.getSnapshot().phase, client.getSnapshot().status, client.getSnapshot().failure], ['failed', 'disconnected', 'unavailable']);
+    assert.equal(s.log.filter((entry) => entry === 'server.closeVoice').length, 1);
+    assert.equal(b.track.onended, null);
+  });
+
   test('mocked provider: a denied microphone fails visibly and typed input still works, labeled as typed', async () => {
     const { s, client } = await liveClient({ denyMicrophone: true });
     await client.start();
