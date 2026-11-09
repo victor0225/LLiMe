@@ -14,7 +14,9 @@ import {
   MATCHING_VERSION,
   NEO4J_LABELS,
   NotificationOutboxSchema,
+  OutcomeSchema,
   RunStateSchema,
+  StrategySchema,
   VoiceOperationSchema,
   VoiceOperationStatusSchema,
   type Activity,
@@ -407,8 +409,8 @@ export class Store {
         return {
           id: str(r.get('id')),
           concept: ConceptSchema.parse(concept),
-          strategy: z.custom<Strategy>((v) => typeof v === 'string').parse(r.get('strategy')),
-          outcome: z.custom<Outcome>((v) => typeof v === 'string').parse(r.get('outcome')),
+          strategy: StrategySchema.parse(r.get('strategy')),
+          outcome: OutcomeSchema.parse(r.get('outcome')),
           createdAt: str(r.get('createdAt')),
           nodeIds: payload.nodes.map((n) => n.id),
         };
