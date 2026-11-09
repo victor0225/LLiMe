@@ -7,13 +7,13 @@ import { ACTIVITY_COPY, STUDENT_COPY } from './copy.js';
 import { compactSha256 } from './dataset.js';
 import {
   type Activity,
-  type ActivityContext,
   type ActivitySpec,
   type AnyAttempt,
   type Attempt,
   AttemptSchema,
   CATALOG_VERSION,
   type Command,
+  COMMAND_PHASES,
   CommandSchema,
   type Criterion,
   type Decision,
@@ -32,14 +32,13 @@ import {
   type SavedAttempt,
   TEMPLATE_KIND,
   type TemplateId,
-  type Workspace,
 } from './domain.js';
 import type { EventPayload } from './events.js';
-import { type AskedQuestion, QUESTION_MEANING } from './graph.js';
+import { type AskedQuestion, contextCaseId, QUESTION_MEANING, speechSourceId } from './graph.js';
 import { problemRefOf } from './problems.js';
 import { ActivityRenderedCommandSchema, VoiceCommandSchema } from './routes.js';
 import { DomainError, type Mutation, type NewEvent, type RunRecord, RunRecordSchema, type Store, type TransitionContext, type VoiceOperationChange } from './store.js';
-import { ActivityValidationError, countHelpers, validateActivity } from './ui/activity-catalog.js';
+import { activityContextOf, countHelpers, validateActivity } from './ui/activity-catalog.js';
 
 // ---------------------------------------------------------------------------------------------
 // Limits
@@ -234,23 +233,6 @@ export function buildActivity(draft: ActivityDraft): Activity {
   };
 }
 
-const WORKSPACE_OF_TEMPLATE: Partial<Record<TemplateId, Workspace>> = {
-  anchor_start_number_line: 'NumberLine',
-  independent_number_line: 'NumberLine',
-  make_ten_blocks: 'MakeTenWorkspace',
-  independent_make_ten: 'MakeTenWorkspace',
-};
-
-// The validation context a generated spec must match, derived only from the stored activity.
-// TODO: replace with activityContextOf from the activity catalog once that export lands on integration;
-// this local version exists only until then.
-export function activityContextOf(activity: Activity): ActivityContext {
-  const workspace = WORKSPACE_OF_TEMPLATE[activity.templateId];
-  const phase = activity.kind === 'support' || activity.kind === 'independent' ? activity.kind : null;
-  if (workspace === undefined || phase === null || activity.problem === null) throw new ActivityValidationError(`Activity ${activity.id} has no generated workspace`);
-  return { activityId: activity.id, revision: activity.revision, phase, workspace, problemRef: problemRefOf(activity.problem), start: activity.problem.lhs, addend: activity.problem.rhs, evidenceIds: activity.evidenceIds };
-}
-
 // The independent check follows the support's representation and has no helpers at all.
 function independentDraft(runId: string, revision: number, support: Activity, problem: Problem): ActivityDraft {
   const makeTen = support.templateId === 'make_ten_blocks';
@@ -294,9 +276,14 @@ export type VerificationTurnInput = {
   expectedRevision: number;
 };
 
+// The run as the runtime reads it when the turn actually starts.
+export type TurnRun = { revision: number; state: RunState };
+
 export type TurnRequest = { runId: string; operationId: string; cancellationEpoch: number } & (
   | { phase: 'explanation'; input: ExplanationTurnInput }
-  | { phase: 'verification'; input: VerificationTurnInput }
+  // Read when the turn starts, not when it was requested: opening a thread commits the runtime choice
+  // first, so a revision taken earlier would already be stale for commit_episode.
+  | { phase: 'verification'; input: (run: TurnRun) => VerificationTurnInput }
 );
 
 export type RuntimePort = {
@@ -482,9 +469,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
     }
     if (next.phase === 'CLARIFY') {
       // A failed retry is application policy: ask which number was counted first, on the same problem.
-      const problem = activity.problem ?? state.selectedProblems?.initial;
-      if (!problem) throw wrongPhase(ctx, 'practice');
-      const published = buildActivity({ runId, id: activityIdOf.clarification(runId, state.explanationRevision), revision, templateId: 'clarify_first_number', strategy: 'clarify', problem, spec: null, evidenceIds: [], decisionSummary: '' });
+      const published = buildActivity({ runId, id: activityIdOf.clarification(runId, state.explanationRevision), revision, templateId: 'clarify_first_number', strategy: 'clarify', problem: graded.problem, spec: null, evidenceIds: [], decisionSummary: '' });
       return {
         state: { ...state, phase: 'CLARIFY', attempts, activity: published, clarificationRounds: state.clarificationRounds + 1 },
         events: [{ type: 'activity.published', payload: { activity: published } }],
@@ -508,7 +493,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
       operationId,
       cancellationEpoch: state.cancellationEpoch,
       phase: 'verification',
-      input: { independentAttemptId: saved.id, supportAttemptId: supportAttempt?.id ?? null, activityId: activity.id, expectedRevision: ctx.revision + 1 },
+      input: (run) => ({ independentAttemptId: saved.id, supportAttemptId: supportAttempt?.id ?? null, activityId: activity.id, expectedRevision: run.revision }),
     };
     return {
       state: { ...state, attempts: [...state.attempts, saved] },
@@ -520,7 +505,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
 
   async function planStop(ctx: TransitionContext): Promise<Plan> {
     const { state } = ctx;
-    if (state.stopped || !COMMAND_STOPPABLE.includes(state.phase)) throw wrongPhase(ctx, 'stop_learning');
+    if (state.stopped || !COMMAND_PHASES.stop_learning.includes(state.phase)) throw wrongPhase(ctx, 'stop_learning');
     const open = requiredEffectPending(state) ? await latestOpenOperation(ctx) : null;
     const cancelled = open ? cancelOperation(open, 'stopped') : null;
     return {
@@ -563,7 +548,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
       operationId,
       cancellationEpoch,
       phase: 'explanation',
-      input: { explanationRevision, sourceId: `${runId}_context_${explanationRevision}:speech`, explanation: input.text, inputMode: input.provenance.inputMode, problem, attempt, question: question?.text ?? null },
+      input: { explanationRevision, sourceId: speechSourceId(contextCaseId(runId, explanationRevision)), explanation: input.text, inputMode: input.provenance.inputMode, problem, attempt, question: question?.text ?? null },
     };
     return {
       state: next,
@@ -736,9 +721,6 @@ export function createEngine({ store, runtime }: EngineDeps) {
 }
 
 export type Engine = ReturnType<typeof createEngine>;
-
-// Phases in which stop_learning is accepted: every phase that is not already final.
-const COMMAND_STOPPABLE: readonly RunPhase[] = ['WAITING', 'INGESTING', 'INVITED', 'INITIAL', 'EXPLAIN', 'PROCESSING', 'CLARIFY', 'PRACTICE', 'VERIFY', 'NEEDS_SUPPORT'];
 
 function phaseOfRuntime(phase: RunPhase): RuntimePhase | null {
   if (phase === 'INGESTING') return 'ingestion';

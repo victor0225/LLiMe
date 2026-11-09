@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { z } from 'zod';
-import { createCodexRuntime, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
+import { createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
+import type { OperationSettlement } from '../src/engine.js';
 import { TOOL_SCHEMAS, ToolNameSchema, type ToolName, type ToolResult } from '../src/domain.js';
 import type { ToolContext } from '../src/tools.js';
 import {
@@ -320,6 +321,8 @@ describe('turns and model', () => {
     assert.equal(events[0]?.payload.expectedTurnId, 'turn_1');
     assert.equal(events[0]?.payload.explanationRevision, 2);
     assert.equal(s.server.count('turn/start'), 1);
+    // The voice operation moves to steered in the same transition as turn.steered.
+    assert.deepEqual(s.store.voiceChanges, [{ kind: 'status', operationId: events[0]?.payload.operationId, status: 'steered', expected: ['started'], onMismatch: 'skip' }]);
 
     // The turn completes; a later steer has no active turn and starts a new one in the same thread.
     s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor('turn_1', 'completed') });
@@ -338,6 +341,37 @@ describe('turns and model', () => {
     assert.equal(s.server.count('turn/steer'), 2);
     assert.equal(s.store.ofType('turn.steered').length, 1);
     assert.equal(s.server.count('thread/start'), 1);
+  });
+
+  test('a steer for a superseded cancellation epoch is neither sent nor recorded (mocked Codex)', async () => {
+    const s = setup();
+    await startedTurn(s);
+    s.store.state = runState({ cancellationEpoch: 1 });
+    const steered = await s.runtime.trySteer({ runId: RUN_ID, phase: 'explanation', input: { text: 'late' }, explanationRevision: 5, operationId: 'op_late', cancellationEpoch: 0 });
+    assert.equal(steered, null);
+    assert.equal(s.server.count('turn/steer'), 0);
+    assert.equal(s.store.ofType('turn.steered').length, 0);
+    assert.deepEqual(s.store.voiceChanges, []);
+  });
+
+  test('a late tool call from a settled turn is refused and writes nothing (mocked Codex)', async () => {
+    const s = setup();
+    const turn = await startedTurn(s);
+    s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor(TURN_ID, 'interrupted') });
+    await turn.done;
+    const eventsBefore = s.store.events.length;
+    const stateBefore = JSON.stringify(s.store.state);
+    const late = await s.server.request('item/tool/call', callParams('call_late', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }), 'rpc-late');
+    assert.equal(late.id, 'rpc-late');
+    const text = (late.result as { success: boolean; contentItems: { text: string }[] }).contentItems[0]?.text ?? '';
+    assert.equal((late.result as { success: boolean }).success, false);
+    assert.equal(toolReplyText(text).error?.code, 'CANCELLED');
+    // A call naming a turn this thread never ran is refused the same way.
+    const unknown = await s.server.request('item/tool/call', { ...callParams('call_ghost', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }), turnId: 'turn_ghost' });
+    assert.equal(toolReplyText((unknown.result as { contentItems: { text: string }[] }).contentItems[0]?.text ?? '').error?.code, 'CANCELLED');
+    assert.equal(s.calls.length, 0);
+    assert.equal(s.store.events.length, eventsBefore);
+    assert.equal(JSON.stringify(s.store.state), stateBefore);
   });
 
   test('at 90 s the turn is interrupted and committed effects stay (mocked Codex)', async () => {
@@ -419,6 +453,59 @@ describe('turns and model', () => {
     assert.equal(attempts, 2);
     assert.deepEqual(s.store.ofType('tool.started').map((e) => e.payload.attempt), [1, 2]);
     assert.equal(s.store.ofType('tool.completed')[0]?.payload.attempt, 2);
+  });
+
+  test('stopping the server interrupts every active turn and keeps what was committed (mocked Codex)', async () => {
+    const s = setup();
+    const turn = await startedTurn(s);
+    await s.server.request('item/tool/call', callParams('call_k', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }));
+    await createServerRuntimePort(s.runtime).interruptActiveTurns();
+    const done = await turn.done;
+    assert.equal(done.status, 'interrupted');
+    assert.equal(done.error?.code, 'CANCELLED');
+    assert.equal(s.store.ofType('tool.completed').length, 1);
+  });
+
+  test('the ingestion turn carries the saved lesson, student, links, hash and the revision after the runtime choice, and settles a blocked result (mocked Codex)', async () => {
+    const s = setup();
+    const settled: OperationSettlement[] = [];
+    const startIngestionTurn = createIngestionStarter({ runtime: s.runtime, store: s.store, settle: async (_runId, settlement) => void settled.push(settlement) });
+    await startIngestionTurn(RUN_ID);
+    await until(() => s.server.count('turn/start') === 1, 'turn/start');
+    const data = (s.store.ofType('runtime.input')[0]?.payload.input as { data: Record<string, unknown> }).data;
+    assert.deepEqual(data.lessonInput, { text: 'Today we add 8 and 5.', provenance: 'synthetic lesson transcript saved to the run inbox', contentHash: 'lesson-hash' });
+    assert.equal(data.student, 'student_7');
+    assert.equal(data.corpusHash, 'corpus-hash');
+    assert.equal((data.conceptLinks as unknown[]).length, 1);
+    // The runtime choice was recorded first, so the revision the model must quote is the bumped one.
+    assert.equal(data.revision, s.store.revision);
+    assert.equal(s.store.revision, 4);
+    s.server.notify('item/completed', { threadId: THREAD_ID, turnId: TURN_ID, completedAtMs: 1, item: { type: 'agentMessage', id: 'm1', text: finalJson({ status: 'blocked', summary: 'no overlap' }), phase: 'final_answer' } });
+    s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor(TURN_ID, 'completed') });
+    await until(() => settled.length === 1, 'settlement');
+    assert.deepEqual(settled[0], { operationId: settled[0]?.operationId, phase: 'ingestion', cancellationEpoch: 0, status: 'blocked' });
+  });
+
+  test('an ingestion turn that cannot start settles the run as failed instead of leaving it ingesting (mocked Codex)', async () => {
+    const s = setup({ script: FakeAppServer.turnStartsWith(TURN_ID, defaultAnswers({ 'account/read': { account: null, requiresOpenaiAuth: true, workspaceRouting: null } })) });
+    const settled: OperationSettlement[] = [];
+    const startIngestionTurn = createIngestionStarter({ runtime: s.runtime, store: s.store, settle: async (_runId, settlement) => void settled.push(settlement) });
+    await assert.rejects(startIngestionTurn(RUN_ID), (e: unknown) => e instanceof RuntimeFailure && e.body.code === 'AUTH_REQUIRED');
+    assert.equal(settled.length, 1);
+    assert.equal(settled[0]?.status, 'failed');
+    assert.equal(settled[0]?.code, 'AUTH_REQUIRED');
+  });
+
+  test('interrupting a run through the engine port ends the turn and closes its child (mocked Codex)', async () => {
+    const s = setup();
+    const port = createRuntimePort({ runtime: s.runtime, settle: async () => undefined, closeVoice: async () => undefined });
+    const turn = await startedTurn(s);
+    const stopping = port.interruptTurn(RUN_ID);
+    await until(() => s.server.child.stdin.writableEnded, 'stdin closed');
+    s.server.child.exitCleanly();
+    await stopping;
+    assert.equal((await turn.done).status, 'interrupted');
+    assert.deepEqual(s.server.child.signals, []);
   });
 
   test('closing a run ends stdin and escalates only if the child does not exit (mocked Codex)', async () => {

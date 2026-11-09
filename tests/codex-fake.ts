@@ -253,6 +253,7 @@ export class FakeRunStore implements RuntimeStore {
   revision = 3;
   events: RunEvent[] = [];
   transitions: string[] = [];
+  voiceChanges: unknown[] = [];
   constructor(state: RunState = runState(), readonly runId = RUN_ID) {
     this.state = state;
   }
@@ -270,8 +271,9 @@ export class FakeRunStore implements RuntimeStore {
   }
   async transition<R>(request: TransitionRequest<R>): Promise<{ result: R; replayed: boolean }> {
     this.transitions.push(request.commandKey);
-    const mutation = await request.apply({ state: this.state, revision: this.revision, seq: this.events.length, now: '2026-11-09T10:00:02.000Z', eventsOfType: async () => [] });
+    const mutation = await request.apply({ state: this.state, revision: this.revision, seq: this.events.length, now: '2026-11-09T10:00:02.000Z', eventsOfType: async () => [], isActivityRendered: async () => false });
     this.state = RunStateSchema.parse(mutation.state);
+    this.voiceChanges.push(...(mutation.voiceOperations ?? []));
     this.revision += 1;
     await this.appendEvents(request.runId, [...mutation.events, { type: 'state.committed', payload: { phase: this.state.phase, revision: this.revision, caseIds: [] } }]);
     const result = typeof mutation.result === 'function' ? (mutation.result as (events: RunEvent[]) => R)(this.events) : mutation.result;
