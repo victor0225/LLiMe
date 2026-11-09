@@ -19,6 +19,7 @@ import {
   OutcomeSchema,
   RunPhaseSchema,
   RunStateSchema,
+  RuntimePhaseSchema,
   SearchResultSchema,
   SourceSchema,
   StrategySchema,
@@ -63,7 +64,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
   }),
   'operation.started': z.strictObject({
     operationId: IdSchema,
-    phase: z.enum(['ingestion', 'explanation', 'verification']),
+    phase: RuntimePhaseSchema,
     explanationRevision: revisionSchema.nullable(),
     cancellationEpoch: revisionSchema,
   }),
@@ -85,7 +86,7 @@ export const EVENT_PAYLOAD_SCHEMAS = {
     threadId: IdSchema,
     model: z.string().min(1),
     serviceTier: z.string().min(1).nullable(),
-    phase: z.enum(['ingestion', 'explanation', 'verification']),
+    phase: RuntimePhaseSchema,
     promptHash: z.string(),
     instructions: z.string(),
     input: z.unknown(),
@@ -237,5 +238,7 @@ export const RunSnapshotSchema = RunStateSchema.safeExtend({
   revision: revisionSchema,
   seq: z.number().int().min(0),
   execution: ExecutionSnapshotSchema,
-}).refine((s) => s.execution.throughSeq === s.seq, { message: 'The execution projection ends at the snapshot seq', path: ['execution', 'throughSeq'] });
+})
+  .refine((s) => s.execution.throughSeq === s.seq, { message: 'The execution projection ends at the snapshot seq', path: ['execution', 'throughSeq'] })
+  .refine((s) => s.execution.events.every((e) => e.runId === s.id), { message: 'The execution projection holds only this run\'s events', path: ['execution', 'events'] });
 export type RunSnapshot = z.infer<typeof RunSnapshotSchema>;

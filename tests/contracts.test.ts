@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { z } from 'zod';
-import { ACTIVITY_COPY, INVITATION_COPY, LESSON_NOTES_COPY, NOTIFICATION_COPY, SPOKEN_COPY, STUDENT_COPY } from '../src/copy.js';
+import { ACTIVITY_COPY, INVITATION_COPY, LESSON_NOTES_COPY, NOTIFICATION_COPY, problemQuestion, SPOKEN_COPY, STUDENT_COPY } from '../src/copy.js';
 import {
   type Activity,
   ActivitySchema,
@@ -14,11 +14,14 @@ import {
   CommandSchema,
   CommitEpisodeInputSchema,
   CommitEpisodeOutputSchema,
+  type ConceptLink,
+  type ContextCommit,
   CONTRACT_VERSION,
   ConceptLinkSchema,
   ConceptLinksSchema,
   CorrelationIdsSchema,
   GetPersonalMemoryInputSchema,
+  type GetPersonalMemoryOutput,
   GetPersonalMemoryOutputSchema,
   type LearningCase,
   NotificationOutboxSchema,
@@ -34,6 +37,9 @@ import {
   SearchLearningCasesInputSchema,
   type SearchLearningCasesInput,
   SearchLearningCasesOutputSchema,
+  type SupportActivityContext,
+  SupportActivityContextSchema,
+  DecisionSchema,
   type SearchResult,
   TEMPLATE_KIND,
   TemplateIdSchema,
@@ -41,6 +47,7 @@ import {
   ToolCallSchema,
   ToolNameSchema,
   ToolResultSchema,
+  type ToolSuccess,
   validateCase,
   VoiceOperationSchema,
 } from '../src/domain.js';
@@ -213,9 +220,9 @@ function filmSearch(): SearchResult {
   };
 }
 
-const contextCommit = () => ({ caseId: CONTEXT_ID, explanationRevision: 1, eventSeq: 14, nodeIds: [`${CONTEXT_ID}:attempt`], edgeIds: [`${CONTEXT_ID}:e0`], replayed: false });
+const contextCommit = (): ContextCommit => ({ caseId: CONTEXT_ID, explanationRevision: 1, eventSeq: 14, nodeIds: [`${CONTEXT_ID}:attempt`], edgeIds: [`${CONTEXT_ID}:e0`], replayed: false });
 
-const supportContext = () => ({
+const supportContext = (): SupportActivityContext => ({
   activityId: `${RUN_ID}_support_1`,
   revision: 8,
   phase: 'support',
@@ -276,7 +283,7 @@ const plainInput = (kind: 'retry' | 'clarification', templateId: 'manipulation_r
   activitySpec: null,
 });
 
-const memoryOutput = () => ({
+const memoryOutput = (): GetPersonalMemoryOutput => ({
   memorySnapshotId: `${RUN_ID}_memory_1`,
   studentId: 'student_7',
   corpusHash: CORPUS_HASH,
@@ -290,9 +297,11 @@ const memoryOutput = () => ({
 
 const assessment = () => ({ attemptId: `${RUN_ID}_initial`, passed: false, processCorrect: false, answerCorrect: false, hints: 0, retention: 'pending' });
 
+const searchSuccess = (): ToolSuccess => ({ ok: true, tool: 'search_learning_cases', data: { contextCommit: contextCommit(), search: filmSearch(), publicationContext: { expectedRevision: 7, activityContext: supportContext() } } });
+
 const commitOutput = () => ({ caseId: `${RUN_ID}_outcome`, strategy: 'make_ten', outcome: 'independent', retention: 'pending', newRevision: 12, eventSeq: 31 });
 
-const CONCEPT_LINKS = [
+const CONCEPT_LINKS: ConceptLink[] = [
   { from: 'subtraction', to: 'addition', kind: 'similar', reason: 'related arithmetic concepts: taking away and putting together' },
   { from: 'subtraction_within_20', to: 'subtraction', kind: 'subconcept', reason: 'subtraction within 20 is a scope of subtraction' },
   { from: 'addition_within_20', to: 'addition', kind: 'subconcept', reason: 'addition within 20 is a scope of addition' },
@@ -303,14 +312,14 @@ const toolRef = { threadId: 'thr_1', turnId: 'turn_1', callId: 'call_1', itemId:
 const SAMPLE_PAYLOADS: { readonly [T in EventType]: z.input<(typeof EVENT_PAYLOAD_SCHEMAS)[T]> } = {
   'state.committed': { phase: 'INVITED', revision: 2, caseIds: [] },
   'lesson.detected': { contentHash: '0ccc0c36', source: 'local_file', bytes: 2293 },
-  'memory.retrieved': { conceptIds: ['addition_within_20', 'subtraction_within_20'], caseIds: ['seed_7_0'], summaries: memoryOutput().summaries as never, links: CONCEPT_LINKS as never },
+  'memory.retrieved': { conceptIds: ['addition_within_20', 'subtraction_within_20'], caseIds: ['seed_7_0'], summaries: memoryOutput().summaries, links: CONCEPT_LINKS },
   'operation.started': { operationId: 'op_1', phase: 'explanation', explanationRevision: 1, cancellationEpoch: 0 },
   'graph.updated': { graph: filmCase() },
   'runtime.boundary': { disabledFeatures: ['shell_tool'], webSearch: 'disabled', configuredMcpCount: 1, disabledMcpCount: 1, enabledMcpTools: 0, selectedCapabilityRoots: 0, environments: 0, sandbox: 'read-only', scope: 'verified model-facing feature flags and inherited MCP inventory' },
   'runtime.input': { threadId: 'thr_1', model: 'gpt-6.1-terra', serviceTier: 'priority', phase: 'explanation', promptHash: 'p1', instructions: 'PHASE: explanation.', input: { revision: 7 } },
   'runtime.item': { threadId: 'thr_1', turnId: 'turn_1', id: 'item_1', type: 'dynamicToolCall', lifecycle: 'started', tool: 'search_learning_cases' },
   'tool.started': { ...toolRef, name: 'search_learning_cases', arguments: searchInput() },
-  'tool.completed': { ...toolRef, name: 'search_learning_cases', result: { ok: true, tool: 'search_learning_cases', data: { contextCommit: contextCommit(), search: filmSearch(), publicationContext: { expectedRevision: 7, activityContext: supportContext() } } } as never, elapsedMs: 21 },
+  'tool.completed': { ...toolRef, name: 'search_learning_cases', result: searchSuccess(), elapsedMs: 21 },
   'tool.failed': { ...toolRef, name: 'record_learning_evidence', error: { code: 'UNKNOWN_TOOL', message: 'Tool not allowed', retryable: false }, contextCommit: null, elapsedMs: 1 },
   'runtime.message': { threadId: 'thr_1', turnId: 'turn_1', itemId: 'item_2', text: 'Published the ten-box activity.', partial: false },
   'runtime.completed': { threadId: 'thr_1', turnId: 'turn_1', status: 'completed' },
@@ -471,6 +480,8 @@ describe('tool search_learning_cases', () => {
     accepts(SearchLearningCasesOutputSchema, { ...output(), search, publicationContext: { expectedRevision: 7, activityContext: null } });
   });
   test('rejects more than 20 detailed candidates', () => rejects(SearchLearningCasesOutputSchema, { ...output(), search: { ...filmSearch(), candidates: Array.from({ length: 21 }, () => filmSearch().candidates[0]) } }));
+  test('rejects an evidence decision without evidence', () => rejects(DecisionSchema, { ...filmSearch().decision, evidenceIds: [] }));
+  test('rejects a support context for the independent phase', () => rejects(SupportActivityContextSchema, { ...supportContext(), phase: 'independent' }));
   test('rejects evidence on a default decision', () => rejects(SearchLearningCasesOutputSchema, { ...output(), search: { ...filmSearch(), decision: { ...filmSearch().decision, basis: 'default' } } }));
   test('rejects an unassessed admitted case', () => rejects(SearchLearningCasesOutputSchema, { ...output(), search: { ...filmSearch(), admitted: [{ ...filmSearch().admitted[0], outcome: 'not_assessed' }] } }));
   test('rejects a group with more successes than cases', () => rejects(SearchLearningCasesOutputSchema, { ...output(), search: { ...filmSearch(), decision: { ...filmSearch().decision, groups: [{ strategy: 'make_ten', independent: 30, total: 29 }] } } }));
@@ -588,6 +599,14 @@ describe('events', () => {
     test(`accepts ${type}`, () => accepts(EventSchema, sampleEvent(type)));
     test(`rejects ${type} with an unexpected payload field`, () => rejects(EventSchema, { ...sampleEvent(type), payload: { ...SAMPLE_PAYLOADS[type], unexpected: true } }));
   }
+  for (const type of EVENT_TYPES) {
+    test(`rejects ${type} without its first required field`, () => {
+      const [firstKey] = Object.keys(SAMPLE_PAYLOADS[type]);
+      const payload: Record<string, unknown> = { ...SAMPLE_PAYLOADS[type] };
+      delete payload[firstKey ?? ''];
+      rejects(EventSchema, { ...sampleEvent(type), payload });
+    });
+  }
   test('rejects an unknown event type', () => rejects(EventSchema, { ...sampleEvent('state.committed'), type: 'search.progress' }));
   test('rejects seq 0 and a missing timestamp', () => {
     rejects(EventSchema, sampleEvent('state.committed', 0));
@@ -680,6 +699,7 @@ describe('routes', () => {
     saveLesson: { ok: { text: '[00:00] Ms. Ortiz: Today we put two groups together.' }, bad: { text: 'é'.repeat(LESSON_TEXT_MAX_BYTES / 2 + 1) } },
     createVoiceSession: { ok: { commandId: COMMAND_ID, expectedRevision: 9, sdpOffer: 'v=0\r\no=- 1 2 IN IP4 127.0.0.1' }, bad: { commandId: COMMAND_ID, expectedRevision: 9, sdpOffer: 'hello' } },
     voiceSnapshot: null,
+    notificationOpened: { ok: { commandId: COMMAND_ID, activityId: `${RUN_ID}_invitation`, activityRevision: 2 }, bad: { commandId: COMMAND_ID, activityId: `${RUN_ID}_invitation`, activityRevision: 2, url: 'https://example.com' } },
     voiceCommand: { ok: { type: 'activity_rendered', commandId: COMMAND_ID, voiceSessionId: null, expectedRunRevision: 8, activityId: `${RUN_ID}_support_1`, activityRevision: 8, specHash: 'b5d4c3a2' }, bad: { type: 'activity_rendered', commandId: COMMAND_ID, voiceSessionId: null, expectedRunRevision: 8, activityId: `${RUN_ID}_support_1`, activityRevision: 8 } },
   };
   const voiceSnapshot = { voiceSessionId: 'live_1', status: 'live', activeOperationId: null, explanationRevision: 1, cancellationEpoch: 0, audioGate: 'open' };
@@ -689,6 +709,7 @@ describe('routes', () => {
     getRun: { ok: snapshot(), bad: { ...snapshot(), phase: 'CANCELLED' } },
     runEvents: { ok: [sampleEvent('state.committed', 3), sampleEvent('search.completed', 4)], bad: [{ ...sampleEvent('state.committed', 3), type: 'state.changed' }] },
     runCommand: { ok: snapshot(), bad: { ...snapshot(), stopped: undefined } },
+    notificationOpened: { ok: snapshot(), bad: { ...snapshot(), execution: { throughSeq: 2, events: [sampleEvent('state.committed', 1), { ...sampleEvent('activity.published', 2), runId: 'another-run' }] } } },
     getLesson: { ok: { inboxFile: `/tmp/inbox/${RUN_ID}.txt`, saved: true, contentHash: '0ccc0c36', prepared: null }, bad: { inboxFile: `/tmp/inbox/${RUN_ID}.txt`, saved: true, contentHash: null, prepared: null } },
     saveLesson: { ok: { saved: true, contentHash: '0ccc0c36' }, bad: { saved: false, contentHash: '0ccc0c36' } },
     createVoiceSession: { ok: { voiceSessionId: 'live_1', sdpAnswer: 'v=0\r\n', status: 'live' }, bad: { voiceSessionId: 'live_1', sdpAnswer: 'v=0\r\n', status: 'live', apiKey: 'leaked' } },
@@ -739,6 +760,8 @@ describe('routes', () => {
     assert.equal(routePath('runEvents', { runId: RUN_ID }), `/api/runs/${RUN_ID}/events`);
     assert.equal(routePath('createRun'), '/api/runs');
     assert.throws(() => routePath('getRun'), /needs a runId/);
+    assert.equal(routePath('notificationOpened', { runId: RUN_ID, notificationId: 'notif 1' }), `/api/runs/${RUN_ID}/notifications/notif%201/opened`);
+    assert.throws(() => routePath('notificationOpened', { runId: RUN_ID }), /needs a notificationId/);
   });
 });
 
@@ -753,6 +776,7 @@ describe('copy', () => {
     assert.equal(ACTIVITY_COPY.anchor_start_number_line({ lhs: 6, rhs: 7 }).title, '6 is the starting point. Count once each time you move.');
     assert.equal(ACTIVITY_COPY.independent_number_line({ lhs: 9, rhs: 4 }).body, 'Show 9 + 4. Mark where you start, then show your moves.');
     assert.equal(STUDENT_COPY.howDidYouGet(12), 'How did you get 12?');
+    assert.equal(problemQuestion({ lhs: 9, rhs: 4 }), '9 + 4 = ?');
   });
   test('every non-invitation template has copy that fits an activity', () => {
     for (const template of TemplateIdSchema.options) {

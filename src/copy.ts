@@ -4,7 +4,8 @@
 import type { Problem, TemplateId } from './domain.js';
 
 const sum = (p: Problem) => `${p.lhs} + ${p.rhs}`;
-const question = (p: Problem) => `${sum(p)} = ?`;
+// The arithmetic line shown with every activity, e.g. "8 + 5 = ?".
+export const problemQuestion = (p: Problem) => `${sum(p)} = ?`;
 
 // The invitation names no strategy: the strategy is chosen later, from the child's own attempt.
 export const INVITATION_COPY = {
@@ -34,15 +35,15 @@ const SEND_EXPLANATION = 'Send explanation';
 
 // Copy for every non-invitation template, built from the activity's own problem.
 export const ACTIVITY_COPY: { readonly [T in Exclude<TemplateId, 'invitation_addition'>]: (problem: Problem) => ActivityCopy } = {
-  initial_number_line: (p) => ({ title: `Show ${sum(p)} on the number line.`, body: question(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
-  anchor_start_number_line: (p) => ({ title: `${p.lhs} is the starting point. Count once each time you move.`, body: question(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
-  make_ten_blocks: (p) => ({ title: 'Fill the box to ten. Then count what’s left.', body: question(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
-  manipulation_retry: (p) => ({ title: 'Let’s try the taps again.', body: question(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
-  clarify_first_number: (p) => ({ title: 'Can you show the first number you counted?', body: question(p), primaryLabel: SEND_EXPLANATION, secondaryLabel: null }),
+  initial_number_line: (p) => ({ title: `Show ${sum(p)} on the number line.`, body: problemQuestion(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
+  anchor_start_number_line: (p) => ({ title: `${p.lhs} is the starting point. Count once each time you move.`, body: problemQuestion(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
+  make_ten_blocks: (p) => ({ title: 'Fill the box to ten. Then count what’s left.', body: problemQuestion(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
+  manipulation_retry: (p) => ({ title: 'Let’s try the taps again.', body: problemQuestion(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
+  clarify_first_number: (p) => ({ title: 'Can you show the first number you counted?', body: problemQuestion(p), primaryLabel: SEND_EXPLANATION, secondaryLabel: null }),
   // Never names or hints at a proposed pattern.
-  clarify_show_steps: (p) => ({ title: 'Can you show me how you got your answer?', body: question(p), primaryLabel: SEND_EXPLANATION, secondaryLabel: null }),
+  clarify_show_steps: (p) => ({ title: 'Can you show me how you got your answer?', body: problemQuestion(p), primaryLabel: SEND_EXPLANATION, secondaryLabel: null }),
   independent_number_line: (p) => ({ title: 'Now try a new one on your own.', body: `Show ${sum(p)}. Mark where you start, then show your moves.`, primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
-  independent_make_ten: (p) => ({ title: 'Now make ten on your own.', body: question(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
+  independent_make_ten: (p) => ({ title: 'Now make ten on your own.', body: problemQuestion(p), primaryLabel: CHECK_ANSWER, secondaryLabel: null }),
   // States only the observed new-task performance; retention stays pending and is not claimed.
   completion: () => ({ title: OUTCOME_COPY.completeTitle, body: OUTCOME_COPY.completeBody, primaryLabel: 'Done', secondaryLabel: null }),
 };
@@ -60,6 +61,8 @@ export const STUDENT_COPY = {
   sendExplanation: SEND_EXPLANATION,
   interpreting: 'Thanks. Let’s look at your way.',
   checkAnswer: CHECK_ANSWER,
+  // Enabled for the independent check only after microphone and playback were torn down.
+  startProblem: 'Start problem',
   startAt: (start: number) => `Start at ${start}`,
   moveForward: 'Move one step forward',
   moveBack: 'Move one step back',
@@ -99,6 +102,7 @@ export const VOICE_CONTROL_COPY = {
   mute: 'Mute',
   end: 'End voice',
   typeInstead: 'Type instead',
+  reconnect: 'Reconnect',
 } as const;
 
 // The only content the app sends to the Live session for speaking; Live may paraphrase it lightly.

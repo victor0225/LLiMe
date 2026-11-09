@@ -20,7 +20,8 @@ export const SDP_MAX_BYTES = 64 * 1024;
 // The browser sends this header on every POST; it guards local mutations from unrelated pages.
 export const SESSION_HEADER = 'x-primer-session';
 
-const utf8Bytes = (text: string) => new TextEncoder().encode(text).length;
+// Size limits count UTF-8 bytes. The server checks them before parsing so an oversized body is a 413.
+export const utf8ByteLength = (text: string) => new TextEncoder().encode(text).length;
 
 export const HTTP_STATUS = {
   ok: 200,
@@ -82,7 +83,7 @@ export const LessonStatusSchema = z.strictObject({
 export type LessonStatus = z.infer<typeof LessonStatusSchema>;
 
 export const LessonSaveInputSchema = z.strictObject({
-  text: z.string().refine((t) => t.trim().length > 0, 'The lesson is empty').refine((t) => utf8Bytes(t) <= LESSON_TEXT_MAX_BYTES, 'The lesson is larger than 16 KB'),
+  text: z.string().refine((t) => t.trim().length > 0, 'The lesson is empty').refine((t) => utf8ByteLength(t) <= LESSON_TEXT_MAX_BYTES, 'The lesson is larger than 16 KB'),
 });
 export const LessonSaveOutputSchema = z.strictObject({ saved: z.literal(true), contentHash: z.string() });
 
@@ -92,7 +93,7 @@ export type VoiceSessionStatus = z.infer<typeof VoiceSessionStatusSchema>;
 export const VoiceSessionInputSchema = z.strictObject({
   commandId: z.uuid(),
   expectedRevision: z.number().int().min(0),
-  sdpOffer: z.string().startsWith('v=0').refine((sdp) => utf8Bytes(sdp) <= SDP_MAX_BYTES, 'The SDP offer is too large'),
+  sdpOffer: z.string().startsWith('v=0').refine((sdp) => utf8ByteLength(sdp) <= SDP_MAX_BYTES, 'The SDP offer is too large'),
 });
 // No key, upstream header or provider credential ever appears in this response.
 export const VoiceSessionOutputSchema = z.strictObject({
@@ -140,6 +141,14 @@ export type VoiceCommand = z.infer<typeof VoiceCommandSchema>;
 // return only session fields, after which the client reloads the run before its next mutation.
 export const VoiceCommandOutputSchema = z.union([RunSnapshotSchema, VoiceSnapshotSchema]);
 
+// A real notification tap whose activity resolves server-side. Opening is not consent to start the
+// activity; the tap is deduplicated by notificationId.
+export const NotificationOpenedInputSchema = z.strictObject({
+  commandId: z.uuid(),
+  activityId: IdSchema,
+  activityRevision: z.number().int().min(0),
+});
+
 // ---------------------------------------------------------------------------------------------
 // Route table.
 
@@ -153,29 +162,31 @@ type RouteDef = {
   errors: readonly number[];
 };
 
-const runErrors = [HTTP_STATUS.notFound] as const;
+// Host validation applies to every request, so every route can answer 403.
+const runErrors = [HTTP_STATUS.forbidden, HTTP_STATUS.notFound] as const;
 const commandErrors = [HTTP_STATUS.badRequest, HTTP_STATUS.forbidden, HTTP_STATUS.notFound, HTTP_STATUS.conflict, HTTP_STATUS.payloadTooLarge, HTTP_STATUS.unprocessable, HTTP_STATUS.unavailable] as const;
 
 export const ROUTES = {
   bootstrap: { method: 'GET', path: '/api/bootstrap', status: HTTP_STATUS.ok, request: null, query: null, response: BootstrapSchema, errors: [HTTP_STATUS.forbidden] },
   createRun: { method: 'POST', path: '/api/runs', status: HTTP_STATUS.created, request: RunCreateInputSchema, query: null, response: RunSnapshotSchema, errors: [HTTP_STATUS.badRequest, HTTP_STATUS.forbidden, HTTP_STATUS.payloadTooLarge, HTTP_STATUS.unavailable] },
   getRun: { method: 'GET', path: '/api/runs/:runId', status: HTTP_STATUS.ok, request: null, query: null, response: RunSnapshotSchema, errors: runErrors },
-  runEvents: { method: 'GET', path: '/api/runs/:runId/events', status: HTTP_STATUS.ok, request: null, query: EventsQuerySchema, response: z.array(EventSchema), errors: [HTTP_STATUS.badRequest, HTTP_STATUS.notFound] },
+  runEvents: { method: 'GET', path: '/api/runs/:runId/events', status: HTTP_STATUS.ok, request: null, query: EventsQuerySchema, response: z.array(EventSchema), errors: [HTTP_STATUS.badRequest, HTTP_STATUS.forbidden, HTTP_STATUS.notFound] },
   runCommand: { method: 'POST', path: '/api/runs/:runId/commands', status: HTTP_STATUS.ok, request: CommandSchema, query: null, response: RunSnapshotSchema, errors: commandErrors },
   getLesson: { method: 'GET', path: '/api/runs/:runId/lesson', status: HTTP_STATUS.ok, request: null, query: null, response: LessonStatusSchema, errors: runErrors },
   // Writes the run's inbox file only; the inbox watcher is the sole trigger for ingestion.
   saveLesson: { method: 'POST', path: '/api/runs/:runId/lesson', status: HTTP_STATUS.accepted, request: LessonSaveInputSchema, query: null, response: LessonSaveOutputSchema, errors: [HTTP_STATUS.badRequest, HTTP_STATUS.forbidden, HTTP_STATUS.notFound, HTTP_STATUS.conflict, HTTP_STATUS.payloadTooLarge] },
   createVoiceSession: { method: 'POST', path: '/api/runs/:runId/voice/session', status: HTTP_STATUS.created, request: VoiceSessionInputSchema, query: null, response: VoiceSessionOutputSchema, errors: commandErrors },
   voiceSnapshot: { method: 'GET', path: '/api/runs/:runId/voice/snapshot', status: HTTP_STATUS.ok, request: null, query: null, response: VoiceSnapshotSchema, errors: runErrors },
+  notificationOpened: { method: 'POST', path: '/api/runs/:runId/notifications/:notificationId/opened', status: HTTP_STATUS.ok, request: NotificationOpenedInputSchema, query: null, response: RunSnapshotSchema, errors: [HTTP_STATUS.badRequest, HTTP_STATUS.forbidden, HTTP_STATUS.notFound, HTTP_STATUS.conflict, HTTP_STATUS.payloadTooLarge] },
   voiceCommand: { method: 'POST', path: '/api/runs/:runId/voice/commands', status: HTTP_STATUS.ok, request: VoiceCommandSchema, query: null, response: VoiceCommandOutputSchema, errors: commandErrors },
 } as const satisfies Record<string, RouteDef>;
 export type RouteName = keyof typeof ROUTES;
 
 // Builds a concrete path from a route pattern, encoding every parameter.
-export function routePath(name: RouteName, params: { runId?: string } = {}): string {
-  return ROUTES[name].path.replace(':runId', () => {
-    if (params.runId === undefined) throw new Error(`Route ${name} needs a runId`);
-    return encodeURIComponent(params.runId);
+export function routePath(name: RouteName, params: { runId?: string; notificationId?: string } = {}): string {
+  return ROUTES[name].path.replace(/:(runId|notificationId)/g, (_match, key: 'runId' | 'notificationId') => {
+    const value = params[key];
+    if (value === undefined) throw new Error(`Route ${name} needs a ${key}`);
+    return encodeURIComponent(value);
   });
 }
-

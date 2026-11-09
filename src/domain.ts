@@ -219,12 +219,15 @@ export type Problem = z.infer<typeof ProblemSchema>;
 // Problem seeds are unsigned 32-bit integers so a run's pair is reproducible from the stored seed.
 export const SeedSchema = z.number().int().min(0).max(0xffffffff);
 
+// Help exposure recorded with an attempt; capped so a client cannot submit an unbounded count.
+export const HintsSchema = z.number().int().min(0).max(20);
+
 // A submitted number-line attempt. `moves` lists the visited positions in action order.
 export const AttemptSchema = z.strictObject({
   start: z.number().int(),
   moves: z.array(z.number().int()).max(20),
   answer: z.number().int(),
-  hints: z.number().int().min(0).max(20),
+  hints: HintsSchema,
 });
 export type Attempt = z.infer<typeof AttemptSchema>;
 
@@ -236,7 +239,7 @@ export type MakeTenZone = z.infer<typeof MakeTenZoneSchema>;
 export const MakeTenAttemptSchema = z.strictObject({
   placements: z.array(z.strictObject({ objectId: IdentifierSchema, to: MakeTenZoneSchema })).max(40),
   answer: z.number().int(),
-  hints: z.number().int().min(0).max(20),
+  hints: HintsSchema,
 });
 export type MakeTenAttempt = z.infer<typeof MakeTenAttemptSchema>;
 
@@ -252,7 +255,7 @@ export const AssessmentSchema = z.strictObject({
   passed: z.boolean(),
   processCorrect: z.boolean(),
   answerCorrect: z.boolean(),
-  hints: z.number().int().min(0).max(20),
+  hints: HintsSchema,
   retention: RetentionSchema,
 });
 export type Assessment = z.infer<typeof AssessmentSchema>;
@@ -394,7 +397,7 @@ export const DecisionSchema = z.strictObject({
   evidenceIds: z.array(z.string()),
   reason: z.string().max(300),
   groups: z.array(StrategyGroupSchema),
-}).refine((d) => d.basis === 'evidence' || d.evidenceIds.length === 0, { message: 'Only an evidence decision cites evidence', path: ['evidenceIds'] });
+}).refine((d) => (d.basis === 'evidence') === (d.evidenceIds.length > 0), { message: 'An evidence decision cites evidence and no other decision does', path: ['evidenceIds'] });
 export type Decision = z.infer<typeof DecisionSchema>;
 
 // The detailed candidate list is capped so the search event stays small; `scores` carries the full ranking compactly.
@@ -487,7 +490,7 @@ export type ToolName = z.infer<typeof ToolNameSchema>;
 
 export const MAX_MEMORY_CASES_PER_CONCEPT = 8;
 
-// T1 get_personal_memory. conceptIds[0] is today's concept; conceptIds[1], if present, must be linked to it.
+// get_personal_memory: conceptIds[0] is today's concept; conceptIds[1], if present, must be linked to it.
 export const GetPersonalMemoryInputSchema = z.strictObject({
   conceptIds: z.array(ConceptSchema).min(1).max(2),
   includeUnassessed: z.boolean(),
@@ -529,7 +532,7 @@ export const GetPersonalMemoryOutputSchema = z.strictObject({
 });
 export type GetPersonalMemoryOutput = z.infer<typeof GetPersonalMemoryOutputSchema>;
 
-// T2 search_learning_cases. Writes the context graph, then searches. Idempotent on (runId, explanationRevision).
+// search_learning_cases writes the context graph, then searches. Idempotent on (runId, explanationRevision).
 export const SearchLearningCasesInputSchema = z.strictObject({
   explanationRevision: z.number().int().min(0),
   interpretations: InterpretationsSchema,
@@ -551,7 +554,7 @@ export const SearchLearningCasesOutputSchema = z.strictObject({
 });
 export type SearchLearningCasesOutput = z.infer<typeof SearchLearningCasesOutputSchema>;
 
-// T3 publish_activity. The handler accepts only the kind and template of the same-run decision.
+// publish_activity: the handler accepts only the kind and template of the same-run decision.
 export const PublishKindSchema = z.enum(['invitation', 'support', 'retry', 'clarification']);
 export type PublishKind = z.infer<typeof PublishKindSchema>;
 
@@ -591,13 +594,13 @@ export const PublishActivityOutputSchema = z.strictObject({
 });
 export type PublishActivityOutput = z.infer<typeof PublishActivityOutputSchema>;
 
-// T4 assess_attempt. The rubric comes from the stored activity, never from the model's criterion.
+// assess_attempt: the rubric comes from the stored activity, never from the model's criterion.
 export const AssessAttemptInputSchema = z.strictObject({ attemptId: IdSchema, criterion: CriterionSchema });
 export type AssessAttemptInput = z.infer<typeof AssessAttemptInputSchema>;
 export const AssessAttemptOutputSchema = AssessmentSchema;
 export type AssessAttemptOutput = z.infer<typeof AssessAttemptOutputSchema>;
 
-// T5 commit_episode. The outcome is built from stored assessments; the model cannot supply it.
+// commit_episode: the outcome is built from stored assessments; the model cannot supply it.
 export const CommitEpisodeInputSchema = z.strictObject({
   independentAttemptId: IdSchema,
   supportAttemptId: IdSchema.nullable(),
@@ -654,10 +657,14 @@ export type ToolSuccess = z.infer<typeof ToolSuccessSchema>;
 export const ToolResultSchema = z.union([ToolSuccessSchema, ToolFailureSchema]);
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
+// The three kinds of agent turn in a run.
+export const RuntimePhaseSchema = z.enum(['ingestion', 'explanation', 'verification']);
+export type RuntimePhase = z.infer<typeof RuntimePhaseSchema>;
+
 // Final response schema for every agent turn. It is displayed after validation but never substitutes
 // for a committed tool effect.
 export const PhaseResultSchema = z.strictObject({
-  phase: z.enum(['ingestion', 'explanation', 'verification']),
+  phase: RuntimePhaseSchema,
   status: z.enum(['completed', 'blocked']),
   activityId: z.string().nullable(),
   caseId: z.string().nullable(),
@@ -743,11 +750,14 @@ export const RunCreateInputSchema = z.strictObject({ seed: SeedSchema.optional()
 export type RunCreateInput = z.infer<typeof RunCreateInputSchema>;
 
 // Both null until the lesson's problems are validated; then persisted together, once, and never redrawn.
+const selectionIsConsistent = (s: { lessonProblems: unknown; selectedProblems: unknown }) => (s.lessonProblems === null) === (s.selectedProblems === null);
+const selectionIssue = { message: 'lessonProblems and selectedProblems are persisted together' };
+
 export const RunSelectionSchema = z.strictObject({
   seed: SeedSchema,
   lessonProblems: z.array(ProblemSchema).nullable(),
   selectedProblems: z.strictObject({ initial: ProblemSchema, independent: ProblemSchema }).nullable(),
-}).refine((s) => (s.lessonProblems === null) === (s.selectedProblems === null), { message: 'lessonProblems and selectedProblems are persisted together' });
+}).refine(selectionIsConsistent, selectionIssue);
 export type RunSelection = z.infer<typeof RunSelectionSchema>;
 
 // ---------------------------------------------------------------------------------------------
@@ -875,5 +885,5 @@ export const RunStateSchema = z.strictObject({
   search: SearchResultSchema.nullable(),
   error: ErrorBodySchema.nullable(),
   createdAt: z.iso.datetime(),
-}).refine((s) => (s.lessonProblems === null) === (s.selectedProblems === null), { message: 'lessonProblems and selectedProblems are persisted together' });
+}).refine(selectionIsConsistent, selectionIssue);
 export type RunState = z.infer<typeof RunStateSchema>;
