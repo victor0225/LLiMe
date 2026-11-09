@@ -4,7 +4,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, type Stats, watch } from 'node:fs';
 import { lstat, mkdir, open, readdir, readFile, rename, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { z } from 'zod';
 import { ErrorCodeSchema, type ErrorCode, IdSchema, type LessonRecord, type RunState } from './domain.js';
 import { LESSON_TEXT_MAX_BYTES, LessonSaveInputSchema, LessonSaveOutputSchema, type LessonStatus, LessonStatusSchema, utf8ByteLength } from './routes.js';
@@ -28,7 +28,7 @@ const INBOX_FILE_PATTERN = /^([A-Za-z0-9_-]+)\.txt$/;
 export type InboxConfig = { rootDir: string };
 export type LessonSaveOutput = z.infer<typeof LessonSaveOutputSchema>;
 
-const inboxDir = (config: InboxConfig) => join(config.rootDir, INBOX_DIR);
+const inboxDir = (config: InboxConfig) => resolve(config.rootDir, INBOX_DIR);
 const inboxFileName = (runId: string) => `${runId}.txt`;
 const sha256Hex = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 
@@ -90,25 +90,36 @@ const PreparedLessonManifestSchema = z.object({
   encoding: z.literal('utf-8'),
 });
 
-// The prepared transcript is offered only while its bytes still match the manifest, so an edited copy
-// is never presented as the prepared lesson. A missing or malformed manifest is a broken install.
-async function loadPreparedLesson(config: InboxConfig): Promise<LessonStatus['prepared']> {
-  const dir = join(config.rootDir, PREPARED_LESSON_DIR);
-  const manifest = PreparedLessonManifestSchema.parse(JSON.parse(await readFile(join(dir, 'manifest.json'), 'utf8')));
-  const bytes = await readFile(join(dir, manifest.file));
-  if (bytes.byteLength !== manifest.bytes || sha256Hex(bytes) !== manifest.sha256) return null;
-  return { text: decodeUtf8(bytes), sha256: manifest.sha256 };
+export type PreparedLesson = NonNullable<LessonStatus['prepared']>;
+export const PREPARED_LESSON_MISSING = 'Prepared transcript is missing';
+export const PREPARED_LESSON_MISMATCH = 'Prepared transcript does not match its manifest';
+export type PreparedLessonLoad = { prepared: PreparedLesson; problem: null } | { prepared: null; problem: string };
+
+// Read once when the server starts. The prepared transcript is offered only while its bytes match the
+// manifest, so an edited copy is never presented as the prepared lesson; otherwise the screen offers
+// loading a file instead, and the caller logs the problem. A malformed manifest is a broken checkout.
+export async function loadPreparedLesson(config: InboxConfig): Promise<PreparedLessonLoad> {
+  const dir = resolve(config.rootDir, PREPARED_LESSON_DIR);
+  const manifestBytes = await readIfPresent(join(dir, 'manifest.json'));
+  if (manifestBytes === null) return { prepared: null, problem: PREPARED_LESSON_MISSING };
+  const manifest = PreparedLessonManifestSchema.parse(JSON.parse(manifestBytes.toString('utf8')));
+  const bytes = await readIfPresent(join(dir, manifest.file));
+  if (bytes === null) return { prepared: null, problem: PREPARED_LESSON_MISSING };
+  if (bytes.byteLength !== manifest.bytes || sha256Hex(bytes) !== manifest.sha256) return { prepared: null, problem: PREPARED_LESSON_MISMATCH };
+  return { prepared: { text: decodeUtf8(bytes), sha256: manifest.sha256 }, problem: null };
 }
 
-// What the Lesson notes screen shows for a run. The caller has already checked that the run exists.
-export async function readLesson(runId: string, config: InboxConfig): Promise<LessonStatus> {
+// What the Lesson notes screen shows for a run: the absolute path of its inbox file, whether a lesson
+// was saved there, and the prepared transcript loaded at start. The caller has checked the run exists.
+export async function readLesson(runId: string, config: InboxConfig & { prepared: PreparedLesson | null }): Promise<LessonStatus> {
   const id = requireRunFileId(runId);
-  const saved = await readIfPresent(join(inboxDir(config), inboxFileName(id)));
+  const inboxFile = join(inboxDir(config), inboxFileName(id));
+  const saved = await readIfPresent(inboxFile);
   return LessonStatusSchema.parse({
-    inboxFile: `${INBOX_DIR}/${inboxFileName(id)}`,
+    inboxFile,
     saved: saved !== null,
     contentHash: saved === null ? null : sha256Hex(saved),
-    prepared: await loadPreparedLesson(config),
+    prepared: config.prepared,
   });
 }
 

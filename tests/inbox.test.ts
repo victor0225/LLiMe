@@ -14,7 +14,10 @@ import {
   type IngestionStore,
   type InboxOutcome,
   LessonSaveError,
+  loadPreparedLesson,
   PREPARED_LESSON_DIR,
+  PREPARED_LESSON_MISMATCH,
+  PREPARED_LESSON_MISSING,
   readLesson,
   saveTranscript,
 } from '../src/inbox.js';
@@ -159,21 +162,29 @@ describe('saving a lesson transcript', () => {
   test('the prepared transcript saved unchanged hashes to data/lesson/manifest.json', async () => {
     const root = await rootWithPreparedLesson();
     const manifest: { sha256: string; bytes: number } = JSON.parse(await readFile(join(LESSON_DATA_DIR, 'manifest.json'), 'utf8'));
+    const { prepared, problem } = await loadPreparedLesson({ rootDir: root });
+    assert.equal(problem, null);
+    assert.ok(prepared);
+    assert.equal(prepared.sha256, manifest.sha256);
 
-    const unsaved = await readLesson(RUN_A, { rootDir: root });
-    assert.deepEqual({ inboxFile: unsaved.inboxFile, saved: unsaved.saved, contentHash: unsaved.contentHash }, { inboxFile: `${INBOX_DIR}/${RUN_A}.txt`, saved: false, contentHash: null });
-    assert.ok(unsaved.prepared);
-    assert.equal(unsaved.prepared.sha256, manifest.sha256);
+    const unsaved = await readLesson(RUN_A, { rootDir: root, prepared });
+    assert.deepEqual(unsaved, { inboxFile: inboxPath(root, `${RUN_A}.txt`), saved: false, contentHash: null, prepared });
 
-    const saved = await saveTranscript(RUN_A, unsaved.prepared.text, { rootDir: root });
+    const saved = await saveTranscript(RUN_A, prepared.text, { rootDir: root });
     assert.equal(saved.contentHash, manifest.sha256);
     assert.equal((await stat(inboxPath(root, `${RUN_A}.txt`))).size, manifest.bytes);
-    const status = await readLesson(RUN_A, { rootDir: root });
-    assert.equal(status.saved, true);
-    assert.equal(status.contentHash, manifest.sha256);
+    assert.deepEqual(await readLesson(RUN_A, { rootDir: root, prepared }), { inboxFile: inboxPath(root, `${RUN_A}.txt`), saved: true, contentHash: manifest.sha256, prepared });
+  });
 
-    await writeFile(join(root, PREPARED_LESSON_DIR, 'lesson-transcript.txt'), `${unsaved.prepared.text} edited`);
-    assert.equal((await readLesson(RUN_A, { rootDir: root })).prepared, null);
+  test('an edited or missing prepared transcript is not offered', async () => {
+    const root = await rootWithPreparedLesson();
+    const transcript = join(root, PREPARED_LESSON_DIR, 'lesson-transcript.txt');
+    const original = await readFile(transcript, 'utf8');
+
+    await writeFile(transcript, `${original} edited`);
+    assert.deepEqual(await loadPreparedLesson({ rootDir: root }), { prepared: null, problem: PREPARED_LESSON_MISMATCH });
+    await rm(transcript);
+    assert.deepEqual(await loadPreparedLesson({ rootDir: root }), { prepared: null, problem: PREPARED_LESSON_MISSING });
   });
 });
 
