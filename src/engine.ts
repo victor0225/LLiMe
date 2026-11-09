@@ -305,6 +305,8 @@ export const ExplanationProvenanceSchema = z
     inputMode: ExplanationRecordSchema.shape.inputMode,
     liveSessionId: IdSchema.nullable(),
     delegationId: IdSchema.nullable(),
+    // Where in the Live session the delegated speech was heard; recorded as voice.delegated.
+    offsetMs: z.number().int().min(0).optional(),
   })
   .refine((p) => p.delegationId === null || p.liveSessionId !== null, { message: 'A delegation requires a Live session', path: ['liveSessionId'] })
   .refine((p) => p.inputMode === 'typed' || p.delegationId !== null, { message: 'A spoken explanation arrives through a delegation', path: ['delegationId'] });
@@ -543,6 +545,13 @@ export function createEngine({ store, runtime }: EngineDeps) {
       error: null,
     };
     const question = questionForExplanation(next);
+    const { liveSessionId, delegationId, offsetMs } = input.provenance;
+    const threadId = state.runtime?.threadId ?? null;
+    // Recorded with the explanation it carried, under the same receipt, so a retry never writes it twice.
+    const delegated: NewEvent[] =
+      liveSessionId !== null && delegationId !== null && offsetMs !== undefined
+        ? [{ type: 'voice.delegated', payload: { runId, liveSessionId, delegationId, operationId, explanationRevision, cancellationEpoch, threadId, turnId: null, offsetMs } }]
+        : [];
     const request: TurnRequest = {
       runId,
       operationId,
@@ -554,13 +563,14 @@ export function createEngine({ store, runtime }: EngineDeps) {
       state: next,
       events: [
         ...(cancelled ? [cancelled.event] : []),
+        ...delegated,
         { type: 'operation.started', payload: { operationId, phase: 'explanation', explanationRevision, cancellationEpoch } },
       ],
       voiceOperations: [
         ...(cancelled ? [cancelled.change] : []),
         {
           kind: 'insert',
-          operation: { runId, liveSessionId: input.provenance.liveSessionId, delegationId: input.provenance.delegationId, operationId, explanationRevision, cancellationEpoch, threadId: state.runtime?.threadId ?? null, turnId: null, status: 'started' },
+          operation: { runId, liveSessionId, delegationId, operationId, explanationRevision, cancellationEpoch, threadId, turnId: null, status: 'started' },
         },
       ],
       effects: [{ kind: correction ? 'steer_or_start' : 'start', request }],
