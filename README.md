@@ -38,8 +38,8 @@ The demo makes three mechanisms observable. Memory supplies prior evidence. The 
 
 3. **Uses comparable situations to choose how to explain.** llime searches other learners' recorded situations with a similar structure of actions and explanations, then compares the support they got and the independent results that followed. In the synthetic data, a ten-box ("make ten") activity leads. Codex composes the activity from validated components, so the child works with the same idea in a different form. The histories are authored to demonstrate the mechanism, not to show that one teaching method works better.
 
-   ![Learning memory view: this student's history, the subtraction–addition curriculum link, today's lesson and a grid of 659 other learners' situations](docs/images/learning-memory-live.png)
-   <sub>Live run (Codex App Server and Neo4j over the synthetic history): the learner's memory and today's lesson, before the search.</sub>
+   ![Learning memory view: 659 past situations across 117 other students, one tile per student's memory, under the shared concept addition within 20](docs/images/learning-memory-live.png)
+   <sub>Live run (Codex App Server and Neo4j over the synthetic history): other learners' memories on today's concept, before the search.</sub>
 
    ![Search and decision view: the child's attempt, observation and explanation on the left, the make-ten next step from 29 cases, and the three strategy groups 23/29, 14/22 and 3/8](docs/images/memory-search-decision.png)
    <sub>The search and decision, replayed from a recorded agent input over the synthetic cases (the view labels itself "Simulation").</sub>
@@ -61,7 +61,7 @@ Parents of grade 2–3 children who keep needing help with math homework. The ch
 
 ## What the demo shows, honestly
 
-- **Real execution:** nothing in the flow is scripted or hardcoded. Proven on a clean clone: the lesson save reaches the inbox watcher, a real Codex App Server turn calls the memory tool and publishes the invitation, and a real voice session opens and closes. In live QA runs, the hint-free check committed its outcome exactly once and the run completed. The filmed main run: TODO(run): main-run capture manifest path. Storybook stories and recorded fixtures are never used as evidence. Open failures are listed in [docs/engineering-qa.md](docs/engineering-qa.md).
+- **Real execution:** nothing in the flow is scripted or hardcoded. Proven on a clean clone: the lesson save reaches the inbox watcher, a real Codex App Server turn calls the memory tool and publishes the invitation, and a real voice session opens and closes. A complete QA main run with the film seed went from the saved lesson to the hint-free 9 + 4 (no helpers), committed its outcome once and reached COMPLETE; its export's hashes verified. The filmed main run: TODO(run): main-run capture manifest path. Storybook stories and recorded fixtures are never used as evidence. Open failures are listed in [docs/engineering-qa.md](docs/engineering-qa.md).
 - **Scripted:** the film uses problem seed 28, which gives 8 + 5 and then 9 + 4 (other seeds give other pairs). An adult plays the child and makes the planned mistake. The outcome rates in memory were written by us to show the mechanism.
 - **Synthetic:** the lesson transcript and every learner history. Start and Stop recording on the Lesson notes screen stage the prepared transcript; no classroom audio is captured or transcribed. Finish lesson saves the transcript for real, and that saved file is what triggers processing. The memory holds 781 situations from 120 fictional learners.
 - **Simulated:** the iPad runs in the iOS Simulator, and the notification is a simulated push.
