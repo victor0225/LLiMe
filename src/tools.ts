@@ -4,10 +4,10 @@
 import { z } from 'zod';
 import { assess, AssessmentError } from './assessment.js';
 import { compactSha256, resolveRelatedLeaf } from './dataset.js';
-import { type ActivityDraft, activityContextOf, activityIdOf, buildActivity, decisionExceedsLimits, episodeOutcome, explainedAttempt, questionForExplanation } from './engine.js';
+import { type ActivityDraft, activityIdOf, buildActivity, decisionExceedsLimits, episodeOutcome, explainedAttempt, questionForExplanation } from './engine.js';
 import { addResult, appendClarification, contextCase, contextCaseId, GraphProposalError, renameCase } from './graph.js';
 import { buildSearchResult, chooseActivity, rank, rankingHash } from './search.js';
-import { ActivityValidationError, validateActivity } from './ui/activity-catalog.js';
+import { activityContextOf, ActivityValidationError, validateActivity } from './ui/activity-catalog.js';
 import {
   type ActivityContext,
   type ActivitySpec,

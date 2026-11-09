@@ -31,7 +31,8 @@ before(async () => {
 after(async () => {
   for (const runId of created) {
     await store.resetRun(runId);
-    assert.equal((await store.countNamespace(runId)).total, 0);
+    const left = await store.countNamespace(runId);
+    assert.deepEqual([left.outbox, left.total], [0, 0], `${runId} left rows behind`);
   }
   await store.close();
 });
@@ -60,6 +61,14 @@ function stubRuntime(onStart: (request: TurnRequest) => Promise<void> = async ()
 
 const contextOf = (run: RunRecord): ToolContext => ({ runId: run.id, studentId: run.state.studentId, corpusHash: run.state.corpusHash, phase: run.state.phase, revision: run.revision, cancellationEpoch: run.state.cancellationEpoch, threadId: 'thread-1', turnId: 'turn-1' });
 
+// The shared database may have a live server polling for pending notifications. A test row is taken
+// out of the queue the moment it is written, so no server ever sends it to a device.
+async function retireNotification(notificationId: string | null): Promise<void> {
+  assert.ok(notificationId, 'an invitation queues a notification');
+  assert.ok(await store.claimNotification(notificationId), 'the test row was still pending');
+  await store.markNotificationFailed(notificationId, 'TEST_ROW');
+}
+
 // A run that saved the prepared lesson, read memory and published its invitation, as ingestion leaves it.
 async function invitedRun(options: { seed?: number; corpus?: LoadedSeed; prefix?: string } = {}): Promise<string> {
   const runId = createRunId(options.prefix ?? TASK_ID);
@@ -83,7 +92,8 @@ async function invitedRun(options: { seed?: number; corpus?: LoadedSeed; prefix?
     decisionSummary: 'Earlier subtraction needed help; a short addition check will show whether addition does too.',
     activitySpec: null,
   });
-  assert.ok(published.ok, JSON.stringify(published));
+  assert.ok(published.ok && published.tool === 'publish_activity', JSON.stringify(published));
+  await retireNotification(published.data.notificationId);
   return runId;
 }
 
