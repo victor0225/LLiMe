@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import type { Activity, Attempt, MakeTenAttempt, MakeTenZone, Problem, TemplateId } from '../src/domain.js';
-import { TEMPLATE_KIND } from '../src/domain.js';
+import { type Activity, type Attempt, type MakeTenAttempt, type MakeTenZone, type Problem, TEMPLATE_KIND, type TemplateId } from '../src/domain.js';
 import { assess } from '../src/assessment.js';
 
 function activityFor(templateId: TemplateId, problem: Problem | null, helperCount = 0): Activity {
@@ -249,6 +248,11 @@ describe('assess criterion and retention', () => {
     for (const templateId of ['invitation_addition', 'clarify_first_number', 'clarify_show_steps', 'completion'] as const) {
       assert.throws(() => assess(attempt, activityFor(templateId, FILM_INITIAL), 'initial'), /gradable/, templateId);
     }
+  });
+
+  test('an activity whose kind does not match its template is rejected', () => {
+    const mixedUp: Activity = { ...independentTen(FILM_INDEPENDENT), kind: 'support' };
+    assert.throws(() => assess(makeTenAttempt(9, 4), mixedUp, 'support'), /template/);
   });
 
   test('an activity without a problem is rejected', () => {

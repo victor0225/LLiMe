@@ -7,6 +7,7 @@ import {
   HintsSchema,
   MakeTenAttemptSchema,
   type Problem,
+  TEMPLATE_KIND,
   type TemplateId,
 } from './domain.js';
 
@@ -50,6 +51,9 @@ function gradedProblem(activity: Activity): Problem {
 }
 
 function expectedCriterion(activity: Activity): Criterion {
+  if (TEMPLATE_KIND[activity.templateId] !== activity.kind) {
+    throw new AssessmentError(`Activity ${activity.id} has kind ${activity.kind}, which its template ${activity.templateId} does not produce`);
+  }
   const expected = CRITERION_BY_KIND[activity.kind];
   if (expected === undefined) throw new AssessmentError(`Activity ${activity.id} (${activity.templateId}) is not gradable`);
   return expected;
