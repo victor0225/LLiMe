@@ -8,7 +8,7 @@ import { FakeAppServer, FakeRunStore, ManualClock, MODEL, okResult, RUN_ID, TIER
 // integration owner reviews that change.
 const PINNED_HASHES = {
   base: '0b9f76f9a07b31d7e501281bb20241a26033182f9949372fae8fa05a72ad4146',
-  ingestion: '3c9d0f12a66efaf85bc5a2c35bc6650c1118edfaeb3f57220513186a9e2607ef',
+  ingestion: '56710c0c392e874a45b52a9024f101dd805c2bb47b0f5bdfa736d7f03014f104',
   explanation: '1f23bbb85c1dea671a070a9f5fcf6427c26b2fc2e8704810cb8db1aceb676d85',
   verification: '2f196fc03a44f5ac8585a9085d78854625ae88336af694b1f37cc38ca370f078',
 };
