@@ -31,7 +31,8 @@ before(async () => {
 after(async () => {
   for (const runId of created) {
     await store.resetRun(runId);
-    assert.equal((await store.countNamespace(runId)).total, 0);
+    const left = await store.countNamespace(runId);
+    assert.deepEqual([left.outbox, left.total], [0, 0], `${runId} left rows behind`);
   }
   await store.close();
 });
@@ -60,6 +61,14 @@ function stubRuntime(onStart: (request: TurnRequest) => Promise<void> = async ()
 
 const contextOf = (run: RunRecord): ToolContext => ({ runId: run.id, studentId: run.state.studentId, corpusHash: run.state.corpusHash, phase: run.state.phase, revision: run.revision, cancellationEpoch: run.state.cancellationEpoch, threadId: 'thread-1', turnId: 'turn-1' });
 
+// The shared database may have a live server polling for pending notifications. A test row is taken
+// out of the queue the moment it is written, so no server ever sends it to a device.
+async function retireNotification(notificationId: string | null): Promise<void> {
+  assert.ok(notificationId, 'an invitation queues a notification');
+  assert.ok(await store.claimNotification(notificationId), 'the test row was still pending');
+  await store.markNotificationFailed(notificationId, 'TEST_ROW');
+}
+
 // A run that saved the prepared lesson, read memory and published its invitation, as ingestion leaves it.
 async function invitedRun(options: { seed?: number; corpus?: LoadedSeed; prefix?: string } = {}): Promise<string> {
   const runId = createRunId(options.prefix ?? TASK_ID);
@@ -83,7 +92,8 @@ async function invitedRun(options: { seed?: number; corpus?: LoadedSeed; prefix?
     decisionSummary: 'Earlier subtraction needed help; a short addition check will show whether addition does too.',
     activitySpec: null,
   });
-  assert.ok(published.ok, JSON.stringify(published));
+  assert.ok(published.ok && published.tool === 'publish_activity', JSON.stringify(published));
+  await retireNotification(published.data.notificationId);
   return runId;
 }
 
@@ -401,6 +411,28 @@ describe('run engine (stub runtime)', () => {
     assert.deepEqual([independent.kind, independent.templateId, independent.helperCount], ['independent', 'independent_make_ten', 0]);
     assert.deepEqual(independent.problem, (await problemsOf(runId)).independent);
     assert.deepEqual(independent.activitySpec?.components.map((c) => c.props), [{ first: 9, second: 4, appearance: 'apple', highlightEmptySlots: false, showEquation: false }]);
+  });
+
+  test('a delegated spoken explanation records voice.delegated in the explanation transaction, once even on a retry (stub runtime)', async () => {
+    const engine = createEngine({ store, runtime: stubRuntime().runtime });
+    const runId = await invitedRun();
+    await toExplain(engine, runId);
+    const before = await store.getRun(runId);
+    const input = { commandId: randomUUID(), revision: before.revision, text: FILM_EXPLANATION, provenance: { inputMode: 'voice', liveSessionId: 'live-1', delegationId: 'delegation-1', offsetMs: 1250 } };
+    const first = await engine.explain(runId, input);
+    const replay = await engine.explain(runId, input);
+    assert.equal(replay.replayed, true);
+    const written = await eventsOf(runId, before.seq);
+    assert.deepEqual(written.map((e) => e.type), ['voice.delegated', 'operation.started', 'state.committed']);
+    const delegated = written.find((e) => e.type === 'voice.delegated');
+    assert.ok(delegated?.type === 'voice.delegated');
+    assert.deepEqual([delegated.payload.liveSessionId, delegated.payload.delegationId, delegated.payload.offsetMs, delegated.payload.operationId, delegated.payload.explanationRevision], ['live-1', 'delegation-1', 1250, input.commandId, first.run.state.explanationRevision]);
+    // A typed explanation carries no delegation.
+    const typed = await invitedRun();
+    await toExplain(engine, typed);
+    const typedBefore = await store.getRun(typed);
+    await send(engine, typed, { type: 'explain', text: FILM_EXPLANATION });
+    assert.equal(ofType(await eventsOf(typed, typedBefore.seq), 'voice.delegated').length, 0);
   });
 
   test('the verification turn reads its expectedRevision when it starts, so the runtime committing a thread first never makes commit_episode stale (stub runtime)', async () => {

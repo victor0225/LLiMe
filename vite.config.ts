@@ -19,5 +19,8 @@ export default defineConfig({
     // The page is opened on the app origin, which proxies HMR to this server, so the HMR client
     // must connect back through the app port.
     hmr: { clientPort: config.port },
+    // Test traces, builds and logs are written inside the repo during a run; watching them would
+    // reload every open page.
+    watch: { ignored: ['**/.runtime/**', '**/dist/**', '**/storybook-static/**'] },
   },
 });

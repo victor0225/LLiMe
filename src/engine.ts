@@ -7,7 +7,6 @@ import { ACTIVITY_COPY, STUDENT_COPY } from './copy.js';
 import { compactSha256 } from './dataset.js';
 import {
   type Activity,
-  type ActivityContext,
   type ActivitySpec,
   type AnyAttempt,
   type Attempt,
@@ -33,14 +32,13 @@ import {
   type SavedAttempt,
   TEMPLATE_KIND,
   type TemplateId,
-  type Workspace,
 } from './domain.js';
 import type { EventPayload } from './events.js';
 import { type AskedQuestion, contextCaseId, QUESTION_MEANING, speechSourceId } from './graph.js';
 import { problemRefOf } from './problems.js';
 import { ActivityRenderedCommandSchema, VoiceCommandSchema } from './routes.js';
 import { DomainError, type Mutation, type NewEvent, type RunRecord, RunRecordSchema, type Store, type TransitionContext, type VoiceOperationChange } from './store.js';
-import { ActivityValidationError, countHelpers, validateActivity } from './ui/activity-catalog.js';
+import { activityContextOf, countHelpers, validateActivity } from './ui/activity-catalog.js';
 
 // ---------------------------------------------------------------------------------------------
 // Limits
@@ -235,23 +233,6 @@ export function buildActivity(draft: ActivityDraft): Activity {
   };
 }
 
-const WORKSPACE_OF_TEMPLATE: Partial<Record<TemplateId, Workspace>> = {
-  anchor_start_number_line: 'NumberLine',
-  independent_number_line: 'NumberLine',
-  make_ten_blocks: 'MakeTenWorkspace',
-  independent_make_ten: 'MakeTenWorkspace',
-};
-
-// The validation context a generated spec must match, derived only from the stored activity.
-// TODO: replace with activityContextOf from the activity catalog once that export lands on integration;
-// this local version exists only until then.
-export function activityContextOf(activity: Activity): ActivityContext {
-  const workspace = WORKSPACE_OF_TEMPLATE[activity.templateId];
-  const phase = activity.kind === 'support' || activity.kind === 'independent' ? activity.kind : null;
-  if (workspace === undefined || phase === null || activity.problem === null) throw new ActivityValidationError(`Activity ${activity.id} has no generated workspace`);
-  return { activityId: activity.id, revision: activity.revision, phase, workspace, problemRef: problemRefOf(activity.problem), start: activity.problem.lhs, addend: activity.problem.rhs, evidenceIds: activity.evidenceIds };
-}
-
 // The independent check follows the support's representation and has no helpers at all.
 function independentDraft(runId: string, revision: number, support: Activity, problem: Problem): ActivityDraft {
   const makeTen = support.templateId === 'make_ten_blocks';
@@ -324,6 +305,8 @@ export const ExplanationProvenanceSchema = z
     inputMode: ExplanationRecordSchema.shape.inputMode,
     liveSessionId: IdSchema.nullable(),
     delegationId: IdSchema.nullable(),
+    // Where in the Live session the delegated speech was heard; recorded as voice.delegated.
+    offsetMs: z.number().int().min(0).optional(),
   })
   .refine((p) => p.delegationId === null || p.liveSessionId !== null, { message: 'A delegation requires a Live session', path: ['liveSessionId'] })
   .refine((p) => p.inputMode === 'typed' || p.delegationId !== null, { message: 'A spoken explanation arrives through a delegation', path: ['delegationId'] });
@@ -562,6 +545,13 @@ export function createEngine({ store, runtime }: EngineDeps) {
       error: null,
     };
     const question = questionForExplanation(next);
+    const { liveSessionId, delegationId, offsetMs } = input.provenance;
+    const threadId = state.runtime?.threadId ?? null;
+    // Recorded with the explanation it carried, under the same receipt, so a retry never writes it twice.
+    const delegated: NewEvent[] =
+      liveSessionId !== null && delegationId !== null && offsetMs !== undefined
+        ? [{ type: 'voice.delegated', payload: { runId, liveSessionId, delegationId, operationId, explanationRevision, cancellationEpoch, threadId, turnId: null, offsetMs } }]
+        : [];
     const request: TurnRequest = {
       runId,
       operationId,
@@ -573,13 +563,14 @@ export function createEngine({ store, runtime }: EngineDeps) {
       state: next,
       events: [
         ...(cancelled ? [cancelled.event] : []),
+        ...delegated,
         { type: 'operation.started', payload: { operationId, phase: 'explanation', explanationRevision, cancellationEpoch } },
       ],
       voiceOperations: [
         ...(cancelled ? [cancelled.change] : []),
         {
           kind: 'insert',
-          operation: { runId, liveSessionId: input.provenance.liveSessionId, delegationId: input.provenance.delegationId, operationId, explanationRevision, cancellationEpoch, threadId: state.runtime?.threadId ?? null, turnId: null, status: 'started' },
+          operation: { runId, liveSessionId, delegationId, operationId, explanationRevision, cancellationEpoch, threadId, turnId: null, status: 'started' },
         },
       ],
       effects: [{ kind: correction ? 'steer_or_start' : 'start', request }],
