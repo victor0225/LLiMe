@@ -9,7 +9,10 @@
     "noEmit": true,
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "paths": {
+      "@core/*": ["./src/*.ts"]
+    }
   },
   "include": ["src", "scripts", "tests"]
 }
