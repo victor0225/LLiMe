@@ -112,6 +112,10 @@
 .flow { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 8 6; animation: lm-flow-in 0.8s var(--ease) both; }
 @keyframes lm-flow-in { from { opacity: 0; } }
 
+/* A case the inspector's selected call returned. */
+.glyph.picked { opacity: 1; filter: drop-shadow(0 0 2px var(--accent)); }
+.glyph.picked line { stroke: var(--accent); }
+
 /* Once a group is chosen the rest of the memory recedes without moving. */
 .learning-memory[data-step="6"] .tree, .learning-memory[data-step="6"] .tiles, .learning-memory[data-step="6"] .owns { opacity: 0.45; }
 .learning-memory[data-step="6"] .glyph.scored:not(.lifted):not(.mine) { opacity: 0.22; }

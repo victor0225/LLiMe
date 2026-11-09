@@ -5,19 +5,12 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { LearningCase, NodeType, ToolName } from '@core/domain';
+import type { LearningCase, NodeType } from '@core/domain';
 import { branchLayout, type BranchLayout, sortLearners } from './branch-layout.js';
 import { liftedCaseIds, litEdgeIds, type ProjectionSnapshot } from './event-projection.js';
 import { hypothesisText } from './learning-copy.js';
 import type { Reveal } from './LearningMemoryScene.js';
-
-// The inspector's selected call. The canvas highlights these IDs and never derives them.
-export interface SelectedCall {
-  readonly callId: string;
-  readonly name: ToolName;
-  readonly caseIds: readonly string[];
-  readonly nodeIds: readonly string[];
-}
+import type { SelectedCall } from './ToolCard.js';
 
 export interface DisposalReport {
   readonly geometriesBefore: number;
@@ -32,6 +25,7 @@ export interface GraphCanvasProps {
   readonly snapshot: ProjectionSnapshot;
   readonly cases: readonly LearningCase[];
   readonly reveal: Reveal;
+  // The call the inspector handed over: its case, node and edge IDs are highlighted, never derived here.
   readonly selectedCall?: SelectedCall | null;
   // Start in the static camera; the person can still switch. Defaults to the system reduced-motion setting.
   readonly staticCamera?: boolean;
@@ -349,6 +343,7 @@ function createController(host: HTMLElement, initial: GraphCanvasProps, startSta
     const lifted = new Set(props.reveal === 'none' ? [] : liftedCaseIds(props.snapshot));
     const lit = litEdgeIds(props.snapshot);
     const selectedCases = new Set(props.selectedCall?.caseIds ?? []);
+    const selectedEdges = new Set(props.selectedCall?.edgeIds ?? []);
     const scores = new Map(props.snapshot.search?.scores ?? []);
     const dim = hex(COLORS.dim);
     const accent = hex(COLORS.accent);
@@ -361,7 +356,7 @@ function createController(host: HTMLElement, initial: GraphCanvasProps, startSta
       for (const slot of slots) {
         const e = field.edges[slot];
         if (!e) continue;
-        const color = lit.has(e.id) || selectedCases.has(caseId) ? accent : base;
+        const color = lit.has(e.id) || selectedEdges.has(e.id) || selectedCases.has(caseId) ? accent : base;
         paintEdge(slot, color, e.stage === 'context' || isLifted);
       }
     }

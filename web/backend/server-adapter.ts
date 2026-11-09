@@ -97,6 +97,8 @@ export interface LiveRun {
   // From the saved run state, for wording the scene cannot take from events.
   readonly problem: Problem | null;
   readonly corpusHash: string | null;
+  // The saved run events, for views that look a saved call up by its ID.
+  readonly events: readonly RunEvent[];
   readonly lessonText: string | null;
 }
 
@@ -116,7 +118,7 @@ export function useLiveRun(runId: string, corpus: CorpusIndex | null, store?: Ev
     };
   }, [own]);
   const snapshot = useMemo(() => foldViewEvents(runId, corpus, adaptRunEvents(view.events)), [runId, corpus, view.events]);
-  return { snapshot, status: view.status, error: view.error, raw: snapshot.raw, problem: view.run?.selectedProblems?.initial ?? null, corpusHash: view.run?.corpusHash ?? null, lessonText: view.run?.lesson?.text ?? null };
+  return { snapshot, status: view.status, error: view.error, raw: snapshot.raw, problem: view.run?.selectedProblems?.initial ?? null, corpusHash: view.run?.corpusHash ?? null, events: view.events, lessonText: view.run?.lesson?.text ?? null };
 }
 
 // The pinned corpus the search ran over, loaded on demand so the main bundle stays small. The scene draws

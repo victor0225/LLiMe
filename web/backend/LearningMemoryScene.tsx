@@ -4,7 +4,9 @@
 // this same component, so only the source chip differs.
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { indexCorpus } from './event-projection.js';
+import { buildInspectorModel } from './Inspector.js';
 import { type Corpus, useCorpus, useLiveRun } from './server-adapter.js';
+import { type SelectedCall, selectedCallFor } from './ToolCard.js';
 import '../styles/backend-scene.css';
 import { type ConceptLink, type CurriculumConcept, type LearningCase, type Problem } from '@core/domain';
 import { ACTIVITY_COPY } from '@core/copy';
@@ -48,6 +50,8 @@ export interface LearningMemorySceneProps {
   readonly problem?: Problem | null;
   // Today's lesson, shown beside the recalled memory before the search.
   readonly lessonText?: string | null;
+  // The call opened from the inspector: its cases are outlined wherever they appear.
+  readonly selectedCall?: SelectedCall | null;
 }
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
@@ -215,7 +219,7 @@ function nextStepWords(snapshot: ProjectionSnapshot, problem: Problem | null | u
 // ---------------------------------------------------------------------------------------------
 // The scene.
 
-export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, source, cases, problem, lessonText }: LearningMemorySceneProps) {
+export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, source, cases, problem, lessonText, selectedCall }: LearningMemorySceneProps) {
   const byId = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases]);
   const personalId = studentOf(snapshot, byId);
   const concept = todayConcept(snapshot);
@@ -242,6 +246,7 @@ export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, 
   const freshShape = useMemo(() => (outcome && graph ? shapeOfCase(graph) : null), [outcome, graph]);
   const row = useMemo(() => personalRow([...mine.map((c) => shapes.get(c.id)?.extent ?? { w: 0, h: 0 }), ...(freshShape ? [freshShape.extent] : [])]), [mine, shapes, freshShape]);
   const recalled = useMemo(() => new Set(memoryHighlight(snapshot).caseIds), [snapshot]);
+  const picked = useMemo(() => new Set(selectedCall?.caseIds ?? []), [selectedCall]);
 
   const spine = useMemo(() => {
     const present = new Set(graph?.nodes.map((n) => n.type));
@@ -428,13 +433,13 @@ export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, 
               const isLifted = place !== rest;
               const score = scores.get(c.id);
               const lostOut = isLifted && chosen && row_ !== undefined && decision !== null && row_.strategy !== decision.strategy;
-              const flags = ['ranked', score !== undefined ? 'scored' : '', row_ ? 'above' : '', isLifted ? 'lifted open' : '', lostOut ? 'lost' : ''].filter(Boolean).join(' ');
+              const flags = ['ranked', score !== undefined ? 'scored' : '', row_ ? 'above' : '', isLifted ? 'lifted open' : '', lostOut ? 'lost' : '', picked.has(c.id) ? 'picked' : ''].filter(Boolean).join(' ');
               return <Glyph key={c.id} caseId={c.id} shape={shape} at={place} lit={litByCase.get(c.id) ?? EMPTY_SET} flags={flags} similarity={score === undefined ? null : score ** BRIGHTNESS_POWER} delayMs={isLifted ? lifted.indexOf(c.id) * LIFT_STAGGER_MS : 0} />;
             })}
             {mine.map((c, k) => {
               const shape = shapes.get(c.id);
               const at = row.placements[k];
-              return shape && at ? <Glyph key={c.id} caseId={c.id} shape={shape} at={at} lit={EMPTY_SET} flags={`mine open${recalled.has(c.id) ? ' recalled' : ''}`} similarity={null} delayMs={0} /> : null;
+              return shape && at ? <Glyph key={c.id} caseId={c.id} shape={shape} at={at} lit={EMPTY_SET} flags={`mine open${recalled.has(c.id) ? ' recalled' : ''}${picked.has(c.id) ? ' picked' : ''}`} similarity={null} delayMs={0} /> : null;
             })}
             {freshShape && graph && row.placements[mine.length] && <Glyph key="fresh" caseId={graph.id} shape={freshShape} at={row.placements[mine.length] ?? { x: ME.row.x, y: ME.row.y, s: 1 }} lit={EMPTY_SET} flags="mine open fresh" similarity={null} delayMs={0} />}
           </g>
@@ -536,23 +541,33 @@ function usePrefersReducedMotion(): boolean {
 }
 
 // The scene for one live run. It reads only this app's polling routes and the bundled corpus.
-export function LiveBackendScene({ runId }: { runId: string }) {
+// `call` names a saved tool call to highlight, as handed over by the inspector.
+export function LiveBackendScene({ runId, call }: { runId: string; call?: { callId: string; attempt: number } | null }) {
   const { corpus, error } = useCorpus();
   const index = useMemo(() => (corpus ? indexCorpus(corpus.cases) : null), [corpus]);
   if (error) return <p role="alert">{error}</p>;
   if (!corpus || !index) return null;
-  return <LiveRunView runId={runId} corpus={corpus} index={index} />;
+  return <LiveRunView runId={runId} corpus={corpus} index={index} call={call ?? null} />;
 }
 
-function LiveRunView({ runId, corpus, index }: { runId: string; corpus: Corpus; index: ReturnType<typeof indexCorpus> }) {
-  const { snapshot, raw, problem, lessonText, corpusHash } = useLiveRun(runId, index);
+function LiveRunView({ runId, corpus, index, call }: { runId: string; corpus: Corpus; index: ReturnType<typeof indexCorpus>; call: { callId: string; attempt: number } | null }) {
+  const { snapshot, raw, problem, lessonText, corpusHash, events } = useLiveRun(runId, index);
   const reveal = useRevealPacing(snapshot, usePrefersReducedMotion());
+  const selectedCall = useMemo(() => {
+    if (!call) return null;
+    const invocation = buildInspectorModel(events).calls.get(`${call.callId}#${call.attempt}`);
+    return invocation ? selectedCallFor(runId, invocation) : null;
+  }, [call, events, runId]);
   // The run pinned a corpus by hash; drawing its result over a different one would show cases that were not searched.
   if (corpusHash !== null && corpusHash !== corpus.corpusHash) return <p role="alert">{CORPUS_MISMATCH}</p>;
-  return <LearningMemoryScene snapshot={snapshot} reveal={reveal} rawEvent={raw} source="live" cases={corpus.cases} problem={problem} lessonText={lessonText} />;
+  return <LearningMemoryScene snapshot={snapshot} reveal={reveal} rawEvent={raw} source="live" cases={corpus.cases} problem={problem} lessonText={lessonText} selectedCall={selectedCall} />;
 }
 
-// The page behind /backend?runId=<run id>.
+// The page behind /backend?runId=<run id>&call=<call id>&attempt=<n>.
 export function BackendSurface({ runId }: { runId: string | null }) {
-  return runId ? <LiveBackendScene runId={runId} /> : <p role="alert">{MISSING_RUN}</p>;
+  const params = new URLSearchParams(window.location.search);
+  const callId = params.get('call');
+  const attempt = Number(params.get('attempt') ?? 1);
+  if (!runId) return <p role="alert">{MISSING_RUN}</p>;
+  return <LiveBackendScene runId={runId} call={callId ? { callId, attempt: Number.isInteger(attempt) && attempt > 0 ? attempt : 1 } : null} />;
 }
