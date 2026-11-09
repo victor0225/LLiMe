@@ -4,21 +4,20 @@ llime runs on one Mac. A local Node server owns every learning-state change. Cod
 
 ## Topology
 
-```text
-                    ┌───────────────────────────── Mac (127.0.0.1 only) ─────────────────────────────┐
- Lesson notes page ─┤ POST lesson → .runtime/inbox/<runId>.txt → inbox watcher                         │
-                    │                                   │                                              │
-                    │                          llime server (src/server.ts)                            │
-                    │      engine + store ── Neo4j 5.26 (Docker, 127.0.0.1:17474/17687)                │
-                    │            │                                                                     │
-                    │   Codex App Server child per run (stdio JSON-RPC, five registered tools)         │
-                    │            │                                                                     │
-                    │   outbox → xcrun simctl push → iPad Simulator                                    │
-                    └────────────┬─────────────────────────────────────────────────────────────────────┘
-                                 │ HTTP /api + web app
-     iPad shell (SwiftUI + WKWebView) /student      Mac browser /inspector, /backend
-                                 │
-                    GPT-Live voice session (WebRTC from the page; created and observed by the server)
+```mermaid
+flowchart LR
+  subgraph mac["Mac · every server bound to 127.0.0.1"]
+    notes["Lesson notes page"] -->|save transcript| inbox["Run inbox file<br/>.runtime/inbox"]
+    inbox -->|inbox watcher| server["llime server<br/>engine · five tools · store"]
+    server <-->|"read · write in one transaction"| db[("Neo4j 5.26 · Docker<br/>127.0.0.1:17474 / 17687")]
+    server <-->|"stdio JSON-RPC · tool calls"| codex["Codex App Server<br/>one child per run"]
+    server -->|"outbox row"| push["xcrun simctl push"]
+    views["Inspector · learning-memory view<br/>browser"] -->|"HTTP /api"| server
+  end
+  push --> ipad["iPad Simulator<br/>SwiftUI shell + WKWebView /student"]
+  ipad <-->|"HTTP /api"| server
+  ipad <-.->|"WebRTC audio"| live["GPT-Live"]
+  server <-.->|"session create · sideband"| live
 ```
 
 | Part | Where | What it does |
@@ -107,7 +106,7 @@ coverage = Σ w·min(q,c) / Σ w·q            how much of the query the candida
 
 ## Voice
 
-The child can explain aloud on `/student`. The page opens a WebRTC connection; the server creates the GPT-Live session and attaches a sideband observer to it (`src/voice.ts`). When the child finishes, the engine writes the explanation, its voice operation and a delegation event in one transaction, then hands the explanation to Codex. A later correction creates a new explanation revision and steers the running turn; an older revision can no longer publish. Steering is designed this way but is an open failure: tool calls in a steered turn are currently refused (V04 in [engineering QA](engineering-qa.md)). The microphone and voice output are torn down before the independent check is enabled. Typing is always available instead of speaking.
+The child can explain aloud on `/student`. The page opens a WebRTC connection; the server creates the GPT-Live session and attaches a sideband observer to it (`src/voice.ts`). When the child finishes, the engine writes the explanation, its voice operation and a delegation event in one transaction, then hands the explanation to Codex. A later correction creates a new explanation revision and steers the running turn; an older revision can no longer publish. The microphone and voice output are torn down before the independent check is enabled. Typing is always available instead of speaking.
 
 ## Data
 
@@ -125,6 +124,6 @@ The child can explain aloud on `/student`. The page opens a WebRTC connection; t
 
 - Every model tool argument, HTTP body, file read and environment variable is parsed by a schema before use.
 - The provider key lives only in the server process. Codex, `simctl` and other child processes get allowlisted environments.
-- Lesson and child text is passed to Codex as escaped JSON data inside the turn instructions. Instruction-like text in a transcript cannot add tools or capabilities. The voice model is only instructed, not constrained: in QA it answered an injected instruction itself with a hint, an open failure (V12 in [engineering QA](engineering-qa.md)).
+- Lesson and child text is passed to Codex as escaped JSON data inside the turn instructions. Instruction-like text in a transcript cannot add tools or capabilities. The voice model is guided by its instructions, not constrained by code; QA checks that it treats such text as learner data (V12 in [engineering QA](engineering-qa.md)).
 - Prompt inputs are scanned so that test expectations or run labels never reach the model.
 - The iPad shell loads one loopback origin and navigates only within it.
