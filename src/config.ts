@@ -35,6 +35,8 @@ const EnvSchema = z
     LLIME_MODEL: unsetIfEmpty(ModelSchema.default('gpt-6.1-terra')),
     LLIME_SERVICE_TIER: unsetIfEmpty(z.string().optional()),
     OPENAI_API_KEY: unsetIfEmpty(z.string().optional()),
+    // The iPad Simulator that receives this Task's notifications; the notifier validates its format.
+    SIMULATOR_UDID: unsetIfEmpty(z.string().optional()),
   })
   .refine((env) => new Set([env.PORT, env.VITE_PORT, env.STORYBOOK_PORT]).size === 3, 'PORT, VITE_PORT and STORYBOOK_PORT must differ');
 
@@ -50,6 +52,7 @@ export type Config = {
   model: z.infer<typeof ModelSchema>;
   serviceTier: string | undefined;
   openaiApiKey: string | undefined;
+  simulatorUdid: string | undefined;
 };
 
 export function parseConfig(vars: Record<string, string | undefined>): Config {
@@ -67,6 +70,7 @@ export function parseConfig(vars: Record<string, string | undefined>): Config {
     model: env.LLIME_MODEL,
     serviceTier: env.LLIME_SERVICE_TIER,
     openaiApiKey: env.OPENAI_API_KEY,
+    simulatorUdid: env.SIMULATOR_UDID,
   };
 }
 

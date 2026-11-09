@@ -222,8 +222,9 @@ describe('invitation publish: commit', () => {
     assert.equal((await store.countNamespace(runId)).outbox, 1);
   });
 
-  test('a publish that is not an invitation is refused until its handler exists', async () => {
+  test('a teaching publish during ingestion is refused as the wrong phase and writes nothing', async () => {
     const prepared = await prepare();
-    failed(await publishActivity(store, prepared.context, { ...invitation(prepared), kind: 'retry', templateId: 'manipulation_retry', strategy: 'retry', evidenceIds: [], todayConceptId: null, quotes: null }), /not available yet/);
+    failed(await publishActivity(store, prepared.context, { ...invitation(prepared), kind: 'retry', templateId: 'manipulation_retry', strategy: 'retry', evidenceIds: [], todayConceptId: null, quotes: null }), /cannot be published in INGESTING/, 'WRONG_PHASE');
+    await assertNothingPublished(prepared);
   });
 });
