@@ -55,7 +55,7 @@ export type SelectedCall = {
   runId: string;
   callId: string;
   attempt: number;
-  toolName: ToolName;
+  name: ToolName;
   itemId: string | null;
   caseIds: string[];
   nodeIds: string[];
@@ -68,14 +68,9 @@ export function evidenceReferences(result: ToolSuccess): Pick<SelectedCall, 'cas
   switch (result.tool) {
     case 'get_personal_memory':
       return { caseIds: unique(result.data.cases.map((c) => c.caseId)), nodeIds: unique(result.data.cases.flatMap((c) => c.nodeIds)), edgeIds: [] };
-    case 'search_learning_cases': {
-      const { contextCommit, search } = result.data;
-      return {
-        caseIds: unique([contextCommit.caseId, ...search.candidates.map((c) => c.id), ...search.admitted.map((c) => c.caseId)]),
-        nodeIds: unique([...contextCommit.nodeIds, ...search.candidates.flatMap((c) => c.matchedCandidateNodeIds)]),
-        edgeIds: unique([...contextCommit.edgeIds, ...search.admitted.flatMap((c) => c.matchedEdgeIds)]),
-      };
-    }
+    // Only the cases the search admitted are lifted in the graph; the inspector passes them on as returned.
+    case 'search_learning_cases':
+      return { caseIds: unique(result.data.search.admitted.map((c) => c.caseId)), nodeIds: [], edgeIds: unique(result.data.search.admitted.flatMap((c) => c.matchedEdgeIds)) };
     case 'publish_activity':
       return { caseIds: unique(result.data.activity.evidenceIds), nodeIds: [], edgeIds: [] };
     case 'commit_episode':
@@ -90,7 +85,7 @@ export function selectedCallFor(runId: string, call: ToolInvocation): SelectedCa
   if (!call.result) return null;
   const refs = evidenceReferences(call.result);
   if (refs.caseIds.length + refs.nodeIds.length + refs.edgeIds.length === 0) return null;
-  return { runId, callId: call.callId, attempt: call.attempt, toolName: call.result.tool, itemId: call.itemId, ...refs };
+  return { runId, callId: call.callId, attempt: call.attempt, name: call.result.tool, itemId: call.itemId, ...refs };
 }
 
 // ---------------------------------------------------------------------------------------------

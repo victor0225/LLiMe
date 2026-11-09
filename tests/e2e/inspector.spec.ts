@@ -233,7 +233,7 @@ for (const viewport of VIEWPORTS) {
           runId: 'run_fixture_01',
           callId: 'call_memory',
           attempt: 1,
-          toolName: 'get_personal_memory',
+          name: 'get_personal_memory',
           itemId: 'item_call_memory',
           caseIds: ['seed_7_0'],
           nodeIds: ['seed_7_0:attempt'],

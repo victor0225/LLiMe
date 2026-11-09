@@ -1,4 +1,4 @@
-import type { ErrorBody, SearchResult } from '@core/domain';
+import type { SearchResult } from '@core/domain';
 import { STUDENT_COPY } from '@core/copy';
 import { type EventPayload, EventSchema, RUNTIME_MESSAGE_MAX_CHARS, type RunEvent, RunSnapshotSchema } from '@core/events';
 import { BootstrapSchema, ROUTES, routePath, SESSION_HEADER } from '@core/routes';
@@ -324,7 +324,7 @@ function orphanCall(key: string, event: RunEvent & { type: 'tool.completed' | 't
     resultSeq: null,
     resultAt: null,
     result: null,
-    error: null as ErrorBody | null,
+    error: null,
     elapsedMs: null,
     acknowledgement: 'unknown',
   };
@@ -434,7 +434,8 @@ function EntryCard({ entry, model, runId, selectedKey, onSelect, onViewEvidence 
       );
     case 'progress':
       return (
-        <Card title={entry.payload.type.toUpperCase()} source="Codex event" status={entry.payload.lifecycle}>
+        <Card title="RUNTIME ITEM" source="Codex event" status={entry.payload.lifecycle}>
+          <p className="insp-summary"><strong>{entry.payload.type}</strong></p>
           <dl className="insp-ids">
             <IdRow label="Item ID" value={entry.payload.id} />
             <IdRow label="Turn ID" value={entry.payload.turnId} />
