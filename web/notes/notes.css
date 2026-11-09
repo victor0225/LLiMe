@@ -1,0 +1,145 @@
+/* Lesson notes: the teacher's class-end screen on the iPad. The page is exactly the viewport height
+   and only the transcript list scrolls, so Finish lesson is always on screen. */
+.notes-app {
+  --notes-record: #c4312b;
+  --notes-record-edge: #8e211c;
+  --notes-record-soft: #fde8e6;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100dvh;
+  padding: 0 var(--p-space-4) 28px;
+  background: var(--p-background);
+  color: var(--p-text);
+  font-family: var(--p-font);
+  overflow: hidden;
+}
+.notes-app *,
+.notes-app *::before,
+.notes-app *::after { box-sizing: border-box; }
+
+.notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 84px;
+  border-bottom: 1px solid var(--p-border);
+}
+.notes-header h1 { margin: 0; font-size: 26px; line-height: 32px; font-weight: 800; letter-spacing: -0.5px; }
+.notes-class { margin: 0; font-size: 18px; font-weight: 700; color: var(--p-muted); }
+
+.notes-body {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.7fr);
+  gap: 32px;
+  min-height: 0;
+  padding: 28px 0;
+}
+.notes-recorder,
+.notes-transcript {
+  background: var(--p-surface);
+  border: 2px solid var(--p-border);
+  border-radius: 24px;
+}
+.notes-recorder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--p-space-2);
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.notes-record {
+  appearance: none;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 184px;
+  height: 184px;
+  padding: 20px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  font: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform var(--p-motion-feedback) var(--p-ease);
+}
+.notes-record svg { width: 52px; height: 52px; flex-shrink: 0; }
+.notes-record[data-variant="record"] { background: var(--notes-record); color: #ffffff; box-shadow: 0 5px 0 var(--notes-record-edge); }
+.notes-record[data-variant="stop"] { background: var(--notes-record-soft); color: var(--notes-record-edge); border-color: var(--notes-record); box-shadow: 0 5px 0 var(--notes-record); }
+.notes-record:disabled { background: var(--p-disabled); color: var(--p-text); border-color: var(--p-border); box-shadow: none; cursor: not-allowed; }
+.notes-record:not(:disabled):active { transform: translateY(3px); box-shadow: none; }
+.notes-record:focus-visible,
+.notes-lines:focus-visible { outline: 3px solid var(--p-focus); outline-offset: 3px; }
+
+.notes-record-status { display: flex; align-items: center; gap: 8px; min-height: 32px; margin: 0; font-size: 20px; font-weight: 800; }
+.notes-time { font-variant-numeric: tabular-nums; }
+.notes-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--notes-record); animation: notes-pulse 1.2s ease-in-out infinite; }
+@keyframes notes-pulse { 50% { opacity: 0.25; } }
+
+.notes-transcript { display: flex; flex-direction: column; min-height: 0; padding: 24px 28px; }
+.notes-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; }
+.notes-panel-head h2 { margin: 0; font-size: 24px; line-height: 32px; }
+.notes-meta { margin: 6px 0 14px; font-size: 16px; font-weight: 650; color: var(--p-muted); }
+.notes-empty { display: flex; flex-direction: column; align-items: center; gap: var(--p-space-2); max-width: 400px; margin: auto; text-align: center; font-size: 20px; line-height: 1.5; color: var(--p-muted); }
+.notes-empty p { margin: 0; }
+
+.notes-lines { flex: 1; min-height: 0; margin: 0; padding: 0 4px 0 0; list-style: none; overflow-y: auto; }
+.notes-lines li {
+  display: grid;
+  grid-template-columns: 64px 120px minmax(0, 1fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--p-border);
+  font-size: 18px;
+  line-height: 26px;
+}
+.notes-line-time { color: var(--p-muted); font-size: 16px; font-variant-numeric: tabular-nums; }
+.notes-line-speaker { font-weight: 800; overflow-wrap: anywhere; }
+.notes-line-text { overflow-wrap: anywhere; }
+.notes-error { margin: 12px 0 0; color: var(--p-error); font-size: 18px; font-weight: 750; }
+
+.notes-footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 20px; }
+.notes-footer-note { margin: 0; font-size: 18px; font-weight: 700; }
+.notes-footer-note[data-tone="error"] { color: var(--p-error); }
+.notes-finish { min-width: 240px; font-size: 22px; }
+
+.notes-started {
+  grid-row: 2 / span 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+.notes-started h2 { margin: 16px 0 0; font-size: 34px; line-height: 42px; letter-spacing: -0.5px; }
+.notes-started p { max-width: 560px; margin: 0; font-size: 22px; line-height: 32px; color: var(--p-muted); }
+.notes-unavailable { grid-row: 2 / span 2; align-self: center; justify-self: center; max-width: 560px; margin: 0; text-align: center; font-size: 22px; line-height: 32px; }
+
+@media (max-width: 900px) {
+  .notes-app { padding: 0 24px 24px; }
+  .notes-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--p-space-2); }
+  .notes-recorder { flex-direction: row; justify-content: flex-start; padding: 20px 24px; text-align: left; }
+  .notes-record { width: 132px; height: 132px; font-size: 17px; }
+  .notes-record svg { width: 40px; height: 40px; }
+}
+@media (max-width: 560px) {
+  .notes-lines li { grid-template-columns: 56px minmax(0, 1fr); }
+  .notes-line-text { grid-column: 1 / -1; }
+  .notes-footer { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-dot { animation: none; }
+  .notes-record { transition: none; }
+  .notes-record:not(:disabled):active { transform: none; }
+}
