@@ -335,6 +335,10 @@ function useCorrectionPlayback(client: VoiceClient, run: RunSnapshot | null): Vo
   useEffect(() => {
     if (superseded) playback.correctionStarted(revision);
   }, [playback, superseded, revision]);
+  const epoch = run?.cancellationEpoch ?? null;
+  useEffect(() => {
+    if (epoch !== null) playback.runObserved({ explanationRevision: revision, cancellationEpoch: epoch });
+  }, [playback, revision, epoch]);
   const shownActivity = run?.activity && (run.phase === 'PRACTICE' || run.phase === 'CLARIFY') ? `${run.activity.id}:${run.activity.revision}` : null;
   useEffect(() => {
     if (shownActivity !== null) playback.replacementRendered(revision);
