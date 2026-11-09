@@ -2,16 +2,16 @@
 
 This page records what was tested, how, and what is still unproven. It is engineering evidence, not the demo film.
 
-**Statuses.** **PASS**: the scenario ran against the integrated build and met its required result. **FAIL**: it ran and did not; **FAIL (open)** means the fix is not merged yet. **UNPROVED**: it did not run, or a dependency was missing, so nothing is claimed. A screenshot never counts as proof of a database transaction, and a tool acknowledgment never counts as proof that audio was heard.
+**Statuses.** **PASS**: the scenario ran against the integrated build and met its required result. **FAIL**: it ran and did not; **FAIL (open)** means the fix is not merged or not yet rechecked. **UNPROVED**: it did not run, or a dependency was missing, so nothing is claimed. A screenshot never counts as proof of a database transaction, and a tool acknowledgment never counts as proof that audio was heard.
 
-**Evidence.** Each scenario's commands, outputs, run IDs and screenshots are kept with the release capture. They are not committed to this repository.
+**Evidence.** Each scenario's commands, outputs, run IDs and screenshots are kept with the release capture. They are not committed to this repository. Unless a row names another commit, results are from integration commit `96f36ca`.
 
 ## Automated suites
 
 | Suite | Result |
 | --- | --- |
 | `npm run typecheck` (server and web) | exit 0 |
-| `npm test` (node:test, no model calls) | TODO(qa): count at the final commit (778/778 at `ac24c48`) |
+| `npm test` (node:test, no model calls) | TODO(qa): count at the final commit (784/784 at `cd82d82`) |
 | `npm run test:e2e` (Playwright + axe), per surface | explain 28, number line 27, invitation and lesson notes 34, make-ten 26, inspector 30, graph 10: all passing |
 | iPad shell unit tests (`xcodebuild test`) | 30/30 |
 | Server-level voice tests | 141/141 |
@@ -46,34 +46,34 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | V01 | One voice session, credential kept server-side, sideband attached to the same session | PASS | Live, in the app |
 | V02 | Spoken explanation delegated with its offset; a late fragment revises the same explanation | UNPROVED | Live delegation sealed the first revision; the delayed-fragment legs need a timed recording |
 | V03 | Published support reaches the UI with matching spoken commentary | PASS | Live, in the app |
-| V04 | A correction during an active turn steers that turn with a new explanation revision | FAIL (open) | Tool calls in the steered turn are refused |
-| V05 | A correction racing a completed turn, before and after practice submission | UNPROVED | Blocked by V04 |
+| V04 | A correction during an active turn steers that turn with a new explanation revision | PASS | After the fix in `3bd9133`; before it, tool calls in a steered turn were refused |
+| V05 | A correction racing a completed turn, before and after practice submission | UNPROVED | |
 | V06 | A duplicate delegation or provider event gives one logical analysis | PASS | |
 | V07 | Sideband disconnect or microphone denied gives an explicit degraded state and the typed path | PASS | Microphone denied live; sideband drop in a controlled test |
 | V08 | Stop learning during analysis and practice; late results and resumes are refused | UNPROVED | Live stop during analysis behaved correctly; the practice leg was not run live |
-| V09 | A correction after speech begins stops the obsolete playback | UNPROVED | Blocked by V04 |
+| V09 | A correction after speech begins stops the obsolete playback | FAIL (open) | Fix in progress |
 | V10 | Voice is fully off before the independent problem is enabled | PASS | Live, in the app |
 | V11 | Closing or reloading the page closes the session within bounds | PASS | |
-| V12 | Instruction-like text in a transcript is treated as learner data | FAIL (open) | The voice model answered an injected instruction itself, with a hint |
+| V12 | Instruction-like text in a transcript is treated as learner data | PASS | After the voice-instruction fix; before it, the voice model answered an injected instruction itself with a hint |
 
-Further voice checks: three controlled checks with a mocked Codex passed, one browser check passed, two are unproved, and one more steering check fails with the same defect as V04.
+Further voice checks: the second steering check and three controlled checks with a mocked Codex passed, the iPad web-view voice check passed, one check fails (open, fix in progress) and one is unproved.
 
 ## Graph, ranking and outcomes
 
 | ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
-| G01 | Same labels with different edges or directions change the score | TODO(qa) | |
-| G02 | Same shape with a different hypothesis meaning scores lower | TODO(qa) | |
-| G03 | Renamed IDs, reordered arrays and moved coordinates leave scores unchanged | TODO(qa) | |
-| G04 | Changing only outcome or strategy leaves similarity unchanged | TODO(qa) | |
-| G05 | The same learner, another concept and future cases are excluded | TODO(qa) | |
-| G06 | Every decision layer: clarify, slip policy, evidence, default; repeat-count never chosen; a mismatched publish refused | TODO(qa) | |
-| G07 | Every matched path pair resolves to real edges | TODO(qa) | |
-| G08 | An invalid node, edge or quote is rejected before any write | TODO(qa) | |
-| G09 | Context and outcome nodes appear only after their own commits | PASS | Live |
+| G01 | Same labels with different edges or directions change the score | PASS | |
+| G02 | Same shape with a different hypothesis meaning scores lower | PASS | |
+| G03 | Renamed IDs, reordered arrays and moved coordinates leave scores unchanged | PASS | |
+| G04 | Changing only outcome or strategy leaves similarity unchanged | PASS | |
+| G05 | The same learner, another concept and future cases are excluded | PASS | |
+| G06 | Every decision layer: clarify, slip policy, evidence, default; repeat-count never chosen; a mismatched publish refused | PASS | The browser check of the Default label was not run |
+| G07 | Every matched path pair resolves to real edges | PASS | |
+| G08 | An invalid node, edge or quote is rejected before any write | PASS | |
+| G09 | Context and outcome nodes appear only after their own commits | PASS | No screenshot of the graph before verification |
 | G10 | Hints or invalid moves cannot earn an independent pass; correct assisted practice advances to the check | PASS | |
-| G11 | A real hint-free attempt saves narrow independent evidence | PASS | Live, after the fix in `f1345ff`: the outcome is committed once, the run is COMPLETE, and the child sees "You solved a new problem without help." Before the fix the verification turn ended in ERROR |
-| G12 | Novel hypothesis (engineering only, never filmed): clarifies despite passing scores, the name shows only in the inspector, invalid variants are refused | FAIL (open) | Starting a turn while the previous one is finishing ends in ERROR, also at the boundary between ingestion and explanation |
+| G11 | A real hint-free attempt saves narrow independent evidence | PASS | Live at `f1345ff`: the outcome is committed once, the run is COMPLETE, and the child sees "You solved a new problem without help." Before that fix the verification turn ended in ERROR |
+| G12 | Novel hypothesis (engineering only, never filmed): clarifies despite passing scores, the name shows only in the inspector, invalid variants are refused | PASS | After the fix in `3bd9133`; before it, starting a turn while the previous one was finishing ended in ERROR |
 
 ## Persistence, mobile and visualization
 
@@ -86,13 +86,13 @@ Further voice checks: three controlled checks with a mocked Codex passed, one br
 | M01 | Notification permission granted and denied in the Simulator | PASS | |
 | M02 | The OS notification arrives after the commit with opaque IDs only | PASS | |
 | M03 | Tapping the notification, warm and cold, opens the exact activity and still asks before starting | PASS | |
-| M04 | Stale activity, offline backend or duplicate tap gives an honest unavailable or retry state | FAIL (open) | Tapping a stale invitation |
-| M05 | Voice inside the iPad web view: permission, audio and teardown | TODO(qa) | |
+| M04 | Stale activity, offline backend or duplicate tap gives an honest unavailable or retry state | PASS | After the fix in `96f36ca`; before it, a tap on a stale invitation was accepted |
+| M05 | Voice inside the iPad web view: permission, audio and teardown | UNPROVED | The Simulator has no audio input, so only the typed fallback was exercised |
 | M06 | Rotating the iPad keeps the activity, moves and attempt | UNPROVED (in part) | The first answer draft survives rotation; the other legs did not run |
 | X01 | The search view shows the actual matched branches | PASS | Live: 659 ranked, 51 admitted, 51 shown |
 | X02 | Class-memory scene | UNPROVED | Not built; outside the demo |
-| iPad tap checks | Banner, opened activity, cold launch and second tap | PASS | |
-| iPad tap check | Tap while the invitation is stale | FAIL (open) | Same defect as M04 |
+| iPad tap checks | Notification banner, opened activity, cold launch, second tap, stale invitation | PASS | The stale-invitation check passed after the fix in `96f36ca` |
+| iPad tap checks (part) | Two further tap checks | UNPROVED | |
 
 ## Child UI
 
@@ -115,7 +115,7 @@ Further voice checks: three controlled checks with a mocked Codex passed, one br
 | GUI04 | Real Codex receives the component catalog and returns an accepted spec | PASS | |
 | GUI05 | `publish_activity` commits a generated spec atomically | PASS | |
 | GUI06 | Speech waits for the matching render acknowledgment | UNPROVED (in part) | The receipt checks passed; speech gating is not yet tested |
-| GUI07 | No unsolicited replacement while the child is moving objects | FAIL, fixed in `c404692` | A replacement shifted the make-ten workspace by 80 px. The recovery line now sits below the card, and the browser test checks that every object stays within 1 px |
+| GUI07 | No unsolicited replacement while the child is moving objects | PASS | After the fix in `c404692`; before it, a refused replacement shifted the make-ten workspace by 80 px |
 | GUI08 | A falsified hint count from the client is ignored | PASS | |
 
 Make-ten workspace checks:
@@ -130,9 +130,18 @@ Make-ten workspace checks:
 
 ## Found during QA
 
-- The first support publish on the main run was rejected because the explanation prompt did not say that the lesson concept and quotes are empty for support activities. Fixed in `f1345ff`.
-- Open, fix in progress: `commit_episode` can be refused with a stale revision.
-- `demo:reset -- --case main` picked a random problem seed instead of the film seed. Fixed in `993c1ed`; L01 and L07 passed again afterwards.
+| Defect | Fix | Recheck |
+| --- | --- | --- |
+| The verification turn ended in ERROR on the main run | `f1345ff` | G11 PASS |
+| The first support publish was rejected because the explanation prompt did not say that the lesson concept and quotes are empty for support activities | `f1345ff` | G11 live rerun passed |
+| `demo:reset -- --case main` picked a random problem seed instead of the film seed | `993c1ed` | L01 and L07 PASS |
+| Tool calls in a steered turn were refused; starting a turn while the previous one was finishing ended in ERROR | `3bd9133` | V04 and G12 PASS |
+| The voice model answered an injected instruction itself | `17257d1` | V12 PASS |
+| A refused replacement shifted the make-ten workspace | `c404692` | GUI07 PASS |
+| A tap on a stale invitation was accepted | `96f36ca` | M04 PASS |
+| `commit_episode` was refused when the run had moved to a newer revision during verification | retry on the reported revision | Unit tests pass; a retry with the real model is UNPROVED |
+| A new voice session did not ask the child how they got their answer | `cd82d82` | TODO(qa): recheck pending |
+| A correction after speech begins does not stop the obsolete playback (V09) | in progress | FAIL (open) |
 
 ## Engineering checks outside the film
 
@@ -142,4 +151,4 @@ These checks are engineering QA only and never appear in the film.
 | --- | --- |
 | Alternate explanation on a separate run ("I missed one tap.") | Not run. `npm run demo:reset -- --case contrast` creates such a run; the automatic comparison between runs is not implemented. |
 | A second problem seed (for example one giving 6 + 6) | Not run |
-| Novel hypothesis (G12) | FAIL (open); see G12 |
+| Novel hypothesis (G12) | PASS; see G12 |
