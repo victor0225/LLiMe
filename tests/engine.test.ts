@@ -413,6 +413,28 @@ describe('run engine (stub runtime)', () => {
     assert.deepEqual(independent.activitySpec?.components.map((c) => c.props), [{ first: 9, second: 4, appearance: 'apple', highlightEmptySlots: false, showEquation: false }]);
   });
 
+  test('a delegated spoken explanation records voice.delegated in the explanation transaction, once even on a retry (stub runtime)', async () => {
+    const engine = createEngine({ store, runtime: stubRuntime().runtime });
+    const runId = await invitedRun();
+    await toExplain(engine, runId);
+    const before = await store.getRun(runId);
+    const input = { commandId: randomUUID(), revision: before.revision, text: FILM_EXPLANATION, provenance: { inputMode: 'voice', liveSessionId: 'live-1', delegationId: 'delegation-1', offsetMs: 1250 } };
+    const first = await engine.explain(runId, input);
+    const replay = await engine.explain(runId, input);
+    assert.equal(replay.replayed, true);
+    const written = await eventsOf(runId, before.seq);
+    assert.deepEqual(written.map((e) => e.type), ['voice.delegated', 'operation.started', 'state.committed']);
+    const delegated = written.find((e) => e.type === 'voice.delegated');
+    assert.ok(delegated?.type === 'voice.delegated');
+    assert.deepEqual([delegated.payload.liveSessionId, delegated.payload.delegationId, delegated.payload.offsetMs, delegated.payload.operationId, delegated.payload.explanationRevision], ['live-1', 'delegation-1', 1250, input.commandId, first.run.state.explanationRevision]);
+    // A typed explanation carries no delegation.
+    const typed = await invitedRun();
+    await toExplain(engine, typed);
+    const typedBefore = await store.getRun(typed);
+    await send(engine, typed, { type: 'explain', text: FILM_EXPLANATION });
+    assert.equal(ofType(await eventsOf(typed, typedBefore.seq), 'voice.delegated').length, 0);
+  });
+
   test('the verification turn reads its expectedRevision when it starts, so the runtime committing a thread first never makes commit_episode stale (stub runtime)', async () => {
     const seen: { input?: VerificationTurnInput } = {};
     const { runtime } = stubRuntime(async (request) => {
@@ -573,5 +595,30 @@ describe('run engine (stub runtime)', () => {
     const second = await engine.recoverInterrupted({ runIdPrefix: prefix });
     assert.deepEqual(second.interrupted, []);
     assert.deepEqual(await snapshot(), before);
+  });
+
+  test('recoverInterrupted with ownsRun recovers only the runs it owns and leaves the others untouched; without it every run is recovered (stub runtime)', async () => {
+    const { runtime } = stubRuntime();
+    const engine = createEngine({ store, runtime });
+    const prefix = `${TASK_ID}-owned-${randomUUID().slice(0, 8)}`;
+    const ingesting = async () => {
+      const runId = createRunId(prefix);
+      created.push(runId);
+      await store.createRun({ runId, seed: FILM_SEED }, seed);
+      await store.beginIngestion(runId, { expectedRevision: 0, lesson });
+      return runId;
+    };
+    const mine = await ingesting();
+    const theirs = await ingesting();
+    const theirsBefore = await store.getRun(theirs);
+
+    const owned = await engine.recoverInterrupted({ runIdPrefix: prefix, ownsRun: async (runId) => runId === mine });
+    assert.deepEqual(owned.interrupted, [mine]);
+    assert.equal(await phaseOf(mine), 'ERROR');
+    const theirsAfter = await store.getRun(theirs);
+    assert.deepEqual([theirsAfter.state.phase, theirsAfter.revision, theirsAfter.seq], ['INGESTING', theirsBefore.revision, theirsBefore.seq]);
+
+    const all = await engine.recoverInterrupted({ runIdPrefix: prefix });
+    assert.deepEqual(all.interrupted, [theirs]);
   });
 });

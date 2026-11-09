@@ -305,6 +305,8 @@ export const ExplanationProvenanceSchema = z
     inputMode: ExplanationRecordSchema.shape.inputMode,
     liveSessionId: IdSchema.nullable(),
     delegationId: IdSchema.nullable(),
+    // Where in the Live session the delegated speech was heard; recorded as voice.delegated.
+    offsetMs: z.number().int().min(0).optional(),
   })
   .refine((p) => p.delegationId === null || p.liveSessionId !== null, { message: 'A delegation requires a Live session', path: ['liveSessionId'] })
   .refine((p) => p.inputMode === 'typed' || p.delegationId !== null, { message: 'A spoken explanation arrives through a delegation', path: ['delegationId'] });
@@ -543,6 +545,13 @@ export function createEngine({ store, runtime }: EngineDeps) {
       error: null,
     };
     const question = questionForExplanation(next);
+    const { liveSessionId, delegationId, offsetMs } = input.provenance;
+    const threadId = state.runtime?.threadId ?? null;
+    // Recorded with the explanation it carried, under the same receipt, so a retry never writes it twice.
+    const delegated: NewEvent[] =
+      liveSessionId !== null && delegationId !== null && offsetMs !== undefined
+        ? [{ type: 'voice.delegated', payload: { runId, liveSessionId, delegationId, operationId, explanationRevision, cancellationEpoch, threadId, turnId: null, offsetMs } }]
+        : [];
     const request: TurnRequest = {
       runId,
       operationId,
@@ -554,13 +563,14 @@ export function createEngine({ store, runtime }: EngineDeps) {
       state: next,
       events: [
         ...(cancelled ? [cancelled.event] : []),
+        ...delegated,
         { type: 'operation.started', payload: { operationId, phase: 'explanation', explanationRevision, cancellationEpoch } },
       ],
       voiceOperations: [
         ...(cancelled ? [cancelled.change] : []),
         {
           kind: 'insert',
-          operation: { runId, liveSessionId: input.provenance.liveSessionId, delegationId: input.provenance.delegationId, operationId, explanationRevision, cancellationEpoch, threadId: state.runtime?.threadId ?? null, turnId: null, status: 'started' },
+          operation: { runId, liveSessionId, delegationId, operationId, explanationRevision, cancellationEpoch, threadId, turnId: null, status: 'started' },
         },
       ],
       effects: [{ kind: correction ? 'steer_or_start' : 'start', request }],
@@ -676,10 +686,13 @@ export function createEngine({ store, runtime }: EngineDeps) {
   // interrupted and the run moves to ERROR; committed work and an untouched independent check stay as
   // they are; a stopped run keeps its phase and only has its runtime and voice cleaned up. Each recovery
   // is keyed by its operation, so running this again changes nothing.
-  async function recoverInterrupted(options: { runIdPrefix?: string } = {}): Promise<{ interrupted: string[]; cleaned: string[] }> {
+  // `ownsRun` limits recovery to the runs this server owns; without it every recoverable run is
+  // recovered. Several checkouts can share one database, and one must not end another's turns.
+  async function recoverInterrupted(options: { runIdPrefix?: string; ownsRun?: (runId: string) => boolean | Promise<boolean> } = {}): Promise<{ interrupted: string[]; cleaned: string[] }> {
     const interrupted: string[] = [];
     const cleaned: string[] = [];
     for (const run of await store.listRecoverableRuns(options.runIdPrefix ?? null)) {
+      if (options.ownsRun && !(await options.ownsRun(run.id))) continue;
       if (run.state.stopped) {
         await closeOpenVoiceOperations(run.id);
         await release(run.id, [{ kind: 'stop_cleanup' }]);

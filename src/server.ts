@@ -26,12 +26,12 @@ import {
   utf8ByteLength,
 } from './routes.js';
 import { loadSeed } from './dataset.js';
-import { loadPreparedLesson, readLesson, saveTranscript, watchInbox } from './inbox.js';
-import { createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, type SettleOperation } from './codex.js';
+import { hasInboxLesson, loadPreparedLesson, readLesson, saveTranscript, watchInbox } from './inbox.js';
+import { type CodexRuntime, createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, type SettleOperation } from './codex.js';
 import { createEngine } from './engine.js';
 import { defaultSimctlRunner, type OutboxLoop, parseNotifyConfig, startOutboxLoop } from './notify.js';
 import { callTool } from './tools.js';
-import { createVoiceHandlers, createVoiceService } from './voice.js';
+import { createVoiceDelegation, createVoiceHandlers, createVoiceService } from './voice.js';
 import { createRunId, type RunRecord, Store } from './store.js';
 
 type Routes = typeof ROUTES;
@@ -337,6 +337,7 @@ export type LessonPort = {
 export type VoiceRoutes = Pick<Required<RouteHandlers>, 'createVoiceSession' | 'voiceSnapshot' | 'voiceCommand'>;
 
 export type RuntimePort = {
+  // Resolves once every interrupted turn has saved its terminal events and its settlement.
   interruptActiveTurns(): Promise<void>;
   // Closes every Codex child's stdin and waits for it to exit.
   close(): Promise<void>;
@@ -466,6 +467,9 @@ export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'createRu
       runtime: 'Codex App Server',
       database: 'Neo4j',
       dataset: options.dataset,
+      // This server only runs live turns; a replay of a capture is served elsewhere.
+      mode: 'live',
+      captureId: null,
     })),
     createRun: handle('createRun', async ({ body }) => snapshotAt(store, await ports.createRun(body))),
     getRun: handle('getRun', async ({ params }) => snapshotAt(store, await store.getRun(params.runId))),
@@ -627,6 +631,36 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
 
 // Notifications go only to an explicitly configured Simulator. Without one the outbox stays off and
 // pending rows wait, instead of guessing a device that may belong to another worker.
+// Codex acknowledges an interrupt before the turn ends; the turn's terminal events and the engine's
+// settlement are written after that. This tracks both, so shutdown can wait for them before the
+// store closes instead of losing them to a closed driver.
+export function trackTurnSettlement(codex: CodexRuntime, settleOperation: SettleOperation) {
+  const pending = new Set<Promise<unknown>>();
+  function track<T>(work: Promise<T>): Promise<T> {
+    pending.add(work);
+    const forget = () => void pending.delete(work);
+    work.then(forget, forget);
+    return work;
+  }
+  const runtime: CodexRuntime = {
+    ...codex,
+    startTurn: async (request) => {
+      const turn = await codex.startTurn(request);
+      track(turn.done);
+      return turn;
+    },
+  };
+  const settle: SettleOperation = (runId, settlement) => track(settleOperation(runId, settlement));
+  // A finished turn calls settle on a later tick, so the wait repeats until nothing new appears.
+  async function settled(): Promise<void> {
+    while (pending.size > 0) {
+      await Promise.allSettled([...pending]);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+  }
+  return { runtime, settle, settled };
+}
+
 async function startConfiguredOutbox(config: Config, store: Store): Promise<OutboxLoop | null> {
   if (config.simulatorUdid === undefined) {
     console.log('Notifications are off: set SIMULATOR_UDID to the iPad Simulator that should receive them.');
@@ -658,16 +692,21 @@ async function main() {
     callTool: (context, name, args) => callTool({ store, outbox: wakeOutbox }, context, name, args),
     config: { command: join(rootDir, 'node_modules', '.bin', 'codex'), cwd: agentDir, model: config.model, serviceTier: config.serviceTier, stderrLogPath: join(rootDir, '.runtime', 'logs', 'codex.stderr.log') },
   });
-  const voiceService = createVoiceService({ apiKey: config.openaiApiKey, store });
-  // The engine and the runtime refer to each other: a finished turn settles through the engine.
-  const settle: SettleOperation = (runId, settlement) => engine.settleOperation(runId, settlement);
+  // The engine, the runtime and voice delegation refer to each other: a finished turn settles
+  // through the engine, and a stopped run closes its voice through delegation. The lambdas resolve
+  // these names only when they run, after every one exists.
+  const turns = trackTurnSettlement(codex, (runId, settlement) => engine.settleOperation(runId, settlement));
   const engine = createEngine({
     store,
-    runtime: createRuntimePort({ runtime: codex, settle, closeVoice: async (runId) => void (await voiceService.close(runId)) }),
+    runtime: createRuntimePort({ runtime: turns.runtime, settle: turns.settle, closeVoice: async (runId) => void (await delegation.closeVoice(runId)) }),
   });
+  const delegation = createVoiceDelegation({ store, engine });
+  const voiceService = createVoiceService({ apiKey: config.openaiApiKey, store, hooks: delegation.hooks });
+  delegation.attach(voiceService);
+  const serverRuntime = createServerRuntimePort(codex);
   const voiceRoutes = createVoiceHandlers(voiceService, {
     typedCorrection: async (runId, request) => snapshotAt(store, (await engine.typedCorrection(runId, request.command)).run),
-    activityRendered: async (runId, command) => snapshotAt(store, (await engine.activityRendered(runId, command)).run),
+    activityRendered: async (runId, command) => snapshotAt(store, (await delegation.activityRendered(runId, command)).run),
   });
 
   // Vite runs only in development; recording serves the built files with no dev server.
@@ -682,14 +721,25 @@ async function main() {
         readLesson: (runId) => readLesson(runId, { rootDir, prepared: lesson.prepared }),
         saveTranscript: (runId, text) => saveTranscript(runId, text, { rootDir }),
       },
-      engine,
+      engine: {
+        command: (runId, command) => engine.command(runId, command),
+        // Several checkouts share the local database; this one recovers only the runs whose lesson
+        // is in its own inbox, the same owner test the outbox uses.
+        recoverInterrupted: () => engine.recoverInterrupted({ ownsRun: (runId) => hasInboxLesson(runId, { rootDir }) }),
+      },
       voice: { routes: voiceRoutes, closeAll: () => voiceService.closeAll() },
-      runtime: createServerRuntimePort(codex),
+      runtime: {
+        interruptActiveTurns: async () => {
+          await serverRuntime.interruptActiveTurns();
+          await turns.settled();
+        },
+        close: serverRuntime.close,
+      },
       startInbox: () =>
         watchInbox({
           rootDir,
           store,
-          startIngestionTurn: createIngestionStarter({ runtime: codex, store, settle }),
+          startIngestionTurn: createIngestionStarter({ runtime: turns.runtime, store, settle: turns.settle }),
           now: Date.now,
           onOutcome: (outcome) => console.log(`Inbox: ${JSON.stringify(outcome)}`),
         }),
