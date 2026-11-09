@@ -89,7 +89,7 @@ const isCurrentTarget = (run: RunSnapshot, target: RenderTarget) =>
 
 // Queued behind any pending mutation for the run. The body is built only when the request goes out,
 // with the latest run revision, and is dropped if the run has moved on to another activity.
-function sendRenderReceipt(store: EventStore, target: RenderTarget, voiceSessionId: string | null, retryOnConflict = true): void {
+export function sendRenderReceipt(store: EventStore, target: RenderTarget, voiceSessionId: string | null, retryOnConflict = true): void {
   const receipt = (run: RunSnapshot) =>
     isCurrentTarget(run, target) ? { type: 'activity_rendered' as const, commandId: crypto.randomUUID(), voiceSessionId, expectedRunRevision: run.revision, ...target } : null;
   store.sendRunCommand('voiceCommand', receipt).catch((error: unknown) => {

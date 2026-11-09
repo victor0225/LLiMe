@@ -1,7 +1,8 @@
-import { useCallback, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '@core/copy';
 import { EXPLANATION_MAX_CHARS, type Command, type Problem, type RunPhase, type SavedAttempt } from '@core/domain';
 import type { RunEvent, RunSnapshot } from '@core/events';
+import { sendRenderReceipt } from '../activity/ActivityView';
 import { useRunEvents, type EventStore } from '../lib/event-store';
 import type { VoiceClient, VoiceView } from '../voice';
 import { ConnectionNotice, Outcome, outcomeView, type StartNewRun } from './Outcome';
@@ -439,6 +440,18 @@ export function ExplainFlow({ store, voice, voiceControls, startNewRun }: Explai
     [sendThroughQueue],
   );
   const isUpdating = run !== null && run.phase === 'PROCESSING' && isCorrectionPending(run, events);
+  // A clarification is drawn here, not by the activity host, so this flow sends its render receipt,
+  // once per activity revision; the receipt opens the clarification's spoken commentary.
+  const clarification = run !== null && !run.stopped && run.phase === 'CLARIFY' && run.activity?.kind === 'clarification' ? run.activity : null;
+  const acknowledged = useRef<string | null>(null);
+  const voiceSessionId = voice?.voiceSessionId ?? null;
+  useEffect(() => {
+    if (clarification === null) return;
+    const key = `${clarification.id}:${clarification.revision}`;
+    if (acknowledged.current === key) return;
+    acknowledged.current = key;
+    sendRenderReceipt(store, { activityId: clarification.id, activityRevision: clarification.revision, specHash: clarification.specHash }, voiceSessionId);
+  }, [store, clarification, voiceSessionId]);
   if (!run) return null;
   const connection = status === 'reconnecting' ? 'paused' : 'live';
   const canSend = connection === 'live' && !run.stopped;
