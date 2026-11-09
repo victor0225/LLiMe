@@ -24,9 +24,30 @@ The demo makes three mechanisms observable. Memory supplies prior evidence. The 
    > Remember taking things away in subtraction? Today, let’s put things together with addition. Want to try?
 
    The child chooses **Let’s try** or **Later**. Nothing starts until the child accepts.
+
+   ![The llime notification "A quick challenge from today's lesson?" on the iPad Simulator lock screen](docs/images/ipad-notification.png)
+   <sub>A real OS notification on the iPad Simulator, sent by the server after the invitation was committed.</sub>
+
+   ![The invitation card with Let's try and Later buttons](docs/images/ipad-invitation.png)
+   <sub>The invitation in the iPad shell, opened from a notification tap (the shell's toolbar is cropped).</sub>
+
 2. **Asks how, not just what.** The child jumps along a number line from 8 and answers 12 instead of 13. llime asks *"How did you get 12?"* The child explains aloud, or types. An account like "I started at eight and counted eight, nine, ten, eleven, twelve" supports the hypothesis that the child counted the starting number as a move.
+
+   ![Number line from 0 to 15 for 8 + 5 with step buttons and Check my answer](docs/images/number-line.png)
+   <sub>The number line with the film problem, rendered in a browser test, not taken from a live run.</sub>
+
 3. **Uses comparable situations to choose how to explain.** llime searches other learners' recorded situations with a similar structure of actions and explanations, then compares the support they got and the independent results that followed. In the synthetic data, a ten-box ("make ten") activity leads. Codex composes the activity from validated components, so the child works with the same idea in a different form. The histories are authored to demonstrate the mechanism, not to show that one teaching method works better.
+
+   ![Learning memory view: this student's history, the subtraction–addition curriculum link, today's lesson and a grid of 659 other learners' situations](docs/images/learning-memory-live.png)
+   <sub>Live run (Codex App Server and Neo4j over the synthetic history): the learner's memory and today's lesson, before the search.</sub>
+
+   ![Search and decision view: the child's attempt, observation and explanation on the left, the make-ten next step from 29 cases, and the three strategy groups 23/29, 14/22 and 3/8](docs/images/memory-search-decision.png)
+   <sub>The search and decision, replayed from a recorded agent input over the synthetic cases (the view labels itself "Simulation").</sub>
+
 4. **Checks a fresh attempt, then saves the evidence.** The child moves objects into a ten-box (8 + 5 becomes 10 + 3), then solves a fresh 9 + 4 with no hints and no microphone. The attempt, the explanation and the independent result are saved to the learner's memory graph. Reusing that saved case in a later session is future work.
+
+   ![Make-ten activity for 8 + 5: ten apples in the box, two in the tray and one left over, with the equations 8 + 2 = 10 and 10 + 1 = ?](docs/images/make-ten-support.png)
+   <sub>The make-ten support activity mid-move, rendered in a browser test, not taken from a live run.</sub>
 
 ## Why it matters
 
@@ -50,17 +71,98 @@ Parents of grade 2–3 children who keep needing help with math homework. The ch
 
 ## How it works
 
-```text
-Lesson saved → llime server ↔ Codex App Server (reads the lesson and the explanation, calls tools)
-                    ↕
-               Neo4j learning memory (each learner's cases, linked through shared concepts)
-                    ↓
-     iPad student app (WKWebView shell)  ·  inspector and learning-memory view on the Mac
+```mermaid
+flowchart LR
+  subgraph mac["Mac · every server bound to 127.0.0.1"]
+    notes["Lesson notes page"] -->|save transcript| inbox["Run inbox file"]
+    inbox -->|inbox watcher| server["llime server<br/>engine · five tools · store"]
+    server <-->|"read · write in one transaction"| db[("Neo4j 5.26<br/>learning memory")]
+    server <-->|"stdio JSON-RPC · tool calls"| codex["Codex App Server<br/>one child per run"]
+    server -->|"outbox row"| push["xcrun simctl push"]
+    views["Inspector · learning-memory view<br/>browser"] -->|"HTTP /api"| server
+  end
+  push --> ipad["iPad Simulator<br/>SwiftUI shell + WKWebView /student"]
+  ipad <-->|"HTTP /api"| server
+  ipad <-.->|"WebRTC audio"| live["GPT-Live"]
+  server <-.->|"session create · sideband"| live
+```
+
+The main path, from the lesson to the saved result:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant N as Lesson notes
+  participant S as llime server
+  participant C as Codex App Server
+  participant D as Neo4j
+  participant P as iPad (child)
+  N->>S: Finish lesson saves the transcript to the run inbox
+  S->>S: watcher commits WAITING → INGESTING
+  S->>C: ingestion turn
+  C->>S: get_personal_memory
+  S->>D: read the learner's cases
+  C->>S: publish_activity (invitation)
+  S->>D: activity, event, receipt and outbox row in one transaction
+  S->>P: simulated push notification
+  P->>S: tap, then Let's try
+  P->>S: first attempt 8 + 5 = 12
+  S->>P: "How did you get 12?"
+  P->>S: explanation (voice through GPT-Live, or typed)
+  S->>C: explanation turn
+  C->>S: search_learning_cases (the model's reading of the explanation)
+  S->>D: commit the context graph, rank, decide: make ten
+  C->>S: publish_activity (make-ten blocks)
+  P->>S: support attempt, then hint-free 9 + 4 with voice off
+  S->>C: verification turn
+  C->>S: assess_attempt, then commit_episode
+  S->>D: save the outcome as a new case
+```
+
+Each run moves through fixed phases ([`PHASE_TRANSITIONS`](src/domain.ts)):
+
+```mermaid
+stateDiagram-v2
+  [*] --> WAITING
+  WAITING --> INGESTING
+  INGESTING --> INVITED
+  INGESTING --> NO_MATCH
+  INGESTING --> ERROR
+  INVITED --> INITIAL
+  INITIAL --> ALREADY_CORRECT
+  INITIAL --> EXPLAIN
+  INITIAL --> OUT_OF_SCOPE
+  EXPLAIN --> PROCESSING
+  PROCESSING --> PROCESSING: newer explanation revision
+  PROCESSING --> CLARIFY
+  PROCESSING --> PRACTICE
+  PROCESSING --> NEEDS_SUPPORT: clarification cap
+  PROCESSING --> ERROR
+  CLARIFY --> PROCESSING
+  PRACTICE --> PROCESSING: correction before submit
+  PRACTICE --> VERIFY
+  PRACTICE --> CLARIFY
+  PRACTICE --> NEEDS_SUPPORT
+  VERIFY --> COMPLETE
+  VERIFY --> NEEDS_SUPPORT
+  VERIFY --> ERROR
+  NEEDS_SUPPORT --> EXPLAIN: continuation allowed
+  NEEDS_SUPPORT --> PROCESSING: continuation allowed
+  NO_MATCH --> [*]
+  ALREADY_CORRECT --> [*]
+  OUT_OF_SCOPE --> [*]
+  COMPLETE --> [*]
+  ERROR --> [*]
 ```
 
 The model interprets; deterministic tools decide and write. Five tools search memory, compare situations, publish the activity, check the attempt and save the episode. The search compares the *structure* of situations (for example, a move trace one short of the answer followed by an explanation that counts the start) and never the child's words or the past outcome. Everything runs on one Mac, bound to `127.0.0.1`; model inference and voice are external services.
 
-For the film query, the search compares 659 other learners' cases on the same concept and admits 59 close matches. Among them, make-ten support has 23 independent successes in 29 assessed cases, marking the start 14 in 22, and repeating the count 3 in 8. Repeating the count has no activity template, so it can never be chosen. These numbers are recomputed from the seed by the build's own search code in [`tests/search-film.test.ts`](tests/search-film.test.ts). They are authored synthetic outcomes that drive a deterministic choice, not causal evidence about teaching methods.
+For the recorded film query, the search compares 659 other learners' cases on the same concept and admits 59 close matches. Among them, make-ten support has 23 independent successes in 29 assessed cases, marking the start 14 in 22, and repeating the count 3 in 8. Repeating the count has no activity template, so it can never be chosen. These numbers are recomputed from the seed by the build's own search code in [`tests/search-film.test.ts`](tests/search-film.test.ts). A live run depends on how the model reads the child's explanation: one live QA run ranked the same 659 cases and admitted 51. These are authored synthetic outcomes that drive a deterministic choice, not causal evidence about teaching methods.
+
+Every tool call is visible in the inspector:
+
+![Codex execution inspector showing the input, runtime boundary, get_personal_memory and publish_activity calls with their results, and the published invitation](docs/images/inspector-fixture.png)
+<sub>The inspector with a story fixture, labelled "Fixture" in the view; it is not a recording of a run.</sub>
 
 Details: [docs/architecture.md](docs/architecture.md).
 

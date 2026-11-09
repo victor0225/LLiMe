@@ -4,21 +4,20 @@ llime runs on one Mac. A local Node server owns every learning-state change. Cod
 
 ## Topology
 
-```text
-                    ┌───────────────────────────── Mac (127.0.0.1 only) ─────────────────────────────┐
- Lesson notes page ─┤ POST lesson → .runtime/inbox/<runId>.txt → inbox watcher                         │
-                    │                                   │                                              │
-                    │                          llime server (src/server.ts)                            │
-                    │      engine + store ── Neo4j 5.26 (Docker, 127.0.0.1:17474/17687)                │
-                    │            │                                                                     │
-                    │   Codex App Server child per run (stdio JSON-RPC, five registered tools)         │
-                    │            │                                                                     │
-                    │   outbox → xcrun simctl push → iPad Simulator                                    │
-                    └────────────┬─────────────────────────────────────────────────────────────────────┘
-                                 │ HTTP /api + web app
-     iPad shell (SwiftUI + WKWebView) /student      Mac browser /inspector, /backend
-                                 │
-                    GPT-Live voice session (WebRTC from the page; created and observed by the server)
+```mermaid
+flowchart LR
+  subgraph mac["Mac · every server bound to 127.0.0.1"]
+    notes["Lesson notes page"] -->|save transcript| inbox["Run inbox file<br/>.runtime/inbox"]
+    inbox -->|inbox watcher| server["llime server<br/>engine · five tools · store"]
+    server <-->|"read · write in one transaction"| db[("Neo4j 5.26 · Docker<br/>127.0.0.1:17474 / 17687")]
+    server <-->|"stdio JSON-RPC · tool calls"| codex["Codex App Server<br/>one child per run"]
+    server -->|"outbox row"| push["xcrun simctl push"]
+    views["Inspector · learning-memory view<br/>browser"] -->|"HTTP /api"| server
+  end
+  push --> ipad["iPad Simulator<br/>SwiftUI shell + WKWebView /student"]
+  ipad <-->|"HTTP /api"| server
+  ipad <-.->|"WebRTC audio"| live["GPT-Live"]
+  server <-.->|"session create · sideband"| live
 ```
 
 | Part | Where | What it does |

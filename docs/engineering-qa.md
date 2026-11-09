@@ -14,6 +14,7 @@ This page records what was tested, how, and what is still unproven. It is engine
 | `npm test` (node:test, no model calls) | TODO(qa): count at the final commit (778/778 at `ac24c48`) |
 | `npm run test:e2e` (Playwright + axe), per surface | explain 28, number line 27, invitation and lesson notes 34, make-ten 26, inspector 30, graph 10: all passing |
 | iPad shell unit tests (`xcodebuild test`) | 30/30 |
+| Server-level voice tests | 141/141 |
 | `npm run test:runtime` (live Codex App Server smoke) | 3/3 |
 
 The pure rules have direct unit tests: search scoring and admission (`tests/search.test.ts`, `tests/search-film.test.ts`), the decision rule (`tests/decision.test.ts`), assessment (`tests/assessment.test.ts`), the run state machine (`tests/engine.test.ts`), and idempotency and transactions (`tests/store.test.ts`, `tests/outbox.test.ts`).
@@ -43,17 +44,19 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
 | V01 | One voice session, credential kept server-side, sideband attached to the same session | PASS | Live, in the app |
-| V02 | Spoken explanation delegated with its offset; a late fragment revises the same explanation | TODO(qa) | |
+| V02 | Spoken explanation delegated with its offset; a late fragment revises the same explanation | UNPROVED | Live delegation sealed the first revision; the delayed-fragment legs need a timed recording |
 | V03 | Published support reaches the UI with matching spoken commentary | PASS | Live, in the app |
 | V04 | A correction during an active turn steers that turn with a new explanation revision | FAIL (open) | Tool calls in the steered turn are refused |
-| V05 | A correction racing a completed turn, before and after practice submission | TODO(qa) | |
-| V06 | A duplicate delegation or provider event gives one logical analysis | TODO(qa) | |
-| V07 | Sideband disconnect or microphone denied gives an explicit degraded state and the typed path | TODO(qa) | |
-| V08 | Stop learning during analysis and practice; late results and resumes are refused | TODO(qa) | |
-| V09 | A correction after speech begins stops the obsolete playback | TODO(qa) | |
+| V05 | A correction racing a completed turn, before and after practice submission | UNPROVED | Blocked by V04 |
+| V06 | A duplicate delegation or provider event gives one logical analysis | PASS | |
+| V07 | Sideband disconnect or microphone denied gives an explicit degraded state and the typed path | PASS | Microphone denied live; sideband drop in a controlled test |
+| V08 | Stop learning during analysis and practice; late results and resumes are refused | UNPROVED | Live stop during analysis behaved correctly; the practice leg was not run live |
+| V09 | A correction after speech begins stops the obsolete playback | UNPROVED | Blocked by V04 |
 | V10 | Voice is fully off before the independent problem is enabled | PASS | Live, in the app |
-| V11 | Closing or reloading the page closes the session within bounds | TODO(qa) | |
+| V11 | Closing or reloading the page closes the session within bounds | PASS | |
 | V12 | Instruction-like text in a transcript is treated as learner data | FAIL (open) | The voice model answered an injected instruction itself, with a hint |
+
+Further voice checks: three controlled checks with a mocked Codex passed, one browser check passed, two are unproved, and one more steering check fails with the same defect as V04.
 
 ## Graph, ranking and outcomes
 
@@ -68,7 +71,7 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | G07 | Every matched path pair resolves to real edges | TODO(qa) | |
 | G08 | An invalid node, edge or quote is rejected before any write | TODO(qa) | |
 | G09 | Context and outcome nodes appear only after their own commits | PASS | Live |
-| G10 | Hints or invalid moves cannot earn an independent pass; correct assisted practice advances to the check | TODO(qa) | |
+| G10 | Hints or invalid moves cannot earn an independent pass; correct assisted practice advances to the check | PASS | |
 | G11 | A real hint-free attempt saves narrow independent evidence | PASS | Live, after the fix in `f1345ff`: the outcome is committed once, the run is COMPLETE, and the child sees "You solved a new problem without help." Before the fix the verification turn ended in ERROR |
 | G12 | Novel hypothesis (engineering only, never filmed): clarifies despite passing scores, the name shows only in the inspector, invalid variants are refused | FAIL (open) | Starting a turn while the previous one is finishing ends in ERROR, also at the boundary between ingestion and explanation |
 
@@ -76,18 +79,20 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 
 | ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
-| P01 | A duplicate command returns the original receipt; a changed payload conflicts | TODO(qa) | |
-| P02 | A crash around publication leaves no half-published activity | TODO(qa) | |
-| P03 | Restart during ingestion, explanation and verification keeps committed work and never reruns model work | TODO(qa) | |
-| P04 | Export and replay are read-only; inspector refresh shows each tool call exactly once | TODO(qa) | |
-| M01 | Notification permission granted and denied in the Simulator | TODO(qa) | |
-| M02 | The OS notification arrives after the commit with opaque IDs only | TODO(qa) | |
-| M03 | Tapping the notification, warm and cold, opens the exact activity and still asks before starting | TODO(qa) | |
-| M04 | Stale activity, offline backend or duplicate tap gives an honest unavailable or retry state | TODO(qa) | |
+| P01 | A duplicate command returns the original receipt; a changed payload conflicts | PASS | |
+| P02 | A crash around publication leaves no half-published activity | UNPROVED | No fault-injection hook |
+| P03 | Restart during ingestion, explanation and verification keeps committed work and never reruns model work | UNPROVED (in part) | A hard kill during ingestion gives ERROR, and restarts leave committed runs unchanged; the other legs need fault hooks or an exclusive database window |
+| P04 | Export and replay are read-only; inspector refresh shows each tool call exactly once | UNPROVED (in part) | The replay half passed |
+| M01 | Notification permission granted and denied in the Simulator | PASS | |
+| M02 | The OS notification arrives after the commit with opaque IDs only | PASS | |
+| M03 | Tapping the notification, warm and cold, opens the exact activity and still asks before starting | PASS | |
+| M04 | Stale activity, offline backend or duplicate tap gives an honest unavailable or retry state | FAIL (open) | Tapping a stale invitation |
 | M05 | Voice inside the iPad web view: permission, audio and teardown | TODO(qa) | |
-| M06 | Rotating the iPad keeps the activity, moves and attempt | TODO(qa) | |
-| X01 | The search view shows the actual matched branches | TODO(qa) | |
+| M06 | Rotating the iPad keeps the activity, moves and attempt | UNPROVED (in part) | The first answer draft survives rotation; the other legs did not run |
+| X01 | The search view shows the actual matched branches | PASS | Live: 659 ranked, 51 admitted, 51 shown |
 | X02 | Class-memory scene | UNPROVED | Not built; outside the demo |
+| iPad tap checks | Banner, opened activity, cold launch and second tap | PASS | |
+| iPad tap check | Tap while the invitation is stale | FAIL (open) | Same defect as M04 |
 
 ## Child UI
 
@@ -109,8 +114,8 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | GUI03 | Unknown props, wrong math, stale revision or forged evidence is rejected before render | PASS | |
 | GUI04 | Real Codex receives the component catalog and returns an accepted spec | PASS | |
 | GUI05 | `publish_activity` commits a generated spec atomically | PASS | |
-| GUI06 | Speech waits for the matching render acknowledgment | TODO(qa) | |
-| GUI07 | No unsolicited replacement while the child is moving objects | FAIL (open) | A replacement shifts the make-ten workspace by 80 px |
+| GUI06 | Speech waits for the matching render acknowledgment | UNPROVED (in part) | The receipt checks passed; speech gating is not yet tested |
+| GUI07 | No unsolicited replacement while the child is moving objects | FAIL, fixed in `c404692` | A replacement shifted the make-ten workspace by 80 px. The recovery line now sits below the card, and the browser test checks that every object stays within 1 px |
 | GUI08 | A falsified hint count from the client is ignored | PASS | |
 
 Make-ten workspace checks:
@@ -123,9 +128,10 @@ Make-ten workspace checks:
 | Support equation derived from object positions | PASS |
 | Appearance excluded from similarity | UNPROVED |
 
-## Fixed during QA
+## Found during QA
 
 - The first support publish on the main run was rejected because the explanation prompt did not say that the lesson concept and quotes are empty for support activities. Fixed in `f1345ff`.
+- Open, fix in progress: `commit_episode` can be refused with a stale revision.
 - `demo:reset -- --case main` picked a random problem seed instead of the film seed. Fixed in `993c1ed`; L01 and L07 passed again afterwards.
 
 ## Engineering checks outside the film
