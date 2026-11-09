@@ -583,7 +583,7 @@ describe('turns and model', () => {
     assert.deepEqual(settled[0], { operationId: 'op_fix', phase: 'explanation', cancellationEpoch: 1, status: 'completed' });
   });
 
-  test('a new turn waits for the thread\'s finishing turn instead of failing, and only a real timeout fails (mocked Codex)', async () => {
+  test('a turn started while the thread\'s previous turn is finishing (an explanation right after ingestion published) waits for it instead of failing, and only a real timeout fails (mocked Codex)', async () => {
     const turnIds = ['turn_1', 'turn_2'];
     const s = setup({
       script: (request, server) => {
@@ -595,26 +595,36 @@ describe('turns and model', () => {
         return defaultAnswers()(request, server);
       },
     });
-    const first = await s.runtime.startTurn(ingestion());
-    await until(() => s.server.count('turn/start') === 1, 'first turn');
+    const settled: OperationSettlement[] = [];
+    const settle = async (_runId: string, settlement: OperationSettlement) => void settled.push(settlement);
+    await createIngestionStarter({ runtime: s.runtime, store: s.store, settle })(RUN_ID);
+    await until(() => s.server.count('turn/start') === 1, 'ingestion turn');
 
-    // The first turn already published; only its closing message and turn/completed are still to come.
+    // The invitation was published, accepted and attempted, and the child explained, while the ingestion
+    // turn still has its closing message and turn/completed to send.
+    const port = createRuntimePort({ runtime: s.runtime, settle, closeVoice: async () => undefined });
+    const input: ExplanationTurnInput = {
+      explanationRevision: 1,
+      sourceId: 'speech_1',
+      explanation: 'I counted from 8.',
+      inputMode: 'typed',
+      problem: { lhs: 8, rhs: 5 },
+      attempt: { start: 8, moves: [9, 10, 11, 12], answer: 12, hints: 0 },
+      question: null,
+    };
     let started = false;
-    const next = s.runtime.startTurn({ runId: RUN_ID, phase: 'explanation', input: { text: 'my answer' }, operationId: 'op_answer' }).then((turn) => {
-      started = true;
-      return turn;
-    });
+    const next = port.startTurn({ runId: RUN_ID, operationId: 'op_answer', cancellationEpoch: 0, phase: 'explanation', input }).then(() => void (started = true));
     for (let i = 0; i < 20; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
     assert.equal(started, false);
     assert.equal(s.server.count('turn/start'), 1);
     s.server.notify('item/completed', { threadId: THREAD_ID, turnId: 'turn_1', completedAtMs: 1, item: { type: 'agentMessage', id: 'm1', text: finalJson(), phase: 'final_answer' } });
     s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor('turn_1', 'completed') });
-    assert.equal((await first.done).status, 'completed');
-    const second = await next;
-    assert.equal(second.turnId, 'turn_2');
-    assert.equal(second.operationId, 'op_answer');
+    await next;
     assert.equal(s.server.count('turn/start'), 2);
+    assert.equal(s.store.ofType('runtime.input').at(-1)?.payload.phase, 'explanation');
     assert.equal(s.store.ofType('operation.failed').length, 0);
+    await until(() => settled.length === 1, 'ingestion settlement');
+    assert.deepEqual(settled.map((x) => [x.phase, x.status]), [['ingestion', 'completed']]);
 
     // A turn that never finishes is waited on for a bounded time only.
     const blocked = s.runtime.startTurn({ runId: RUN_ID, phase: 'explanation', input: { text: 'again' } });
