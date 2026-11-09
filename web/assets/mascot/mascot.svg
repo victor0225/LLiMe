@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" class="primer-mascot" data-state="idle" data-motion="on" role="img" aria-label="llime learning companion">
+  <g class="mascot-rig" data-part="rig">
+    <g class="foot-left" data-part="foot-left"><path d="M111 291 C106 304 102 323 112 329 C121 335 137 331 140 320 L145 294 Z" fill="var(--mascot-foot, #79b43c)"/></g>
+    <g class="foot-right" data-part="foot-right"><path d="M180 294 L186 322 C189 333 208 334 215 326 C221 318 211 300 207 290 Z" fill="var(--mascot-foot, #79b43c)"/></g>
+    <g class="arm-left" data-part="arm-left"><path d="M74 192 C59 195 46 214 34 229 C25 242 34 254 44 248 C57 240 68 222 82 219 Z" fill="var(--mascot-body, #a5ed6e)"/></g>
+    <g class="body" data-part="body"><path d="M91 115 C111 96 133 102 155 93 C181 81 204 96 224 120 C249 151 266 198 258 240 C250 286 217 311 166 311 C116 312 80 299 64 269 C38 221 51 158 91 115 Z" fill="var(--mascot-body, #a5ed6e)"/><path d="M65 238 C77 279 112 299 166 299 C207 299 239 281 255 255 C244 292 212 311 166 311 C115 312 80 299 64 269 C59 260 56 250 54 239 Z" fill="var(--mascot-shade, #95da5d)" opacity=".5"/></g>
+    <g class="arm-right" data-part="arm-right"><path d="M237 182 C252 183 267 201 278 213 C287 224 278 235 267 228 C253 220 243 207 229 205 Z" fill="var(--mascot-body, #a5ed6e)"/><path class="listening-hand-detail" d="M267 213 Q277 219 273 224" fill="none" stroke="var(--mascot-foot, #79b43c)" stroke-width="3" stroke-linecap="round"/></g>
+    <g class="leaf" data-part="leaf"><path d="M144 104 C127 99 98 90 93 71 C89 56 97 49 109 53 C127 57 137 70 142 83 C149 68 162 61 170 67 C180 75 161 97 144 104 Z" fill="var(--mascot-leaf, #1cb0f6)"/></g>
+    <g class="face" data-part="face" fill="var(--mascot-ink, #3c3c3c)">
+      <g class="eye-left" data-part="eye-left"><ellipse cx="127" cy="180" rx="8" ry="11"/></g>
+      <g class="eye-right" data-part="eye-right"><ellipse cx="194" cy="176" rx="8" ry="11"/></g>
+      <g class="mouth" data-part="mouth"><path d="M148 199 Q162 216 179 198" fill="none" stroke="var(--mascot-ink, #3c3c3c)" stroke-width="8" stroke-linecap="round"/></g>
+    </g>
+  </g>
+</svg>
