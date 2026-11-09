@@ -51,7 +51,9 @@ before(async () => {
         return store.createRun({ runId, ...input }, corpus);
       },
       lessons: { readLesson: async () => assert.fail('reset reads no lesson'), saveTranscript: async () => assert.fail('reset saves no lesson') },
-      engine: createEngine({ store, runtime: stubRuntime }),
+      // Restart recovery reconciles every run in the shared database; this suite boots no real
+      // restart, so it must not interrupt a live run another process is working on.
+      engine: { ...createEngine({ store, runtime: stubRuntime }), recoverInterrupted: async () => ({ interrupted: [], cleaned: [] }) },
       startInbox: async () => ({ stop: async () => {} }),
       startOutbox: async () => ({ stop: async () => {} }),
     },
