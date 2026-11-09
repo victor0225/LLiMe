@@ -12,6 +12,7 @@ import type { RunPhase } from '../src/domain.js';
 import { createEngine } from '../src/engine.js';
 import { routePath, SESSION_HEADER } from '../src/routes.js';
 import { bootServer, type RunningServer } from '../src/server.js';
+import { FILM_SEED } from '../src/problems.js';
 import { createRunId, Store } from '../src/store.js';
 import { isRunActive, ResetRefused, resetRun } from '../scripts/demo-reset.js';
 
@@ -108,6 +109,14 @@ describe('demo:reset (real Neo4j, real routes, stub runtime)', () => {
     const next = await resetRun({ origin, caseName: 'contrast', operatorRunFile });
     assert.notEqual(next.runId, active.runId);
     await stopLearning(next.runId);
+  });
+
+  test('the main case without --seed creates its run with the film seed', async () => {
+    const operatorRunFile = join(scratch, 'film-seed', 'operator-run.json');
+    const run = await resetRun({ origin, caseName: 'main', operatorRunFile });
+    assert.equal(run.seed, FILM_SEED);
+    assert.equal((await store.getRun(run.runId)).state.seed, FILM_SEED);
+    await stopLearning(run.runId);
   });
 
   test('a purged previous run no longer blocks a reset', async () => {
