@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Prepares local credentials without ever displaying them.
 //   --init-machine  first setup of a computer only: create the shared Neo4j credential once.
-//   (default)       copy that credential, and the provider key from the main checkout, into this
-//                   worktree's .env, adding only what is missing.
+//   (default)       copy that credential, and the provider key (from the main checkout, else from
+//                   ~/.config/llime/provider.env), into this worktree's .env, adding only what is missing.
 // Secrets move by file reads and writes only: never through arguments, output or logs.
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -22,6 +22,7 @@ const PLAIN_VALUE = /^[^\s'"`#\\]+$/;
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const machineDir = join(homedir(), '.config', 'llime');
 const machineFile = join(machineDir, 'neo4j.env');
+const providerFile = join(machineDir, 'provider.env');
 const worktreeEnv = join(root, '.env');
 
 function fail(message) {
@@ -87,7 +88,7 @@ function requireIgnoredEnv() {
   }
 }
 
-// Only the main checkout of this repository on this computer holds the provider key.
+// A linked worktree first looks for the provider key in this repository's main checkout.
 function providerKeyFromMainCheckout() {
   const worktrees = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
   const main = worktrees.match(/^worktree (.+)$/m)?.[1];
@@ -95,6 +96,15 @@ function providerKeyFromMainCheckout() {
   const mainEnv = join(main, '.env');
   if (!existsSync(mainEnv)) return undefined;
   return parseEnv(readFileSync(mainEnv, 'utf8'))[PROVIDER_KEY] || undefined;
+}
+
+// A fresh clone has no separate main checkout, so a keyed computer can also keep the key in a
+// private machine file. Computers without a provider key simply have no such file.
+function providerKeyFromMachineFile() {
+  if (!existsSync(providerFile)) return undefined;
+  requirePrivate(machineDir, 0o700);
+  requirePrivate(providerFile, 0o600);
+  return parseEnv(readFileSync(providerFile, 'utf8'))[PROVIDER_KEY] || undefined;
 }
 
 function setupWorktree() {
@@ -108,7 +118,7 @@ function setupWorktree() {
   }
   const additions = DB_KEYS.filter((key) => !hasKey(existing, key)).map((key) => [key, credential[key]]);
   if (!hasKey(existing, PROVIDER_KEY)) {
-    const providerKey = providerKeyFromMainCheckout();
+    const providerKey = providerKeyFromMainCheckout() ?? providerKeyFromMachineFile();
     if (providerKey) additions.push([PROVIDER_KEY, providerKey]);
   }
   const unsafe = additions.filter(([, value]) => !PLAIN_VALUE.test(value)).map(([key]) => key);
@@ -125,7 +135,7 @@ function setupWorktree() {
   const added = additions.map(([key]) => key);
   console.log(added.length ? `Added to .env: ${added.join(', ')}.` : '.env already had the DB credential; nothing added.');
   if (!hasKey(existing, PROVIDER_KEY) && !added.includes(PROVIDER_KEY)) {
-    console.log(`${PROVIDER_KEY} is not set: the main checkout has none on this computer (voice needs it).`);
+    console.log(`${PROVIDER_KEY} is not set: neither the main checkout nor ${providerFile} has one on this computer (voice needs it).`);
   }
   console.log('Local environment ready (credential not displayed).');
 }
