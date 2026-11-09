@@ -18,7 +18,7 @@ export const makeTenSupport: ActivityFixture = {
     ]
   },
   "spec": {
-    "catalogVersion": "primer-math-v1.1",
+    "catalogVersion": "llime-math-v1.1",
     "activityId": "fixture_run_support_1",
     "revision": 1,
     "phase": "support",
@@ -54,7 +54,7 @@ export const makeTenIndependent: ActivityFixture = {
     "evidenceIds": []
   },
   "spec": {
-    "catalogVersion": "primer-math-v1.1",
+    "catalogVersion": "llime-math-v1.1",
     "activityId": "fixture_run_independent_2",
     "revision": 2,
     "phase": "independent",
@@ -90,7 +90,7 @@ export const numberLineSupport: ActivityFixture = {
     ]
   },
   "spec": {
-    "catalogVersion": "primer-math-v1.1",
+    "catalogVersion": "llime-math-v1.1",
     "activityId": "fixture_run_support_1",
     "revision": 1,
     "phase": "support",
@@ -138,7 +138,7 @@ export const numberLineIndependent: ActivityFixture = {
     "evidenceIds": []
   },
   "spec": {
-    "catalogVersion": "primer-math-v1.1",
+    "catalogVersion": "llime-math-v1.1",
     "activityId": "fixture_run_independent_2",
     "revision": 2,
     "phase": "independent",

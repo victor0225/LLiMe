@@ -92,7 +92,7 @@ describe('validateActivity rejects', () => {
     assert.throws(() => validateActivity(unknownRoot, context), /title/);
 
     const wrongCatalog = asRaw(lineSpec(context));
-    wrongCatalog.catalogVersion = 'primer-math-v1';
+    wrongCatalog.catalogVersion = 'llime-math-v1';
     assert.throws(() => validateActivity(wrongCatalog, context), /catalogVersion/);
   });
 
