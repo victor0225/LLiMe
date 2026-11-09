@@ -220,7 +220,7 @@ function isSessionNonce(header: string | string[] | undefined, nonce: string): b
 }
 
 export function createAppServer({ config, nonce, handlers = {}, frontend }: { config: Config; nonce: string; handlers?: RouteHandlers; frontend: Frontend }): Server {
-  // The browser, the iPad shell and the Storybook proxy all address the backend by this one host.
+  // Every client addresses the backend by this one host; a proxy in front of it must rewrite Host.
   const allowedHosts = new Set([`${HOST}:${config.port}`]);
   // Mutations may come from the app itself or from the configured local Vite and Storybook pages.
   const allowedOrigins = new Set([config.appOrigin, `http://${HOST}:${config.vitePort}`, `http://${HOST}:${config.storybookPort}`]);
