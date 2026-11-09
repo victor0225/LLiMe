@@ -1,7 +1,7 @@
 // Child- and teacher-facing copy. The server owns every word a child sees or hears; models choose
 // structure only. Operands are substituted from a validated activity or problem, never from model text.
 // Isomorphic: shared by the server, the web app and stories.
-import type { Problem, TemplateId } from './domain.js';
+import type { Appearance, Problem, TemplateId } from './domain.js';
 
 const sum = (p: Problem) => `${p.lhs} + ${p.rhs}`;
 // The arithmetic line shown with every activity, e.g. "8 + 5 = ?".
@@ -94,6 +94,33 @@ export const NUMBER_LINE_COPY = {
   moveCount: (n: number) => (n === 1 ? '1 move' : `${n} moves`),
   position: (n: number) => `Now at ${n}`,
   lineLabel: 'Number line',
+} as const;
+
+const OBJECT_NAME: { readonly [A in Appearance]: string } = { apple: 'Apple', pear: 'Pear', dot: 'Dot' };
+const SELECT_FIRST: { readonly [A in Appearance]: string } = { apple: 'Select an apple first.', pear: 'Select a pear first.', dot: 'Select a dot first.' };
+
+// The make-ten ten-box. The child sees the ten-frame as "the box" and the remaining zone as "left
+// over". Movable objects are numbered within the second addend only, so no name counts up to the total.
+export const MAKE_TEN_COPY = {
+  box: 'The box',
+  tray: 'Tray',
+  leftOver: 'Left over',
+  fixedObject: (appearance: Appearance) => OBJECT_NAME[appearance],
+  movableObject: (appearance: Appearance, n: number) => `${OBJECT_NAME[appearance]} ${n}`,
+  // Shown only when the activity highlights the empty slots.
+  emptySlot: 'Empty spot',
+  selectFirst: (appearance: Appearance) => SELECT_FIRST[appearance],
+  selected: 'Now choose where it goes.',
+  undo: 'Undo',
+  answerFirst: 'Type your answer first.',
+  equationLabel: 'Number sentence',
+  // Support-only lines built from the actual placements: `8 + 5`, then `8 + 2 = 10`, then `10 + 3 = ?`.
+  // The full sum is never stated; the child types it.
+  equationStart: (first: number, second: number) => sum({ lhs: first, rhs: second }),
+  equationBox: (first: number, inBox: number) => sum({ lhs: first, rhs: inBox }),
+  // Used only when the box is full; it prints the box size and never adds the operands itself.
+  equationBoxFull: (first: number, inBox: number, boxSize: number) => `${sum({ lhs: first, rhs: inBox })} = ${boxSize}`,
+  equationLeftOver: (boxTotal: number, leftOver: number) => problemQuestion({ lhs: boxTotal, rhs: leftOver }),
 } as const;
 
 // The OS notification after an invitation commits. It carries no transcript, explanation or diagnosis.

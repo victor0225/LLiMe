@@ -240,18 +240,23 @@ function makeWorld(): World {
         },
       },
       voice: {
-        createSession: async (runId, input) => {
-          calls.push(`voice.createSession:${runId}:${input.commandId}`);
-          return { voiceSessionId: 'live-1', sdpAnswer: 'v=0 answer', status: 'live' };
+        routes: {
+          createVoiceSession: async ({ params, body }) => {
+            calls.push(`voice.createSession:${params.runId}:${body.commandId}`);
+            return { voiceSessionId: 'live-1', sdpAnswer: 'v=0 answer', status: 'live' };
+          },
+          voiceSnapshot: async ({ params }) => {
+            calls.push(`voice.snapshot:${params.runId}`);
+            if (!store.runs.has(params.runId)) throw laneError('NOT_FOUND', `Unknown run ${params.runId}`);
+            return VOICE_SNAPSHOT;
+          },
+          voiceCommand: async ({ body }) => {
+            calls.push(`voice.command:${body.type}`);
+            if (body.type === 'typed_correction') throw laneError('STALE_REVISION', 'The run moved on');
+            return { ...VOICE_SNAPSHOT, audioGate: body.type === 'audio_gate_closed' ? 'closed' : 'open' };
+          },
         },
-        snapshot: async (runId) => {
-          calls.push(`voice.snapshot:${runId}`);
-          return VOICE_SNAPSHOT;
-        },
-        command: async (runId, command) => {
-          calls.push(`voice.command:${command.type}`);
-          return { ...VOICE_SNAPSHOT, audioGate: command.type === 'audio_gate_closed' ? 'closed' : 'open' };
-        },
+        closeAll: async () => void calls.push('voice.closeAll'),
       },
       runtime: {
         interruptActiveTurns: async () => {
@@ -529,22 +534,16 @@ describe('lesson', () => {
 });
 
 describe('voice routes', () => {
-  test('typed_correction and activity_rendered go through the engine; close_voice and audio_gate_closed go to voice (stub engine, stub voice)', async () => {
+  test('voice commands reach the bound voice handlers behind the session guard, and a conflict from them carries the run revision (stub voice)', async () => {
     await withServer(async (server, world) => {
       const path = routePath('voiceCommand', { runId: RUN });
-      const correction = await post(server, path, { type: 'typed_correction', commandId: uuid(20), expectedRunRevision: 0, voiceSessionId: null, text: 'I counted the eight.' });
-      assert.equal(RunSnapshotSchema.parse(json(correction)).revision, 1);
-      const rendered = await post(server, path, { type: 'activity_rendered', commandId: uuid(21), expectedRunRevision: 1, voiceSessionId: null, activityId: 'a1', activityRevision: 0, specHash: null });
-      assert.equal(RunSnapshotSchema.parse(json(rendered)).revision, 2);
-      const closed = await post(server, path, { type: 'audio_gate_closed', commandId: uuid(22), expectedRunRevision: 2, voiceSessionId: 'live-1' });
+      const closed = await post(server, path, { type: 'audio_gate_closed', commandId: uuid(22), expectedRunRevision: 0, voiceSessionId: 'live-1' });
       assert.equal(VoiceSnapshotSchema.parse(json(closed)).audioGate, 'closed');
-      await post(server, path, { type: 'close_voice', commandId: uuid(23), expectedRunRevision: 2, voiceSessionId: 'live-1' });
-      assert.deepEqual(world.calls.filter((c) => c === 'engine.typedCorrection' || c === 'engine.activityRendered' || c.startsWith('voice.command')), [
-        'engine.typedCorrection',
-        'engine.activityRendered',
-        'voice.command:audio_gate_closed',
-        'voice.command:close_voice',
-      ]);
+      const stale = await post(server, path, { type: 'typed_correction', commandId: uuid(23), expectedRunRevision: 0, voiceSessionId: null, text: 'I counted the eight.' });
+      assert.deepEqual([stale.status, errorOf(stale).code, errorOf(stale).revision], [409, 'STALE_REVISION', 0]);
+      const noNonce = await send(server, { method: 'POST', path, body: JSON.stringify({ type: 'close_voice', commandId: uuid(24), expectedRunRevision: 0, voiceSessionId: 'live-1' }) });
+      assert.equal(noNonce.status, 403);
+      assert.deepEqual(world.calls.filter((c) => c.startsWith('voice.command')), ['voice.command:audio_gate_closed', 'voice.command:typed_correction']);
     });
   });
 
@@ -687,7 +686,7 @@ describe('lifecycle', () => {
       const report = await running.stopped;
       assert.deepEqual([report.forced, report.failures], [false, []]);
       assert.ok(performance.now() - started < SHUTDOWN_DEADLINE_MS);
-      const order = ['inbox.stop', 'outbox.stop', 'runtime.interruptActiveTurns', 'store.close', 'runtime.close'].map((c) => world.calls.indexOf(c));
+      const order = ['inbox.stop', 'outbox.stop', 'voice.closeAll', 'runtime.interruptActiveTurns', 'store.close', 'runtime.close'].map((c) => world.calls.indexOf(c));
       assert.ok(order.every((at, i) => at >= 0 && (i === 0 || at > (order[i - 1] ?? -1))), `shutdown order: ${world.calls.join(', ')}`);
       await assert.rejects(
         new Promise<void>((resolve, reject) => connect(running.port, HOST).once('connect', resolve).once('error', reject)),
