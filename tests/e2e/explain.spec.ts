@@ -518,6 +518,37 @@ for (const viewport of IPAD_VIEWPORTS) {
       expect(receipts[0]).toMatchObject({ type: 'activity_rendered', activityId: activity.id, activityRevision: activity.revision, voiceSessionId: null });
     });
 
+    test('the composed /student page acknowledges a shown clarification with exactly one activity_rendered (stubbed route)', async ({ page }) => {
+      const activity = ActivitySchema.parse({
+        id: `${RUN_ID}_clarification_1`,
+        revision: 5,
+        runId: RUN_ID,
+        kind: 'clarification',
+        templateId: 'clarify_first_number',
+        strategy: 'clarify',
+        problem,
+        ...ACTIVITY_COPY.clarify_first_number(problem),
+        activitySpec: null,
+        specHash: 'synthetic-clarification-hash',
+        helperCount: 0,
+        evidenceIds: [],
+        decisionSummary: '',
+      });
+      const state = { snapshot: runSnapshot({ phase: 'CLARIFY', activity, revision: 5, explanationRevision: 1, seq: 3 }), events: [] as RunEvent[] };
+      await stubRun(page, state);
+      const receipts: unknown[] = [];
+      await page.route(pathIs(routePath('voiceCommand', { runId: RUN_ID })), (route) => {
+        receipts.push(VoiceCommandSchema.parse(route.request().postDataJSON()));
+        return route.fulfill({ json: state.snapshot });
+      });
+      await page.goto(`/student?runId=${encodeURIComponent(RUN_ID)}`);
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(activity.title);
+      await expect.poll(() => receipts.length).toBe(1);
+      // Later polls and re-renders of the same clarification send nothing more.
+      await page.waitForTimeout(1500);
+      expect(receipts).toEqual([expect.objectContaining({ type: 'activity_rendered', activityId: activity.id, activityRevision: 5, specHash: activity.specHash, expectedRunRevision: 5, voiceSessionId: null })]);
+    });
+
     test('every explain and outcome story renders without errors, overflow or accessibility violations (stubbed route)', async ({ page, request }) => {
       test.setTimeout(STORY_SWEEP_TIMEOUT_MS);
       const index = StoryIndexSchema.parse(await (await request.get(`${storybookOrigin}/index.json`)).json());
