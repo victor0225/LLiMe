@@ -596,4 +596,29 @@ describe('run engine (stub runtime)', () => {
     assert.deepEqual(second.interrupted, []);
     assert.deepEqual(await snapshot(), before);
   });
+
+  test('recoverInterrupted with ownsRun recovers only the runs it owns and leaves the others untouched; without it every run is recovered (stub runtime)', async () => {
+    const { runtime } = stubRuntime();
+    const engine = createEngine({ store, runtime });
+    const prefix = `${TASK_ID}-owned-${randomUUID().slice(0, 8)}`;
+    const ingesting = async () => {
+      const runId = createRunId(prefix);
+      created.push(runId);
+      await store.createRun({ runId, seed: FILM_SEED }, seed);
+      await store.beginIngestion(runId, { expectedRevision: 0, lesson });
+      return runId;
+    };
+    const mine = await ingesting();
+    const theirs = await ingesting();
+    const theirsBefore = await store.getRun(theirs);
+
+    const owned = await engine.recoverInterrupted({ runIdPrefix: prefix, ownsRun: async (runId) => runId === mine });
+    assert.deepEqual(owned.interrupted, [mine]);
+    assert.equal(await phaseOf(mine), 'ERROR');
+    const theirsAfter = await store.getRun(theirs);
+    assert.deepEqual([theirsAfter.state.phase, theirsAfter.revision, theirsAfter.seq], ['INGESTING', theirsBefore.revision, theirsBefore.seq]);
+
+    const all = await engine.recoverInterrupted({ runIdPrefix: prefix });
+    assert.deepEqual(all.interrupted, [theirs]);
+  });
 });

@@ -12,6 +12,7 @@ import {
   CATALOG_VERSION,
   JumpCounterPropsSchema,
   MakeTenWorkspacePropsSchema,
+  NUMBER_LINE_MAX,
   NumberLinePropsSchema,
   StartMarkerPropsSchema,
   TEMPLATE_KIND,
@@ -19,9 +20,6 @@ import {
   type Workspace as WorkspaceType,
 } from '../domain.js';
 import { problemRefOf, SUM_MAX, SUM_MIN } from '../problems.js';
-
-// The number line is drawn from 0 to 20, so a problem must end inside it.
-const NUMBER_LINE_MAX_SUM = 20;
 
 const schema = defineSchema(
   (s) => ({
@@ -123,7 +121,7 @@ export function validateActivity(value: unknown, context: ActivityContext): Acti
 
   if (workspace.type === 'NumberLine') {
     const { start, addend } = workspace.props;
-    if (start !== context.start || addend !== context.addend || start + addend > NUMBER_LINE_MAX_SUM) return fail('Problem mismatch');
+    if (start !== context.start || addend !== context.addend || start + addend > NUMBER_LINE_MAX) return fail('Problem mismatch');
     for (const component of spec.components) {
       if ((component.type === 'StartMarker' || component.type === 'JumpCounter') && component.props.targetId !== workspace.id) return fail('Invalid scaffold target');
       if (component.type === 'StartMarker' && component.props.value !== start) return fail('Wrong start marker');

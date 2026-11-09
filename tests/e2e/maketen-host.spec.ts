@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
 import { loadConfig } from '../../src/config.js';
-import { STUDENT_COPY } from '../../src/copy.js';
+import { NUMBER_LINE_COPY, STUDENT_COPY } from '../../src/copy.js';
 import { ActivityRenderedCommandSchema } from '../../src/routes.js';
 import { makeTenIndependent, makeTenSupport, numberLineIndependent, numberLineSupport } from '../../src/ui/activity-fixtures.js';
 
@@ -36,8 +36,6 @@ async function expectMounted(page: Page, { activityId, revision }: FixtureContex
   await expect(mountedActivity(page)).toHaveAttribute('data-activity-id', activityId);
   await expect(mountedActivity(page)).toHaveAttribute('data-activity-revision', String(revision));
 }
-
-const numberLineProp = (page: Page, name: string) => page.locator(`[data-prop="${name}"]`);
 
 for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PORTRAIT]] as const) {
   test.describe(`activity host, iPad ${orientation}`, () => {
@@ -98,22 +96,23 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
       await expectAccessible(page);
     });
 
-    test('a NumberLine spec with StartMarker and JumpCounter mounts the number-line slot with them', async ({ page }) => {
+    test('a NumberLine spec with StartMarker and JumpCounter mounts the number-line practice screen with them', async ({ page }) => {
+      const { start } = numberLineSupport.context;
       await openStory(page, 'host-number-line');
       await expectMounted(page, numberLineSupport.context);
-      await expect(numberLineProp(page, 'start')).toHaveText(String(numberLineSupport.context.start));
-      await expect(numberLineProp(page, 'addend')).toHaveText(String(numberLineSupport.context.addend));
-      await expect(numberLineProp(page, 'startMarker')).toHaveText(String(numberLineSupport.context.start));
-      await expect(numberLineProp(page, 'showJumpCount')).toHaveText('true');
-      await expect(numberLineProp(page, 'hints')).toHaveText('2');
+      await expect(page.getByRole('button', { name: STUDENT_COPY.startAt(start) })).toBeVisible();
+      await expect(page.getByText(NUMBER_LINE_COPY.moveCount(0))).toBeVisible();
+      // The marker shows the anchor; the start stays unselected until the child presses it.
+      await expect(page.locator('[data-start]')).toHaveCount(0);
       await expect.poll(() => receipts(page)).toEqual([storedReceipt(numberLineSupport.context)]);
       await expectAccessible(page);
 
       await openStory(page, 'host-number-line-independent');
       await expectMounted(page, numberLineIndependent.context);
-      await expect(numberLineProp(page, 'startMarker')).toHaveText('none');
-      await expect(numberLineProp(page, 'showJumpCount')).toHaveText('false');
-      await expect(numberLineProp(page, 'hints')).toHaveText('0');
+      await page.getByRole('button', { name: STUDENT_COPY.startProblem }).click();
+      await expect(page.getByRole('button', { name: STUDENT_COPY.startAt(numberLineIndependent.context.start) })).toHaveCount(0);
+      await expect(page.getByText(NUMBER_LINE_COPY.moveCount(0))).toHaveCount(0);
+      await expect(page.locator('[data-start]')).toHaveCount(0);
       await expect.poll(() => receipts(page)).toEqual([storedReceipt(numberLineIndependent.context)]);
       await expectAccessible(page);
     });

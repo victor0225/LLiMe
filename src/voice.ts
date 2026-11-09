@@ -1045,23 +1045,11 @@ export function createVoiceDelegation({ store, engine, onError }: VoiceDelegatio
     return voice;
   };
 
-  // The engine's explain transition writes the explanation and its VoiceOperation; voice.delegated is
-  // recorded right after it, keyed by the operation so a retry records it once.
+  // The engine's explain transition writes the explanation, its VoiceOperation and voice.delegated in
+  // one transaction; the delegation offset is part of the voice provenance.
   async function explainByVoice(input: VoiceExplanation): Promise<void> {
     const { runId, commandId, expectedRevision, text, liveSessionId, delegationId, offsetMs, operationId } = input;
-    await engine.explain(runId, { commandId, revision: expectedRevision, text, provenance: { inputMode: 'voice', liveSessionId, delegationId }, operationId });
-    const operation = (await store.listVoiceOperations(runId)).find((o) => o.operationId === operationId);
-    if (!operation) return;
-    const { status: _status, ...correlation } = operation;
-    const { revision } = await store.getRun(runId);
-    await store.transition({
-      runId,
-      commandKey: `voice_delegated:${operationId}`,
-      body: { operationId, offsetMs },
-      expectedRevision: revision,
-      resultSchema: z.object({}),
-      apply: ({ state }) => ({ state, events: [{ type: 'voice.delegated', payload: { ...correlation, liveSessionId, delegationId, offsetMs } }], result: {} }),
-    });
+    await engine.explain(runId, { commandId, revision: expectedRevision, text, provenance: { inputMode: 'voice', liveSessionId, delegationId, offsetMs }, operationId });
   }
 
   const coordinator = createDelegationCoordinator({
