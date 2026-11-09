@@ -3,13 +3,12 @@ import { afterEach, describe, mock, test } from 'node:test';
 import { CORRELATION_ID_KEYS, type VoiceOperation } from '../src/domain.js';
 import { SDP_MAX_BYTES, type VoiceCommand } from '../src/routes.js';
 import { RouteError } from '../src/server.js';
+import type { Store } from '../src/store.js';
 import {
   buildVoiceOperation,
-  CAPTION_MAX_CHARS,
   CLOSE_TIMEOUT_MS,
   createVoiceHandlers,
   createVoiceService,
-  FRAGMENT_MAX_COUNT,
   parseProviderEvent,
   type SidebandHandlers,
   type SidebandLink,
@@ -297,10 +296,10 @@ describe('audio gate and transcripts', () => {
   test('mocked provider: more than 4,000 caption characters closes voice visibly', async () => {
     const h = harness();
     const { sideband } = await liveSession(h);
-    sideband.emit(delta('session.input_transcript.delta', 'big1', 'a'.repeat(CAPTION_MAX_CHARS), 0, 10));
+    sideband.emit(delta('session.input_transcript.delta', 'big1', 'a'.repeat(4000), 0, 10));
     assert.equal((await h.service.snapshot(RUN_ID)).status, 'live');
     // The output stream has its own buffer.
-    sideband.emit(delta('session.output_transcript.delta', 'out1', 'b'.repeat(CAPTION_MAX_CHARS), 10, 20));
+    sideband.emit(delta('session.output_transcript.delta', 'out1', 'b'.repeat(4000), 10, 20));
     assert.equal((await h.service.snapshot(RUN_ID)).status, 'live');
     sideband.emit(delta('session.input_transcript.delta', 'big2', 'a', 20, 30));
     const snapshot = await h.service.snapshot(RUN_ID);
@@ -308,13 +307,13 @@ describe('audio gate and transcripts', () => {
     assert.equal(h.service.failureReason(RUN_ID), 'caption_limit');
     assert.ok(sideband.sent.some((frame) => frame.type === 'session.close'));
     // Nothing is silently truncated into the retained evidence.
-    assert.equal(h.service.transcript(RUN_ID).input.map((f) => f.text).join('').length, CAPTION_MAX_CHARS);
+    assert.equal(h.service.transcript(RUN_ID).input.map((f) => f.text).join('').length, 4000);
   });
 
   test('mocked provider: more than 2,000 fragments closes voice visibly', async () => {
     const h = harness();
     const { sideband } = await liveSession(h);
-    for (let i = 0; i < FRAGMENT_MAX_COUNT; i += 1) {
+    for (let i = 0; i < 2000; i += 1) {
       sideband.emit(delta(i % 2 === 0 ? 'session.input_transcript.delta' : 'session.output_transcript.delta', `f${i}`, 'x', i, i + 1));
     }
     assert.equal((await h.service.snapshot(RUN_ID)).status, 'live');
@@ -585,3 +584,6 @@ describe('close and teardown', () => {
 // Type-level guard: the service interface exposes exactly what the later delegation work needs.
 const _surface: (keyof VoiceService)[] = ['createSession', 'snapshot', 'close', 'sendCommentary', 'transcript', 'failureReason', 'recordOperation'];
 void _surface;
+
+// The real store must satisfy the narrow store interface voice depends on.
+export const storeFitsVoice = (store: Store): VoiceStore => store;
