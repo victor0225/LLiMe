@@ -269,6 +269,10 @@ export type Workspace = z.infer<typeof WorkspaceSchema>;
 export const AppearanceSchema = z.enum(['apple', 'dot', 'pear']);
 export type Appearance = z.infer<typeof AppearanceSchema>;
 
+// The number line is drawn from 0 to 20, so a problem must end inside it.
+export const NUMBER_LINE_MIN = 0;
+export const NUMBER_LINE_MAX = 20;
+
 export const NumberLinePropsSchema = z.strictObject({
   start: z.number().int().min(0).max(19),
   addend: z.number().int().min(1).max(10),
