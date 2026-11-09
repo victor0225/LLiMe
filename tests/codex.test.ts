@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { z } from 'zod';
-import { createCodexRuntime, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
+import { createCodexRuntime, createServerRuntimePort, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
 import { TOOL_SCHEMAS, ToolNameSchema, type ToolName, type ToolResult } from '../src/domain.js';
 import type { ToolContext } from '../src/tools.js';
 import {
@@ -419,6 +419,17 @@ describe('turns and model', () => {
     assert.equal(attempts, 2);
     assert.deepEqual(s.store.ofType('tool.started').map((e) => e.payload.attempt), [1, 2]);
     assert.equal(s.store.ofType('tool.completed')[0]?.payload.attempt, 2);
+  });
+
+  test('stopping the server interrupts every active turn and keeps what was committed (mocked Codex)', async () => {
+    const s = setup();
+    const turn = await startedTurn(s);
+    await s.server.request('item/tool/call', callParams('call_k', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }));
+    await createServerRuntimePort(s.runtime).interruptActiveTurns();
+    const done = await turn.done;
+    assert.equal(done.status, 'interrupted');
+    assert.equal(done.error?.code, 'CANCELLED');
+    assert.equal(s.store.ofType('tool.completed').length, 1);
   });
 
   test('closing a run ends stdin and escalates only if the child does not exit (mocked Codex)', async () => {

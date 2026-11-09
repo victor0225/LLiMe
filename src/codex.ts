@@ -335,6 +335,8 @@ export interface CodexRuntime {
   trySteer(request: SteerRequest): Promise<string | null>;
   steer(request: SteerRequest): Promise<SteerResult>;
   interrupt(runId: string, failureBody?: ErrorBody): Promise<void>;
+  // Every run's active turn, for a server stop; committed effects stay.
+  interruptActiveTurns(): Promise<void>;
   close(runId: string): Promise<void>;
   closeAll(): Promise<void>;
 }
@@ -742,6 +744,8 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
       if (!turnId) throw fail('RUNTIME_DISCONNECTED', 'turn/start returned no turn ID');
       turn.turnId ??= turnId;
       session.turns.set(turn.turnId, turn);
+      // An interrupt requested while turn/start was in flight could not name the turn yet.
+      if (turn.failure) void interruptTurn(session, turn, turn.failure);
       return { threadId: session.threadId, turnId: turn.turnId, operationId: turn.operationId, done: turn.done };
     } catch (error) {
       turn.cancelDeadline();
@@ -1090,6 +1094,10 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
     if (session && turn) await interruptTurn(session, turn, why);
   }
 
+  async function interruptActiveTurns() {
+    await Promise.all([...sessions.keys()].map((runId) => interrupt(runId, failure('CANCELLED', 'The server is stopping', false))));
+  }
+
   async function close(runId: string) {
     const session = sessions.get(runId);
     if (!session) return;
@@ -1116,7 +1124,7 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
     stderrStreams.clear();
   }
 
-  return { startTurn, trySteer, steer, interrupt, close, closeAll };
+  return { startTurn, trySteer, steer, interrupt, interruptActiveTurns, close, closeAll };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1198,6 +1206,15 @@ export function createRuntimePort(options: { runtime: CodexRuntime; settle: Sett
     },
     interruptTurn: (runId: string) => runtime.interrupt(runId),
     closeVoice: options.closeVoice,
+  };
+}
+
+// The surface the HTTP server drives on stop, restart recovery and shutdown.
+export function createServerRuntimePort(runtime: CodexRuntime) {
+  return {
+    interruptRun: (runId: string) => runtime.interrupt(runId),
+    interruptActiveTurns: () => runtime.interruptActiveTurns(),
+    close: () => runtime.closeAll(),
   };
 }
 
