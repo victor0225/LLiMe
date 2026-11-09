@@ -33,9 +33,10 @@ export type FixtureSet = {
 };
 
 // A support activity cites a case that ended in independent success under the strategy it teaches,
-// the kind of evidence a real decision admits. The first such case in seed order keeps the choice stable.
+// the kind of evidence a real decision admits, on the addition concept the activity practises. The
+// first such case in seed order keeps the choice stable.
 function evidenceCaseFor(cases: readonly LearningCase[], strategy: Strategy): string {
-  const found = cases.find((c) => c.strategy === strategy && c.outcome === 'independent');
+  const found = cases.find((c) => c.concept === 'addition_within_20' && c.strategy === strategy && c.outcome === 'independent');
   if (found === undefined) throw new Error(`The seed has no independent-success case for ${strategy}`);
   return found.id;
 }
