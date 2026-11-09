@@ -11,6 +11,7 @@ import type { Readable, Writable } from 'node:stream';
 import { z } from 'zod';
 import {
   type ConceptLink,
+  DECISION_SUMMARY_MAX,
   type ErrorBody,
   type ErrorCode,
   PhaseResultSchema,
@@ -101,7 +102,8 @@ Use all-case summaries: prior difficulty does not establish current difficulty.
 Independent-only history can support an invitation. An empty concept summary means
 no stored experience, never inability. In the demo, use the recorded subtraction
 difficulty/help to hypothesize that new addition may also need support, then propose
-a brief check; put that concise rationale in decisionSummary, without private reasoning.
+a brief check; put that concise rationale in decisionSummary (at most ${DECISION_SUMMARY_MAX} characters,
+one or two plain sentences), without private reasoning.
 Do not assert current difficulty before observing the attempt. Connect today's concept to specific memory cases and cite their IDs.
 For a supported addition invitation, call publish_activity with kind invitation,
 templateId invitation_addition, todayConceptId, 1..3 exact transcript quotes, and the
