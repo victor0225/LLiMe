@@ -81,9 +81,9 @@ export const STUDENT_COPY = {
   doneCollapsed: 'See you next time.',
   wordmark: 'llime',
   // While the first run snapshot is loading; distinct from the waiting screen, which is real state.
-  loading: 'Opening your learning space…',
-  // The link has no run, or the server does not know it.
-  runUnavailable: 'This learning space isn’t available right now.',
+  loading: 'Just a moment…',
+  // The link has no run, or the server does not know it; waiting will not fix it.
+  runUnavailable: 'This link doesn’t open a lesson. Ask a grown-up for help.',
 } as const;
 
 // The OS notification after an invitation commits. It carries no transcript, explanation or diagnosis.
@@ -154,5 +154,5 @@ export const LESSON_NOTES_COPY = {
   notUtf8: 'This file isn\'t plain UTF-8 text.',
   textTooLarge: 'Shorten the transcript to 16 KB or less.',
   // The page was opened without a run, or for a run the server does not know.
-  runUnavailable: 'This lesson link has no run. Open Lesson notes for a new run.',
+  runUnavailable: 'This link doesn’t match a lesson run. Open the link for today’s class.',
 } as const;
