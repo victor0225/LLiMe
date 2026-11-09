@@ -490,10 +490,11 @@ export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'createRu
         const row = await store.getNotification(params.notificationId);
         if (!row || row.runId !== run.id) throw new RouteError({ code: 'NOT_FOUND', message: `Unknown notification ${params.notificationId} for this run`, retryable: false });
         if (row.activityId !== body.activityId || row.activityRevision !== body.activityRevision) throw conflict('The tap names a different activity than its notification', run.revision);
+        // Checked before the repeat-tap shortcut, so a stale tap is refused even if it was opened once.
+        if (!isCurrentActivity(run.state, row)) throw conflict('The notification’s activity is no longer current', run.revision);
         const events = await store.events(run.id, 0);
         const isRecorded = events.some((event) => event.type === 'notification.opened' && event.payload.notificationId === row.notificationId);
         if (isRecorded) return snapshotAt(store, run);
-        if (!isCurrentActivity(run.state, row)) throw conflict('The notification’s activity is no longer current', run.revision);
         await store.appendEvents(run.id, [{ type: 'notification.opened', payload: { notificationId: row.notificationId, runId: run.id, activityId: row.activityId, activityRevision: row.activityRevision } }]);
         return snapshotAt(store, await store.getRun(run.id));
       }),
