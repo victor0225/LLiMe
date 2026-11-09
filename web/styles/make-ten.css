@@ -48,3 +48,15 @@ button.mt-object:disabled { cursor: default; }
   .activity-view * { transition: none !important; animation: none !important; }
   button.mt-object[aria-pressed="true"] { transform: none; }
 }
+
+/* When the activity has room for the box and a 280px column, tray and left-over stack beside the box.
+   Measured on the activity itself, since it sits beside a guide column on a wide screen. */
+.activity-view { container-type: inline-size; }
+@container (min-width: 780px) {
+  .mt-board { display: grid; grid-template-columns: max-content minmax(280px, 1fr); grid-template-areas: "box tray" "box left"; align-items: start; }
+  .mt-box { grid-area: box; }
+  .mt-tray { grid-area: tray; }
+  .mt-left-over { grid-area: left; }
+  .mt-tray, .mt-left-over { min-width: 0; }
+}
+.mt-frame > .mt-slot:not([data-highlight="true"]) { background: #f6fbfd; }
