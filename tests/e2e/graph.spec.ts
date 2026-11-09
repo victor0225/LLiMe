@@ -1,4 +1,3 @@
-/// <reference lib="dom" />
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import AxeBuilder from '@axe-core/playwright';
@@ -33,6 +32,10 @@ const ranked = rank(
 const query = validateCase((readJson('captures/backend.capture.json') as { query: unknown }).query);
 const search = buildSearchResult({ query, corpusHash: (readJson('seed/manifest.json') as { sha256: string }).sha256, ranked, decision: chooseActivity(query, ranked, false), rankingHash: await rankingHash(ranked) });
 
+// Page-side code is passed as source text so this file needs no DOM typings, which would replace the
+// Node types the rest of the project is checked with.
+const inPage = <T>(page: Page, body: string): Promise<T> => page.evaluate<T>(`(() => {${body}})()`);
+
 async function open(page: Page, id: string): Promise<void> {
   await page.goto(STORY(id), { waitUntil: 'domcontentloaded' });
   await page.locator('.learning-memory').waitFor({ timeout: 60_000 });
@@ -46,32 +49,32 @@ async function advance(page: Page, presses: number): Promise<void> {
 
 // Everything the scene shows that depends on the step, read from the DOM.
 async function stateOf(page: Page) {
-  return page.evaluate(() => {
-    const ids = (selector: string) => [...document.querySelectorAll(selector)].map((e) => e.getAttribute('data-case-id') ?? e.getAttribute('data-edge-id')).sort();
+  return inPage<{ step: string | null; scored: number; lifted: string[]; open: string[]; litEdges: string[]; visibleResults: number; transforms: string[]; raw: string | null | undefined; operation: string | null | undefined; source: string | null | undefined }>(page, `
+    const ids = (selector) => [...document.querySelectorAll(selector)].map((e) => e.getAttribute('data-case-id') ?? e.getAttribute('data-edge-id')).sort();
     const root = document.querySelector('.learning-memory');
     const resOpacity = [...document.querySelectorAll('.glyph:not(.mine) .res')].map((e) => getComputedStyle(e).opacity);
     return {
-      step: root?.getAttribute('data-step'),
+      step: root?.getAttribute('data-step') ?? null,
       scored: ids('.glyph.scored').length,
       lifted: ids('.glyph.lifted'),
       open: ids('.glyph.open:not(.mine)'),
       litEdges: ids('.glyph line.lit'),
       visibleResults: resOpacity.filter((o) => o !== '0').length,
-      transforms: [...document.querySelectorAll('.glyph:not(.mine)')].map((e) => (e as SVGGElement).style.transform),
+      transforms: [...document.querySelectorAll('.glyph:not(.mine)')].map((e) => e.style.transform),
       raw: document.querySelector('.lm-raw')?.textContent,
       operation: document.querySelector('.lm-operation')?.textContent,
       source: document.querySelector('.lm-source')?.textContent,
     };
-  });
+  `);
 }
 
 async function layoutProblems(page: Page): Promise<{ smallest: number; outside: string[]; scrolls: boolean }> {
-  return page.evaluate(() => {
+  return inPage(page, `
     const svg = document.querySelector('.learning-memory svg');
     if (!svg) throw new Error('The scene has no svg');
-    const scale = (svg as SVGSVGElement).getScreenCTM()?.a ?? 1;
-    const shown = (el: Element) => {
-      for (let node: Element | null = el; node && node !== svg; node = node.parentElement) if (getComputedStyle(node).opacity === '0') return false;
+    const scale = svg.getScreenCTM()?.a ?? 1;
+    const shown = (el) => {
+      for (let node = el; node && node !== svg; node = node.parentElement) if (getComputedStyle(node).opacity === '0') return false;
       return true;
     };
     const texts = [...svg.querySelectorAll('text')].filter((t) => (t.textContent ?? '').trim() !== '' && shown(t));
@@ -85,7 +88,7 @@ async function layoutProblems(page: Page): Promise<{ smallest: number; outside: 
       .map((t) => t.textContent ?? '');
     const doc = document.documentElement;
     return { smallest: Math.min(...sizes, ...html), outside, scrolls: doc.scrollHeight > window.innerHeight || doc.scrollWidth > window.innerWidth };
-  });
+  `);
 }
 
 test.describe('Learning memory scene', () => {
@@ -161,7 +164,7 @@ test.describe('Learning memory scene', () => {
       await open(page, PLAYER);
       await advance(page, LAST_STEP + 1);
       const state = await stateOf(page);
-      const transitions = await page.evaluate(() => getComputedStyle(document.querySelector('.glyph') as Element).transitionDuration);
+      const transitions = await inPage<string>(page, "return getComputedStyle(document.querySelector('.glyph')).transitionDuration;");
       await context.close();
       return { state, transitions };
     };
@@ -187,24 +190,24 @@ test.describe('Learning memory scene', () => {
     await page.setViewportSize(VIEWPORTS[0]);
     await open(page, PLAYER);
     await page.waitForTimeout(SETTLE_MS);
-    await page.evaluate(() => {
-      const frames: number[] = [];
+    await inPage<void>(page, `
+      const frames = [];
       let last = performance.now();
-      const sample = (now: number) => {
+      const sample = (now) => {
         frames.push(now - last);
         last = now;
         requestAnimationFrame(sample);
       };
       requestAnimationFrame(sample);
-      Object.assign(window, { frameSamples: frames });
-    });
+      window.frameSamples = frames;
+    `);
     // Ten seconds through the whole scene: a step about every 1.25 s, then the outcome.
     for (let step = 0; step <= LAST_STEP; step++) {
       await page.waitForTimeout(1250);
       await page.keyboard.press('ArrowRight');
     }
     await page.waitForTimeout(2500);
-    const frames = await page.evaluate(() => (window as unknown as { frameSamples: number[] }).frameSamples);
+    const frames = await inPage<number[]>(page, 'return window.frameSamples;');
     const sorted = [...frames].sort((a, b) => a - b);
     const percentile = (p: number) => sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] ?? 0;
     const report = { frames: frames.length, p50Ms: percentile(0.5), p95Ms: percentile(0.95), p99Ms: percentile(0.99), maxMs: sorted.at(-1) ?? 0, targetMs: 33 };
@@ -240,21 +243,20 @@ test.describe('Learning memory scene', () => {
     await page.setViewportSize(VIEWPORTS[0]);
     await open(page, GRAPH_3D);
     await page.waitForTimeout(1000);
-    const frames = await page.evaluate(
-      () =>
-        new Promise<number[]>((resolve) => {
-          const deltas: number[] = [];
-          const start = performance.now();
-          let last = start;
-          const sample = (now: number) => {
-            deltas.push(now - last);
-            last = now;
-            if (now - start < 10_000) requestAnimationFrame(sample);
-            else resolve(deltas);
-          };
-          requestAnimationFrame(sample);
-        }),
-    );
+    const frames = await inPage<number[]>(page, `
+      return new Promise((resolve) => {
+        const deltas = [];
+        const start = performance.now();
+        let last = start;
+        const sample = (now) => {
+          deltas.push(now - last);
+          last = now;
+          if (now - start < 10000) requestAnimationFrame(sample);
+          else resolve(deltas);
+        };
+        requestAnimationFrame(sample);
+      });
+    `);
     const sorted = [...frames].sort((a, b) => a - b);
     const percentile = (p: number) => sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] ?? 0;
     const report = { frames: frames.length, p50Ms: percentile(0.5), p95Ms: percentile(0.95), p99Ms: percentile(0.99), maxMs: sorted.at(-1) ?? 0, targetMs: 33 };
