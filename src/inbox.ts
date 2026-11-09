@@ -123,6 +123,18 @@ export async function readLesson(runId: string, config: InboxConfig & { prepared
   });
 }
 
+// A run belongs to the server whose inbox received its lesson. Every worktree and test suite on a
+// computer shares one database, so a server uses this to act only on its own runs.
+export async function hasInboxLesson(runId: string, config: InboxConfig): Promise<boolean> {
+  if (!RunFileIdSchema.safeParse(runId).success) return false;
+  try {
+    return (await lstat(join(inboxDir(config), inboxFileName(runId)))).isFile();
+  } catch (error) {
+    if (errnoCode(error) === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 async function readIfPresent(path: string): Promise<Buffer | null> {
   try {
     return await readFile(path);
@@ -306,7 +318,8 @@ export function createInboxScanner(deps: InboxScannerDeps): InboxScanner {
     } catch (error) {
       turn = Promise.reject(error);
     }
-    turn.catch((error: unknown) => report([{ kind: 'turn_failed', runId, contentHash, reason: messageOf(error) }]));
+    // Queued behind the current check, so the failure is reported after the start it belongs to.
+    turn.catch((error: unknown) => void serialize(async () => report([{ kind: 'turn_failed', runId, contentHash, reason: messageOf(error) }])));
   }
 
   async function scanAll(): Promise<InboxOutcome[]> {

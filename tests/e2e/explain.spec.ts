@@ -191,15 +191,36 @@ for (const viewport of IPAD_VIEWPORTS) {
       expect(commands[0]).toMatchObject({ type: 'explain', text: 'one\ntwo' });
     });
 
-    test('a failed send keeps the draft and says so (stubbed route)', async ({ page }) => {
+    test('a failed send keeps the draft, says so, and resends the same words with the same command ID (stubbed route)', async ({ page }) => {
       await stubRun(page, { snapshot: runSnapshot({}), events: [] });
-      await page.route(pathIs(routePath('runCommand', { runId: RUN_ID })), (route) => route.fulfill({ status: 503, json: { code: 'RUNTIME_DISCONNECTED', message: 'Store unavailable' } }));
+      const commands: Command[] = [];
+      await page.route(pathIs(routePath('runCommand', { runId: RUN_ID })), (route) => {
+        commands.push(CommandSchema.parse(route.request().postDataJSON()));
+        return commands.length === 1
+          ? route.fulfill({ status: 503, json: { code: 'RUNTIME_DISCONNECTED', message: 'Store unavailable' } })
+          : route.fulfill({ json: runSnapshot({ phase: 'PROCESSING', revision: 5 }) });
+      });
       await openStory(page, 'student-explain--typed-only');
       const field = page.getByLabel(STUDENT_COPY.explanationLabel);
+      const send = page.getByRole('button', { name: STUDENT_COPY.sendExplanation });
       await field.fill('I counted the start.');
-      await page.getByRole('button', { name: STUDENT_COPY.sendExplanation }).click();
+      await send.click();
       await expect(page.getByRole('alert')).toHaveText(EXPLAIN_COPY.sendFailed);
       await expect(field).toHaveValue('I counted the start.');
+
+      await send.click();
+      await expect.poll(() => commands.length).toBe(2);
+      expect(commands[1]?.commandId).toBe(commands[0]?.commandId);
+      await expect(field).toHaveValue('');
+    });
+
+    test('Stop learning sends one stop_learning command (stubbed route)', async ({ page }) => {
+      await stubRun(page, { snapshot: runSnapshot({}), events: [] });
+      const commands = await recordCommands(page, runSnapshot({ stopped: true, revision: 5 }));
+      await openStory(page, 'student-explain--listening');
+      await page.getByRole('button', { name: STUDENT_COPY.stopLearning }).dblclick();
+      await expect.poll(() => commands.length).toBe(1);
+      expect(commands[0]).toMatchObject({ type: 'stop_learning', revision: 4 });
     });
 
     test('with the microphone denied, Type instead remains and no listening state appears (UI07)', async ({ page }) => {

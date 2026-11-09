@@ -1,7 +1,7 @@
 // Child- and teacher-facing copy. The server owns every word a child sees or hears; models choose
 // structure only. Operands are substituted from a validated activity or problem, never from model text.
 // Isomorphic: shared by the server, the web app and stories.
-import type { Problem, TemplateId } from './domain.js';
+import type { Appearance, Problem, TemplateId } from './domain.js';
 
 const sum = (p: Problem) => `${p.lhs} + ${p.rhs}`;
 // The arithmetic line shown with every activity, e.g. "8 + 5 = ?".
@@ -81,19 +81,46 @@ export const STUDENT_COPY = {
   doneCollapsed: 'See you next time.',
   wordmark: 'llime',
   // While the first run snapshot is loading; distinct from the waiting screen, which is real state.
-  loading: 'Opening your learning space…',
-  // The link has no run, or the server does not know it.
-  runUnavailable: 'This learning space isn’t available right now.',
+  loading: 'Just a moment…',
+  // The link has no run, or the server does not know it; waiting will not fix it.
+  runUnavailable: 'This link doesn’t open a lesson. Ask a grown-up for help.',
 } as const;
 
 // Number-line status text. None of it names the target or how many moves remain.
 export const NUMBER_LINE_COPY = {
   // Explains why Check is unavailable before the child has picked a starting number.
   chooseStart: 'Choose where to start.',
-  // The JumpCounter helper: a live count of the child's own moves.
+  // Counts only moves the child made, so the support helper never shows how many are still needed.
   moveCount: (n: number) => (n === 1 ? '1 move' : `${n} moves`),
   position: (n: number) => `Now at ${n}`,
   lineLabel: 'Number line',
+} as const;
+
+const OBJECT_NAME: { readonly [A in Appearance]: string } = { apple: 'Apple', pear: 'Pear', dot: 'Dot' };
+const SELECT_FIRST: { readonly [A in Appearance]: string } = { apple: 'Select an apple first.', pear: 'Select a pear first.', dot: 'Select a dot first.' };
+
+// The make-ten ten-box. The child sees the ten-frame as "the box" and the remaining zone as "left
+// over". Movable objects are numbered within the second addend only, so no name counts up to the total.
+export const MAKE_TEN_COPY = {
+  box: 'The box',
+  tray: 'Tray',
+  leftOver: 'Left over',
+  fixedObject: (appearance: Appearance) => OBJECT_NAME[appearance],
+  movableObject: (appearance: Appearance, n: number) => `${OBJECT_NAME[appearance]} ${n}`,
+  // Shown only when the activity highlights the empty slots.
+  emptySlot: 'Empty spot',
+  selectFirst: (appearance: Appearance) => SELECT_FIRST[appearance],
+  selected: 'Now choose where it goes.',
+  undo: 'Undo',
+  answerFirst: 'Type your answer first.',
+  equationLabel: 'Number sentence',
+  // Support-only lines built from the actual placements: `8 + 5`, then `8 + 2 = 10`, then `10 + 3 = ?`.
+  // The full sum is never stated; the child types it.
+  equationStart: (first: number, second: number) => sum({ lhs: first, rhs: second }),
+  equationBox: (first: number, inBox: number) => sum({ lhs: first, rhs: inBox }),
+  // Used only when the box is full; it prints the box size and never adds the operands itself.
+  equationBoxFull: (first: number, inBox: number, boxSize: number) => `${sum({ lhs: first, rhs: inBox })} = ${boxSize}`,
+  equationLeftOver: (boxTotal: number, leftOver: number) => problemQuestion({ lhs: boxTotal, rhs: leftOver }),
 } as const;
 
 // The OS notification after an invitation commits. It carries no transcript, explanation or diagnosis.
@@ -120,25 +147,23 @@ export const VOICE_CONTROL_COPY = {
   reconnect: 'Reconnect',
 } as const;
 
-// Explanation, thinking and outcome states the tables above leave unnamed. Each line says only what
-// the app knows: assisted work never claims independence, and nothing claims a save the server has
-// not confirmed.
+// Explanation, thinking and outcome screens. Each line says only what the app knows: assisted work
+// never claims independence, and nothing claims a save the server has not confirmed.
 export const EXPLAIN_COPY = {
   // The independent check needed help, so it is described as shared work, never as solving alone.
-  assistedTitle: 'We worked through it together',
+  assistedTitle: 'We worked through it together.',
   assistedBody: 'Next time, we can try a new one on your own.',
   // A correction replaced the activity and its replacement is not published yet.
   activityUpdating: 'Thanks. The activity is being updated.',
   // After a practice submit, during the independent check or once the run ended, a new explanation
   // can no longer change this run's evidence.
-  correctionClosed: 'This try is already saved. To explain it again, start a new run.',
-  voiceConnecting: 'Connecting…',
-  voiceReconnecting: 'Reconnecting…',
-  // Voice dropped: recovery is offered, never assumed.
-  voiceDisconnectedTitle: 'Let’s reconnect',
-  voiceDisconnectedBody: 'Your work is still here. Reconnect to keep talking, or type instead.',
-  microphoneDeniedTitle: 'Let’s use words instead',
-  microphoneDeniedBody: 'Microphone access is off. You can type what you were thinking.',
+  correctionClosed: 'This can’t be changed now. To explain it again, start a new run.',
+  voiceConnecting: 'Starting voice…',
+  voiceReconnecting: 'Reconnecting voice…',
+  // Voice dropped: speech in flight may be lost, so the child is asked to repeat it, never told it was kept.
+  voiceDisconnectedBody: 'I may have missed some of that. Reconnect and say it again, or type instead.',
+  microphoneDeniedTitle: 'Microphone isn’t allowed',
+  microphoneDeniedBody: 'You can type what you were thinking.',
   stoppedTitle: 'Learning is stopped.',
   stoppedBody: 'What you already finished stays saved. Start a new run to keep going.',
   // A second support activity did not work either, so this run offers no further help.
@@ -146,8 +171,6 @@ export const EXPLAIN_COPY = {
   sendFailed: 'Couldn’t send. Your words are still here.',
   stopFailed: 'Couldn’t stop yet. Please try again.',
   startNewRunFailed: 'Couldn’t start a new run. Please try again.',
-  // A notification opened an activity the run has already moved past.
-  activityAlreadyDone: 'This activity is already done. Your work has not changed.',
   // Closes the final screen without sending anything.
   done: 'Done',
   // Pause leaves the failed run untouched for inspection; it neither cancels nor resumes it.
@@ -205,5 +228,5 @@ export const LESSON_NOTES_COPY = {
   notUtf8: 'This file isn\'t plain UTF-8 text.',
   textTooLarge: 'Shorten the transcript to 16 KB or less.',
   // The page was opened without a run, or for a run the server does not know.
-  runUnavailable: 'This lesson link has no run. Open Lesson notes for a new run.',
+  runUnavailable: 'This link doesn’t match a lesson run. Open the link for today’s class.',
 } as const;

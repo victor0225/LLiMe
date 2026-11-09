@@ -4,10 +4,10 @@
 import { z } from 'zod';
 import { assess, AssessmentError } from './assessment.js';
 import { compactSha256, resolveRelatedLeaf } from './dataset.js';
-import { type ActivityDraft, activityContextOf, activityIdOf, buildActivity, decisionExceedsLimits, episodeOutcome, explainedAttempt, questionForExplanation } from './engine.js';
+import { type ActivityDraft, activityIdOf, buildActivity, decisionExceedsLimits, episodeOutcome, explainedAttempt, questionForExplanation } from './engine.js';
 import { addResult, appendClarification, contextCase, contextCaseId, GraphProposalError, renameCase } from './graph.js';
 import { buildSearchResult, chooseActivity, rank, rankingHash } from './search.js';
-import { ActivityValidationError, validateActivity } from './ui/activity-catalog.js';
+import { activityContextOf, ActivityValidationError, validateActivity } from './ui/activity-catalog.js';
 import {
   type ActivityContext,
   type ActivitySpec,
@@ -351,10 +351,14 @@ function assertCurrent(state: RunState, context: ToolContext, revision: number, 
   }
 }
 
-const asValidationFailure = (error: unknown): unknown =>
-  error instanceof GraphProposalError || error instanceof ActivityValidationError || (error instanceof Error && !(error instanceof DomainError) && !(error instanceof z.ZodError))
-    ? new DomainError('VALIDATION_FAILED', error.message.slice(0, MAX_ERROR_MESSAGE_CHARS))
-    : error;
+// A graph or spec built from the model's proposal that the case or catalog rules reject is a validation
+// failure the model can correct. The case validator throws a plain Error or a ZodError; any other error
+// type (a TypeError, say) is a bug and is rethrown.
+function asValidationFailure(error: unknown): unknown {
+  if (error instanceof z.ZodError) return new DomainError('VALIDATION_FAILED', z.prettifyError(error).slice(0, MAX_ERROR_MESSAGE_CHARS));
+  const derived = error instanceof GraphProposalError || error instanceof ActivityValidationError || (error instanceof Error && error.constructor === Error);
+  return derived ? new DomainError('VALIDATION_FAILED', error.message.slice(0, MAX_ERROR_MESSAGE_CHARS)) : error;
+}
 
 // ---------------------------------------------------------------------------------------------
 // T2: search_learning_cases. Commits the context graph, then searches; the two results stay separate so
@@ -515,8 +519,8 @@ export async function searchLearningCases(store: Store, context: ToolContext, ra
 const NO_TEMPLATE_STRATEGIES: readonly Strategy[] = ['reverse_direction', 'repeat_count'];
 const MAX_PUBLISHED_EVIDENCE = 5;
 
-// Whether the newest round's only active pattern is a possible new one; such a pattern is always clarified.
-const hasActiveNovel = (state: RunState): boolean => state.search?.decision.reason.startsWith('A possible new pattern') === true || (state.graph?.nodes.some((n) => n.meaning === 'novel' && (state.graph?.retrievalContext?.nodeIds.includes(n.id) ?? true)) ?? false);
+// Whether the newest round proposes a possible new pattern; such a pattern is always clarified.
+const hasActiveNovel = ({ graph }: RunState): boolean => graph?.nodes.some((n) => n.meaning === 'novel' && (graph.retrievalContext?.nodeIds.includes(n.id) ?? true)) ?? false;
 
 function checkAgainstDecision(input: PublishActivityInput, decision: Decision, state: RunState): void {
   const fail = (message: string) => {

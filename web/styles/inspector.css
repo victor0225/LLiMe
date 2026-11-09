@@ -1,0 +1,112 @@
+/* Codex Execution Inspector. A plain technical surface, separate from the student's light theme. */
+.inspector {
+  --inspector-bg: #0b1420;
+  --inspector-surface: #121e2d;
+  --inspector-panel: #182638;
+  --inspector-ink: #eaf1f7;
+  --inspector-muted: #a6b8ca;
+  --inspector-line: #3a5069;
+  --match: #52dec0;
+  --new-evidence: #f6d47a;
+  --inspector-error: #ffa99e;
+  --inspector-focus: #8cc4ff;
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 0 48px 120px;
+  background: var(--inspector-bg);
+  color: var(--inspector-ink);
+  font: 18px / 26px var(--p-font);
+}
+.inspector *, .inspector *::before, .inspector *::after { box-sizing: border-box; }
+.inspector h1 { margin: 0; font-size: 32px; line-height: 40px; }
+.inspector h2 { margin: 0; font-size: 18px; line-height: 26px; letter-spacing: 0.04em; }
+.inspector code, .inspector pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.inspector button { font: inherit; }
+.inspector :focus-visible { outline: 3px solid var(--inspector-focus); outline-offset: 3px; }
+
+.insp-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  min-height: 72px;
+  padding: 10px 0;
+}
+.insp-chips { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; }
+.insp-chip { display: flex; gap: 10px; padding: 4px 12px; border: 1px solid var(--inspector-line); border-radius: 12px; font-size: 16px; line-height: 22px; }
+.insp-chip dt { color: var(--inspector-muted); }
+.insp-chip dd { margin: 0; font-weight: 700; }
+.insp-badge { padding: 4px 14px; border: 2px solid var(--match); border-radius: 12px; font-size: 16px; font-weight: 700; }
+.insp-badge[data-source="fixture"] { border-color: var(--new-evidence); color: var(--new-evidence); }
+.insp-poll { margin-left: auto; color: var(--inspector-muted); font-size: 16px; line-height: 22px; }
+
+.insp-ids { margin: 0; display: grid; gap: 4px 20px; font-size: 16px; line-height: 22px; }
+.insp-ids-bar { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); padding-bottom: 20px; }
+.insp-id { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.insp-id dt { color: var(--inspector-muted); }
+.insp-id dd { margin: 0; display: flex; align-items: center; gap: 10px; overflow-wrap: anywhere; }
+.insp-muted { color: var(--inspector-muted); }
+.insp-copy { min-height: 28px; padding: 0 10px; border: 1px solid var(--inspector-line); border-radius: 8px; background: transparent; color: var(--inspector-ink); font-size: 14px; cursor: pointer; }
+.insp-banner { margin: 0 0 20px; padding: 10px 20px; border: 1px dashed var(--new-evidence); border-radius: 12px; color: var(--new-evidence); font-size: 16px; line-height: 22px; }
+
+.insp-body { display: grid; grid-template-columns: minmax(0, 1160px) 640px; gap: 24px; align-items: start; }
+/* At 1440 the evidence panel narrows so the feed keeps a readable width. */
+@media (max-width: 1499px) { .insp-body { grid-template-columns: minmax(0, 1fr) 520px; } }
+@media (max-width: 1199px) { .insp-body { grid-template-columns: minmax(0, 1fr); } }
+
+.insp-feed { display: grid; gap: 20px; }
+.insp-panel { position: sticky; top: 20px; padding: 20px; border: 1px solid var(--inspector-line); border-radius: 12px; background: var(--inspector-panel); }
+@media (max-width: 1199px) { .insp-panel { position: static; } }
+.insp-panes { display: flex; gap: 10px; margin-bottom: 20px; }
+.insp-panes button, .insp-select, .insp-action {
+  min-height: 48px;
+  padding: 8px 20px;
+  border: 2px solid var(--inspector-line);
+  border-radius: 12px;
+  background: var(--inspector-surface);
+  color: var(--inspector-ink);
+  font-weight: 700;
+  cursor: pointer;
+}
+.insp-panes button[aria-pressed="true"], .insp-select[aria-pressed="true"] { border-color: var(--match); }
+.insp-action { background: var(--match); border-color: var(--match); color: #06231d; }
+.insp-action:disabled { background: transparent; border-color: var(--inspector-line); color: var(--inspector-muted); cursor: not-allowed; }
+
+.insp-card { padding: 20px; border: 1px solid var(--inspector-line); border-left-width: 6px; border-radius: 12px; background: var(--inspector-surface); }
+.insp-card[data-tone="ok"] { border-left-color: var(--match); }
+.insp-card[data-tone="bad"] { border-left-color: var(--inspector-error); }
+.insp-card[data-tone="warn"] { border-left-color: var(--new-evidence); }
+.insp-card[data-selected="true"] { box-shadow: 0 0 0 2px var(--match); }
+.insp-card > header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; margin-bottom: 10px; }
+.insp-source { color: var(--inspector-muted); font-size: 16px; line-height: 22px; }
+.insp-status { margin-left: auto; padding: 2px 12px; border: 1px solid currentColor; border-radius: 12px; font-size: 16px; line-height: 22px; font-weight: 700; }
+.insp-status[data-tone="ok"] { color: var(--match); }
+.insp-status[data-tone="bad"] { color: var(--inspector-error); }
+.insp-status[data-tone="warn"] { color: var(--new-evidence); }
+.insp-summary { margin: 0 0 10px; font-size: 24px; line-height: 34px; }
+.insp-error { margin: 0 0 10px; color: var(--inspector-error); font-weight: 700; }
+.insp-facts { display: grid; gap: 4px; margin: 0 0 10px; font-size: 18px; line-height: 26px; }
+.insp-facts div { display: flex; gap: 10px; }
+.insp-facts dt { min-width: 150px; color: var(--inspector-muted); font-size: 16px; line-height: 26px; }
+.insp-facts dd { margin: 0; overflow-wrap: anywhere; }
+.insp-groups { margin: 0 0 10px; padding-left: 20px; }
+.insp-json { margin: 10px 0; }
+.insp-json summary { cursor: pointer; font-size: 16px; line-height: 22px; min-height: 28px; }
+.insp-json pre, .insp-output {
+  max-height: 360px;
+  margin: 10px 0 0;
+  padding: 10px 20px;
+  overflow: auto;
+  border-radius: 12px;
+  background: var(--inspector-panel);
+  font-size: 16px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.insp-output { font-size: 18px; line-height: 26px; }
+.insp-select, .insp-action { margin: 10px 10px 0 0; }
+.insp-final { padding: 20px; border: 2px solid var(--inspector-error); border-radius: 12px; }
+.insp-final p { margin-top: 0; }
+.insp-empty { color: var(--inspector-muted); }
+@media (prefers-reduced-motion: reduce) { .inspector * { transition: none !important; animation: none !important; } }

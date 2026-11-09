@@ -105,12 +105,10 @@ export function ConnectionNotice({ saveUnconfirmed }: { saveUnconfirmed: boolean
   );
 }
 
-// A notification tap whose activity cannot be opened: unknown to the server (404) or already moved
-// past (409). Neither case changes earlier work.
-export type ActivityOpenFailure = 'unavailable' | 'completed';
-
-export function ActivityUnavailable({ reason }: { reason: ActivityOpenFailure }) {
-  return <OutcomeScreen title={reason === 'completed' ? EXPLAIN_COPY.activityAlreadyDone : STUDENT_COPY.activityOpenFailed} />;
+// A notification tap whose activity cannot be opened, whether the server does not know it (404) or
+// the run has moved past it (409). Neither case changes earlier work, and neither claims it was done.
+export function ActivityUnavailable() {
+  return <OutcomeScreen title={STUDENT_COPY.activityOpenFailed} />;
 }
 
 function OutcomeScreen({ title, body, tone, children }: { title: string; body?: string; tone?: 'success'; children?: ReactNode }) {
