@@ -204,6 +204,8 @@ export type VoiceHooks = {
   delegationCreated?: (event: DelegationCreated) => void;
   delegationIncomplete?: (event: DelegationIncomplete) => void;
   inputFragment?: (event: InputFragmentObserved) => void;
+  // The session can speak: started on the provider and observed on the sideband.
+  sessionLive?: (event: { runId: string; voiceSessionId: string }) => void;
 };
 
 export type VoiceFailure = 'caption_limit' | 'fragment_limit' | 'sideband_lost' | 'not_ready' | 'persist_failed';
@@ -355,6 +357,7 @@ export function createVoiceService(deps: VoiceDeps) {
     if (session.readyTimer) clearTimeout(session.readyTimer);
     if (session.readyTimer) session.timers.delete(session.readyTimer);
     session.readyTimer = null;
+    deps.hooks?.sessionLive?.({ runId: session.runId, voiceSessionId: session.voiceSessionId });
   }
 
   function onEvent(session: Session, event: ProviderEvent) {
@@ -1001,8 +1004,9 @@ export function createDelegationCoordinator(ports: DelegationPorts) {
       return serialized(runId, async () => {
         const live = ports.activeSession(runId);
         if (!live) return { outcome: 'silent', reason: 'no_session' };
-        const initial = (await ports.readRun(runId)).state.attempts.findLast((a) => a.criterion === 'initial');
-        if (!initial) return { outcome: 'silent', reason: 'no_approved_speech' };
+        const { state } = await ports.readRun(runId);
+        const initial = state.attempts.findLast((a) => a.criterion === 'initial');
+        if (state.phase !== 'EXPLAIN' || !initial) return { outcome: 'silent', reason: 'no_approved_speech' };
         return askAgain(runId, live.liveSessionId, `voice_question:${initial.id}`, null);
       });
     },
@@ -1076,6 +1080,8 @@ export function createVoiceDelegation({ store, engine, onError }: VoiceDelegatio
   const hooks: VoiceHooks = {
     delegationCreated: (event) => void coordinator.delegationCreated(event).catch(report),
     inputFragment: (event) => void coordinator.inputFragment(event).catch(report),
+    // A session opened while the child explains speaks the question shown on screen, once per attempt.
+    sessionLive: (event) => void coordinator.askForExplanation(event.runId).catch(report),
     delegationIncomplete: (event) => coordinator.voiceFailed(event.runId),
   };
 
