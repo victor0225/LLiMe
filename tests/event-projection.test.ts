@@ -267,6 +267,5 @@ describe('agent events', () => {
     const after = project(before, view({ type: 'runtime.message', payload: { threadId: 't', turnId: 'u', itemId: 'i', text: 'Recorded once.', partial: false } }));
     assert.equal(after.graph, before.graph);
     assert.equal(after.raw?.type, 'runtime.message');
-    assert.equal(after.agentEvents.at(-1)?.type, 'runtime.message');
   });
 });

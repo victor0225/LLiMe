@@ -12,7 +12,7 @@ import { type ConceptLink, type CurriculumConcept, type LearningCase, type Probl
 import { ACTIVITY_COPY } from '@core/copy';
 import { ADMISSION_MIN_SCORE, ADMISSION_TOP_MARGIN } from '@core/search';
 import { type BranchLayout, branchLayout, type Extent, extentOf, FIELD, fieldLayout, GLYPH_UNIT, HUB, ME, personalRow, type Placement, RESULT_X, SLOT, sortLearners, SPINE, STAGE, TRUNK_X, ZONE, zoneLayout } from './branch-layout.js';
-import { hypothesisLabels, liftedCaseIds, litEdgeIds, memoryHighlight, type ProjectionSnapshot, type ViewEvent, visibleScores } from './event-projection.js';
+import { hypothesisLabels, liftedCaseIds, memoryHighlight, type ProjectionSnapshot, type ViewEvent, visibleScores } from './event-projection.js';
 import {
   CORPUS_MISMATCH,
   fieldCaption,
