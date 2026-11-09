@@ -21,7 +21,7 @@ const SPEAKING_HOLD_MS = 1_500;
 // What the client needs from the browser and from the server, as narrow interfaces. The real
 // WebRTC, audio and fetch objects satisfy them; tests supply scripted ones.
 
-export type TrackLike = { enabled: boolean; stop: () => void };
+export type TrackLike = { enabled: boolean; stop: () => void; onended?: (() => void) | null };
 export type StreamLike = { getAudioTracks: () => TrackLike[] };
 export type ChannelLike = {
   onmessage: ((event: { data: unknown }) => void) | null;
@@ -131,6 +131,7 @@ export function createVoiceClient({ env, api, pollMs = POLL_MS, readyTimeoutMs =
       playback.srcObject = null;
     }
     for (const track of microphone?.getAudioTracks() ?? []) {
+      track.onended = null;
       track.enabled = false;
       track.stop();
     }
@@ -230,7 +231,14 @@ export function createVoiceClient({ env, api, pollMs = POLL_MS, readyTimeoutMs =
       });
       // The microphone starts disabled and playback starts muted until the server reports the
       // session ready.
-      for (const track of microphone.getAudioTracks()) track.enabled = false;
+      for (const track of microphone.getAudioTracks()) {
+        track.enabled = false;
+        // Capture that fails after it started (the browser ends the track) leaves nothing to hear:
+        // the session ends and typed input is offered instead of a status that still says listening.
+        track.onended = () => {
+          if (run === generation && (view.phase === 'connecting' || view.phase === 'live')) void lose('unavailable');
+        };
+      }
       playback = env.createPlayback();
       playback.muted = true;
       const connection = env.createPeer();
