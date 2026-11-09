@@ -70,7 +70,7 @@ export type Capture = {
 // Field names whose values are never exported, whatever they hold.
 const FORBIDDEN_KEYS: readonly { rule: string; pattern: RegExp }[] = [
   { rule: 'credential field', pattern: /^(authorization|proxy-authorization|cookie|set-cookie|password|secret|api[-_]?key|openai[-_]?api[-_]?key|(access|refresh|id|bearer)?[-_]?token)$/i },
-  { rule: 'session nonce', pattern: /^(nonce|x-primer-session)$/i },
+  { rule: 'session nonce', pattern: /^(nonce|x-llime-session)$/i },
   { rule: 'SDP field', pattern: /sdp/i },
   { rule: 'raw audio field', pattern: /^(audio|raw[-_]?audio|audio[-_]?(data|bytes|base64|chunk|delta|buffer)|pcm)$/i },
   { rule: 'reasoning field', pattern: /reasoning/i },

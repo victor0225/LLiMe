@@ -253,7 +253,7 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
       const started = page.getByRole('status').filter({ has: page.getByRole('heading', { name: LESSON_NOTES_COPY.startedHeading }) });
       await expect(started).toBeVisible();
       await expect(started.getByText(LESSON_NOTES_COPY.startedBody)).toBeVisible();
-      await expect(started.locator('svg.primer-mascot')).toBeVisible();
+      await expect(started.locator('svg.llime-mascot')).toBeVisible();
       await expect(page.getByRole('button')).toHaveCount(0);
       await expect(page.getByRole('heading', { name: LESSON_NOTES_COPY.transcriptHeading })).toHaveCount(0);
 

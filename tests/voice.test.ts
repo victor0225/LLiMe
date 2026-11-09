@@ -84,6 +84,7 @@ function fakeStore(overrides: Partial<VoiceStore> = {}) {
 
 function harness(options: { apiKey?: string | undefined; reply?: () => Response; store?: Partial<VoiceStore> } = {}) {
   const calls: Call[] = [];
+  const logs: string[] = [];
   const sidebands: FakeSideband[] = [];
   const hooks = { delegations: [] as unknown[], incomplete: [] as unknown[] };
   const { store, calls: storeCalls, operations } = fakeStore(options.store);
@@ -105,8 +106,9 @@ function harness(options: { apiKey?: string | undefined; reply?: () => Response;
       delegationCreated: (event) => hooks.delegations.push(event),
       delegationIncomplete: (event) => hooks.incomplete.push(event),
     },
+    log: (line) => logs.push(line),
   });
-  return { service, calls, sidebands, hooks, storeCalls, operations };
+  return { service, calls, sidebands, hooks, storeCalls, operations, logs };
 }
 
 const createInput = (commandId = COMMAND_A, sdpOffer = SDP_OFFER) => ({ commandId, expectedRevision: 4, sdpOffer });
@@ -202,6 +204,15 @@ describe('session creation', () => {
       'Never say the correct answer, never hint at it',
     ]) assert.ok(instructions.includes(rule), rule);
     assert.ok(instructions.length <= 1_500, `instructions are ${instructions.length} characters`);
+  });
+
+  test('mocked provider: a refused Live session logs one line with the provider status, type and code and never the key; the student answer is unchanged', async () => {
+    const h = harness({ reply: () => Response.json({ error: { type: 'invalid_request_error', code: 'unsupported_sdp', message: `Bad offer for key ${KEY}` } }, { status: 400 }) });
+    await rejectsWith(h.service.createSession(RUN_ID, createInput()), 'RUNTIME_DISCONNECTED');
+    assert.equal(h.logs.length, 1);
+    const [line = ''] = h.logs;
+    for (const part of ['status 400', 'type invalid_request_error', 'code unsupported_sdp']) assert.ok(line.includes(part), `${part} in ${line}`);
+    assert.ok(!line.includes(KEY) && !line.includes('Bearer') && !line.includes(SDP_OFFER), line);
   });
 
   test('mocked provider: the same commandId returns the same session receipt and opens no second session', async () => {
