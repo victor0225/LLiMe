@@ -10,7 +10,7 @@ const PINNED_HASHES = {
   base: '0b9f76f9a07b31d7e501281bb20241a26033182f9949372fae8fa05a72ad4146',
   ingestion: '56710c0c392e874a45b52a9024f101dd805c2bb47b0f5bdfa736d7f03014f104',
   explanation: '1f23bbb85c1dea671a070a9f5fcf6427c26b2fc2e8704810cb8db1aceb676d85',
-  verification: '2f196fc03a44f5ac8585a9085d78854625ae88336af694b1f37cc38ca370f078',
+  verification: '6a77b1d4b3b1bc1b32496d51405d7c83a3d375e0d8505d5eb7dd3d25713ef0db',
 };
 
 const sha256 = (text: string) => createHash('sha256').update(text, 'utf8').digest('hex');

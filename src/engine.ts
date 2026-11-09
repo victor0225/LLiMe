@@ -273,7 +273,8 @@ export type VerificationTurnInput = {
   independentAttemptId: string;
   supportAttemptId: string | null;
   activityId: string;
-  expectedRevision: number;
+  // The run revision when the turn starts; the model passes it as commit_episode's expectedRevision.
+  revision: number;
 };
 
 // The run as the runtime reads it when the turn actually starts.
@@ -495,7 +496,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
       operationId,
       cancellationEpoch: state.cancellationEpoch,
       phase: 'verification',
-      input: (run) => ({ independentAttemptId: saved.id, supportAttemptId: supportAttempt?.id ?? null, activityId: activity.id, expectedRevision: run.revision }),
+      input: (run) => ({ independentAttemptId: saved.id, supportAttemptId: supportAttempt?.id ?? null, activityId: activity.id, revision: run.revision }),
     };
     return {
       state: { ...state, attempts: [...state.attempts, saved] },
