@@ -90,7 +90,7 @@ export const STUDENT_COPY = {
 export const NUMBER_LINE_COPY = {
   // Explains why Check is unavailable before the child has picked a starting number.
   chooseStart: 'Choose where to start.',
-  // The JumpCounter helper: a live count of the child's own moves.
+  // Counts only moves the child made, so the support helper never shows how many are still needed.
   moveCount: (n: number) => (n === 1 ? '1 move' : `${n} moves`),
   position: (n: number) => `Now at ${n}`,
   lineLabel: 'Number line',
