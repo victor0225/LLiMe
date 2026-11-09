@@ -8,10 +8,23 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "dev": "tsx watch src/server.ts --dev",
+    "build": "vite build",
+    "start": "tsx src/server.ts",
+    "storybook": "tsx .storybook/serve.ts",
+    "build-storybook": "storybook build --disable-telemetry",
+    "test:e2e": "playwright test",
+    "setup:env": "node scripts/setup-env.mjs",
+    "db:up": "docker compose -p llime-local up -d --wait",
+    "dataset": "tsx scripts/dataset.ts",
+    "seed": "tsx scripts/seed.ts",
+    "live:codex": "tsx scripts/live-codex.ts",
+    "live:voice": "tsx scripts/live-voice.ts"
   },
   "dependencies": {
     "@json-render/core": "0.22.0",
+    "@json-render/react": "0.22.0",
     "neo4j-driver": "6.3.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
