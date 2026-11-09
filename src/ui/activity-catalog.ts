@@ -3,8 +3,10 @@
 // mounts only specs that passed `validateActivity`, so this module imports no Node module.
 import { defineCatalog, defineSchema, type PromptContext } from '@json-render/core';
 import {
+  type Activity,
   type ActivityComponent,
   type ActivityContext,
+  ActivityContextSchema,
   ActivitySpecSchema,
   type ActivitySpec,
   CATALOG_VERSION,
@@ -12,8 +14,11 @@ import {
   MakeTenWorkspacePropsSchema,
   NumberLinePropsSchema,
   StartMarkerPropsSchema,
+  TEMPLATE_KIND,
+  type TemplateId,
+  type Workspace as WorkspaceType,
 } from '../domain.js';
-import { SUM_MAX, SUM_MIN } from '../problems.js';
+import { problemRefOf, SUM_MAX, SUM_MIN } from '../problems.js';
 
 // The number line is drawn from 0 to 20, so a problem must end inside it.
 const NUMBER_LINE_MAX_SUM = 20;
@@ -132,6 +137,37 @@ export function validateActivity(value: unknown, context: ActivityContext): Acti
   if (spec.components.length !== 1) return fail('Invalid scaffold target');
   if (spec.phase === 'independent' && (highlightEmptySlots || showEquation)) return fail('Independent task cannot contain scaffolds');
   return spec;
+}
+
+// The workspace each generated-activity template mounts. The other templates (initial, retry,
+// clarification, invitation, completion) are application-owned and carry no generated spec.
+const TEMPLATE_WORKSPACE: Partial<Record<TemplateId, WorkspaceType>> = {
+  anchor_start_number_line: 'NumberLine',
+  independent_number_line: 'NumberLine',
+  make_ten_blocks: 'MakeTenWorkspace',
+  independent_make_ten: 'MakeTenWorkspace',
+};
+
+// The validation context for a stored activity, built only from what the server committed (ID,
+// revision, template, problem, allowed evidence), never from the spec it is about to check. The
+// server builds it before publication and the browser before mounting, so both apply the same rules.
+export function activityContextOf(activity: Activity): ActivityContext {
+  const workspace = TEMPLATE_WORKSPACE[activity.templateId];
+  if (workspace === undefined) return fail(`Template ${activity.templateId} has no generated workspace`);
+  if (TEMPLATE_KIND[activity.templateId] !== activity.kind) return fail(`Kind ${activity.kind} does not match template ${activity.templateId}`);
+  if (activity.problem === null) return fail(`Activity ${activity.id} has no problem`);
+  const parsed = ActivityContextSchema.safeParse({
+    activityId: activity.id,
+    revision: activity.revision,
+    phase: activity.kind,
+    workspace,
+    problemRef: problemRefOf(activity.problem),
+    start: activity.problem.lhs,
+    addend: activity.problem.rhs,
+    evidenceIds: activity.evidenceIds,
+  });
+  if (!parsed.success) return fail(`Activity ${activity.id} cannot carry a generated spec: ${parsed.error.issues.map((issue) => issue.path.join('.')).join(', ')}`);
+  return parsed.data;
 }
 
 // Help the spec itself exposes: each displayed helper counts once. The server stores this at
