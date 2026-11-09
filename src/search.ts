@@ -35,7 +35,7 @@ const PATH_MAX_EDGES = 3;
 
 // Scores shown to screens are rounded to this many decimals; admission always uses the exact values.
 const SCORE_DECIMALS = 3;
-// Hash precision: fine enough to separate every distinct ratio of path counts in a case.
+// Hash precision: nine decimals drop float noise while still telling apart ratios of small path counts.
 const HASH_DECIMALS = 9;
 
 // The compact search event must stay small enough for the event store and the live feed.
