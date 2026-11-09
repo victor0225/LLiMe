@@ -1,0 +1,20 @@
+{
+  "file": "lesson-transcript.txt",
+  "sha256": "0ccc0c360ff42003c8732c5f5410b6ce1b341609097113751b97abbf0ca78839",
+  "bytes": 2293,
+  "encoding": "utf-8",
+  "turns": 27,
+  "speakers": [
+    "Amara",
+    "Class",
+    "Jonah",
+    "Leo",
+    "Ms. Ortiz",
+    "Priya",
+    "Sam"
+  ],
+  "durationSeconds": 125,
+  "concept": "addition_within_20",
+  "synthetic": true,
+  "provenance": "authored demo text; no audio recorded or transcribed"
+}
