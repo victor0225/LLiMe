@@ -14,6 +14,7 @@ import {
   AttemptSchema,
   CATALOG_VERSION,
   type Command,
+  COMMAND_PHASES,
   CommandSchema,
   type Criterion,
   type Decision,
@@ -35,7 +36,7 @@ import {
   type Workspace,
 } from './domain.js';
 import type { EventPayload } from './events.js';
-import { type AskedQuestion, QUESTION_MEANING } from './graph.js';
+import { type AskedQuestion, contextCaseId, QUESTION_MEANING, speechSourceId } from './graph.js';
 import { problemRefOf } from './problems.js';
 import { ActivityRenderedCommandSchema, VoiceCommandSchema } from './routes.js';
 import { DomainError, type Mutation, type NewEvent, type RunRecord, RunRecordSchema, type Store, type TransitionContext, type VoiceOperationChange } from './store.js';
@@ -482,9 +483,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
     }
     if (next.phase === 'CLARIFY') {
       // A failed retry is application policy: ask which number was counted first, on the same problem.
-      const problem = activity.problem ?? state.selectedProblems?.initial;
-      if (!problem) throw wrongPhase(ctx, 'practice');
-      const published = buildActivity({ runId, id: activityIdOf.clarification(runId, state.explanationRevision), revision, templateId: 'clarify_first_number', strategy: 'clarify', problem, spec: null, evidenceIds: [], decisionSummary: '' });
+      const published = buildActivity({ runId, id: activityIdOf.clarification(runId, state.explanationRevision), revision, templateId: 'clarify_first_number', strategy: 'clarify', problem: graded.problem, spec: null, evidenceIds: [], decisionSummary: '' });
       return {
         state: { ...state, phase: 'CLARIFY', attempts, activity: published, clarificationRounds: state.clarificationRounds + 1 },
         events: [{ type: 'activity.published', payload: { activity: published } }],
@@ -520,7 +519,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
 
   async function planStop(ctx: TransitionContext): Promise<Plan> {
     const { state } = ctx;
-    if (state.stopped || !COMMAND_STOPPABLE.includes(state.phase)) throw wrongPhase(ctx, 'stop_learning');
+    if (state.stopped || !COMMAND_PHASES.stop_learning.includes(state.phase)) throw wrongPhase(ctx, 'stop_learning');
     const open = requiredEffectPending(state) ? await latestOpenOperation(ctx) : null;
     const cancelled = open ? cancelOperation(open, 'stopped') : null;
     return {
@@ -563,7 +562,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
       operationId,
       cancellationEpoch,
       phase: 'explanation',
-      input: { explanationRevision, sourceId: `${runId}_context_${explanationRevision}:speech`, explanation: input.text, inputMode: input.provenance.inputMode, problem, attempt, question: question?.text ?? null },
+      input: { explanationRevision, sourceId: speechSourceId(contextCaseId(runId, explanationRevision)), explanation: input.text, inputMode: input.provenance.inputMode, problem, attempt, question: question?.text ?? null },
     };
     return {
       state: next,
@@ -736,9 +735,6 @@ export function createEngine({ store, runtime }: EngineDeps) {
 }
 
 export type Engine = ReturnType<typeof createEngine>;
-
-// Phases in which stop_learning is accepted: every phase that is not already final.
-const COMMAND_STOPPABLE: readonly RunPhase[] = ['WAITING', 'INGESTING', 'INVITED', 'INITIAL', 'EXPLAIN', 'PROCESSING', 'CLARIFY', 'PRACTICE', 'VERIFY', 'NEEDS_SUPPORT'];
 
 function phaseOfRuntime(phase: RunPhase): RuntimePhase | null {
   if (phase === 'INGESTING') return 'ingestion';
