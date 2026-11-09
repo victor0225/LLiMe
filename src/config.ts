@@ -44,6 +44,8 @@ export type Config = {
   storybookPort: number;
   // The one origin the browser, the iPad shell, Playwright and the Storybook /api proxy use.
   appOrigin: string;
+  // Where Storybook serves stories; its /api proxy forwards to appOrigin.
+  storybookOrigin: string;
   neo4j: { uri: string; user: string; password: string | undefined };
   model: z.infer<typeof ModelSchema>;
   serviceTier: string | undefined;
@@ -60,6 +62,7 @@ export function parseConfig(vars: Record<string, string | undefined>): Config {
     vitePort: env.VITE_PORT,
     storybookPort: env.STORYBOOK_PORT,
     appOrigin: `http://${HOST}:${env.PORT}`,
+    storybookOrigin: `http://${HOST}:${env.STORYBOOK_PORT}`,
     neo4j: { uri: env.NEO4J_URI, user: env.NEO4J_USER, password: env.NEO4J_PASSWORD },
     model: env.LLIME_MODEL,
     serviceTier: env.LLIME_SERVICE_TIER,
