@@ -39,8 +39,7 @@ export const SupportLimitAskAdult: Story = { render: () => outcome({ kind: 'supp
 export const CheckingSave: Story = { render: () => outcome({ kind: 'checking' }) };
 export const RuntimeError: Story = { render: () => outcome({ kind: 'runtime_error' }) };
 export const Stopped: Story = { render: () => outcome({ kind: 'stopped' }) };
-export const ActivityNotFound: Story = { render: () => <ActivityUnavailable reason="unavailable" /> };
-export const ActivityAlreadyDone: Story = { render: () => <ActivityUnavailable reason="completed" /> };
+export const ActivityUnavailableToOpen: Story = { render: () => <ActivityUnavailable /> };
 // Shown inside a practice screen after its attempt was submitted; the heading stands for that screen.
 export const CorrectionNeedsNewRun: Story = {
   render: () => (
