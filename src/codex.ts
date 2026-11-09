@@ -1241,7 +1241,7 @@ export function createRuntimePort(options: { runtime: CodexRuntime; settle: Sett
       void settleWhenDone(turn, request.runId, request.phase, request.cancellationEpoch, settle, report);
     },
     async steerTurn(request: TurnRequest): Promise<boolean> {
-      return (await runtime.trySteer({ runId: request.runId, phase: request.phase, input: request.input, operationId: request.operationId, cancellationEpoch: request.cancellationEpoch, explanationRevision: explanationRevisionOf(request.input) })) !== null;
+      return (await runtime.trySteer({ runId: request.runId, phase: request.phase, input: request.input, operationId: request.operationId, cancellationEpoch: request.cancellationEpoch, explanationRevision: request.phase === 'explanation' ? request.input.explanationRevision : 0 })) !== null;
     },
     // The engine interrupts only when a run is stopped, and a stopped run never resumes: the child goes too.
     async interruptTurn(runId: string): Promise<void> {
@@ -1259,11 +1259,6 @@ export function createServerRuntimePort(runtime: CodexRuntime) {
     interruptActiveTurns: () => runtime.interruptActiveTurns(),
     close: () => runtime.closeAll(),
   };
-}
-
-function explanationRevisionOf(input: object): number {
-  const revision = field(input, 'revision');
-  return typeof revision === 'number' ? revision : 0;
 }
 
 // Starts the run's ingestion turn. The model reads the saved lesson, reads personal memory and, when
