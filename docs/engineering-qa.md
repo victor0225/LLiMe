@@ -2,64 +2,62 @@
 
 This page records what was tested, how, and what is still unproven. It is engineering evidence, not the demo film.
 
-**Statuses.** **PASS**: the scenario ran against the integrated build and met its required result. **FAIL**: it ran and did not. **UNPROVED**: it did not run, or a dependency was missing, so nothing is claimed. A screenshot never counts as proof of a database transaction, and a tool acknowledgment never counts as proof that audio was heard.
+**Statuses.** **PASS**: the scenario ran against the integrated build and met its required result. **FAIL**: it ran and did not; **FAIL (open)** means the fix is not merged yet. **UNPROVED**: it did not run, or a dependency was missing, so nothing is claimed. A screenshot never counts as proof of a database transaction, and a tool acknowledgment never counts as proof that audio was heard.
 
-**Evidence paths** are relative to the checkout on the machine that ran the scenario, under `.runtime/` (gitignored). They are kept with the run's capture and are not committed to this repository.
+**Evidence.** Each scenario's commands, outputs, run IDs and screenshots are kept with the release capture. They are not committed to this repository.
 
-## Automated suite
+## Automated suites
 
-| Check | Commit | Result |
-| --- | --- | --- |
-| `npm run typecheck` (server and web) | `993c1ed` | exit 0 |
-| `npm test` (node:test, no model calls) | `993c1ed` | 775 tests, 775 pass, 0 fail, 0 skipped |
-| `npm run doctor` | `993c1ed` | 13 pass, 1 warning (Storybook port in use by another local process), 0 fail |
-| `npm run test:e2e` (Playwright + axe) | — | TODO(qa) |
-| iPad shell unit tests (`xcodebuild test`) | — | TODO(qa) |
-| `npm run test:runtime` (live Codex smoke) | — | TODO(qa) |
+| Suite | Result |
+| --- | --- |
+| `npm run typecheck` (server and web) | exit 0 |
+| `npm test` (node:test, no model calls) | TODO(qa): count at the final commit (778/778 at `ac24c48`) |
+| `npm run test:e2e` (Playwright + axe), per surface | explain 28, number line 27, invitation and lesson notes 34, make-ten 26, inspector 30, graph 10: all passing |
+| iPad shell unit tests (`xcodebuild test`) | 30/30 |
+| `npm run test:runtime` (live Codex App Server smoke) | 3/3 |
 
-The pure rules have direct unit tests: search scoring and admission (`tests/search.test.ts`, `tests/search-film.test.ts`), the decision rule (`tests/decision.test.ts`), assessment (`tests/assessment.test.ts`), the run state machine (`tests/engine.test.ts`), idempotency and transactions (`tests/store.test.ts`, `tests/outbox.test.ts`).
+The pure rules have direct unit tests: search scoring and admission (`tests/search.test.ts`, `tests/search-film.test.ts`), the decision rule (`tests/decision.test.ts`), assessment (`tests/assessment.test.ts`), the run state machine (`tests/engine.test.ts`), and idempotency and transactions (`tests/store.test.ts`, `tests/outbox.test.ts`).
 
 ## Fresh install
 
-| ID | Scenario | Status | Evidence |
+| ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
-| BUILD01 | Clean `https` clone at `f9efd1f`: `npm ci`, `setup:env`, `db:up`, `doctor` (14/14), `dataset`, `seed` twice (781 cases, 120 learners, second run writes nothing), `typecheck`, `npm test` (774/774), `dev`, `demo:reset --case main`, `demo:drop` reaching INVITED on a real Codex App Server, `demo:export`, `live:voice`, `build`, `start`, `demo:purge` (0 nodes left), `build-storybook` | PASS | `.runtime/captures/tasks/task_8f8f5682c529/fresh/BUILD01/summary.md`, command log `fresh-commands.log` (SHA-256 `1431a09f6489c09b3176ca9282b113af9a33bf5c768faa0e118cf457ce772190`) |
+| BUILD01 | Clean `https` clone at `f9efd1f`: `npm ci`, `setup:env`, `db:up`, `doctor` (14/14), `dataset`, `seed` twice (781 cases, 120 learners; the second run writes nothing), `typecheck`, `npm test` (774/774), `dev`, `demo:reset --case main`, `demo:drop` reaching INVITED on a real Codex App Server, `demo:export`, `live:voice`, `build`, `start`, `demo:purge` (0 nodes left), `build-storybook` | PASS | Ran on a build Mac that already had the database credential, Docker images and caches, so not a bare-machine install |
 | BUILD01 (part) | Cold first start of Neo4j | UNPROVED | No exclusive database window; the shared service was never stopped |
-
-The clone ran on a build Mac that already had the database credential, Docker images and caches, so it is not a bare-machine install.
 
 ## Lesson and invitation
 
-| ID | Scenario | Status | Evidence |
+| ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
-| L01 | Saving the main transcript triggers real Codex ingestion, a real memory tool call with source quotes, and a committed invitation with its outbox row | PASS | TODO(qa): exact receipt path under `.runtime/captures/lesson/` |
-| L02 | An unrelated lesson, or no eligible memory, gives no invitation and an honest no-match state | PASS | TODO(qa): exact receipt path under `.runtime/captures/lesson/` |
-| L03 | The same content saved twice, or a partial file, is processed once | PASS | TODO(qa): exact receipt path under `.runtime/captures/lesson/` |
+| L01 | Saving the main transcript triggers real Codex ingestion, a real memory tool call with source quotes, and a committed invitation with its outbox row | PASS | |
+| L02 | An unrelated lesson gives no invitation and an honest no-match state | PASS | |
+| L02 (part) | No eligible memory gives no invitation | UNPROVED | |
+| L03 | The same content saved twice, or a partial file, is processed once | PASS | |
 | L04 | A provider timeout or an invalid quote before the commit gives no publication and no notification | UNPROVED | No fault-injection seam |
-| L05 | Lesson notes: Start, Stop and Finish save the prepared text unchanged with no audio captured; a loaded file saves as shown; bad files are refused | PASS | TODO(qa): exact receipt path under `.runtime/captures/lesson/` |
-| L06 | Invitation eligibility: invalid concept, quote or evidence is rejected; curriculum links resolve; 18 subtraction and 0 addition cases are summarized and 8 returned | UNPROVED (in part) | Parts that need fault injection did not run. TODO(qa): list the parts that passed |
-| L07 | Problem selection by seed: invalid seeds refused, the selected pair survives refresh and restart, the film seed gives 8 + 5 then 9 + 4 | PASS | TODO(qa): exact receipt path under `.runtime/captures/lesson/` |
+| L05 | Lesson notes: Start, Stop and Finish save the prepared text unchanged with no audio captured; a loaded file saves as shown; bad files are refused | PASS | |
+| L06 | Invitation eligibility: invalid concept, quote or evidence is rejected; curriculum links resolve; 18 subtraction and 0 addition cases are summarized and 8 returned | UNPROVED (in part) | Six sub-checks passed; the sub-checks that need fault injection did not run |
+| L07 | Problem selection by seed: invalid seeds refused, the selected pair survives refresh and restart, the film seed gives 8 + 5 then 9 + 4 | PASS | |
 
 ## Voice, delegation and execution
 
-| ID | Scenario | Status | Evidence |
+| ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
-| V01 | One voice session, credential kept server-side, sideband attached to the same session | TODO(qa) | |
+| V01 | One voice session, credential kept server-side, sideband attached to the same session | PASS | Live, in the app |
 | V02 | Spoken explanation delegated with its offset; a late fragment revises the same explanation | TODO(qa) | |
-| V03 | Published support reaches the UI and matching spoken commentary | TODO(qa) | |
-| V04 | A correction during an active turn steers that turn with a new explanation revision | FAIL (open) | Tool calls in the steered turn are refused; fix in progress |
+| V03 | Published support reaches the UI with matching spoken commentary | PASS | Live, in the app |
+| V04 | A correction during an active turn steers that turn with a new explanation revision | FAIL (open) | Tool calls in the steered turn are refused |
 | V05 | A correction racing a completed turn, before and after practice submission | TODO(qa) | |
 | V06 | A duplicate delegation or provider event gives one logical analysis | TODO(qa) | |
 | V07 | Sideband disconnect or microphone denied gives an explicit degraded state and the typed path | TODO(qa) | |
 | V08 | Stop learning during analysis and practice; late results and resumes are refused | TODO(qa) | |
 | V09 | A correction after speech begins stops the obsolete playback | TODO(qa) | |
-| V10 | Voice is fully off before the independent problem is enabled | TODO(qa) | |
+| V10 | Voice is fully off before the independent problem is enabled | PASS | Live, in the app |
 | V11 | Closing or reloading the page closes the session within bounds | TODO(qa) | |
-| V12 | Instruction-like text in a transcript is treated as learner data | TODO(qa) | |
+| V12 | Instruction-like text in a transcript is treated as learner data | FAIL (open) | The voice model answered an injected instruction itself, with a hint |
 
 ## Graph, ranking and outcomes
 
-| ID | Scenario | Status | Evidence |
+| ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
 | G01 | Same labels with different edges or directions change the score | TODO(qa) | |
 | G02 | Same shape with a different hypothesis meaning scores lower | TODO(qa) | |
@@ -69,14 +67,14 @@ The clone ran on a build Mac that already had the database credential, Docker im
 | G06 | Every decision layer: clarify, slip policy, evidence, default; repeat-count never chosen; a mismatched publish refused | TODO(qa) | |
 | G07 | Every matched path pair resolves to real edges | TODO(qa) | |
 | G08 | An invalid node, edge or quote is rejected before any write | TODO(qa) | |
-| G09 | Context and outcome nodes appear only after their own commits | TODO(qa) | |
+| G09 | Context and outcome nodes appear only after their own commits | PASS | Live |
 | G10 | Hints or invalid moves cannot earn an independent pass; correct assisted practice advances to the check | TODO(qa) | |
-| G11 | A real hint-free attempt saves narrow independent evidence | FAIL (open) | The verification turn ends in ERROR on the main run; fix in progress |
-| G12 | Novel hypothesis (engineering only, never filmed): clarifies despite passing scores, the name shows only in the inspector, invalid variants are refused | FAIL (open) | Starting a turn while the previous one is finishing ends in ERROR; fix in progress |
+| G11 | A real hint-free attempt saves narrow independent evidence | PASS | Live, after the fix in `f1345ff`: the outcome is committed once, the run is COMPLETE, and the child sees "You solved a new problem without help." Before the fix the verification turn ended in ERROR |
+| G12 | Novel hypothesis (engineering only, never filmed): clarifies despite passing scores, the name shows only in the inspector, invalid variants are refused | FAIL (open) | Starting a turn while the previous one is finishing ends in ERROR, also at the boundary between ingestion and explanation |
 
 ## Persistence, mobile and visualization
 
-| ID | Scenario | Status | Evidence |
+| ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
 | P01 | A duplicate command returns the original receipt; a changed payload conflicts | TODO(qa) | |
 | P02 | A crash around publication leaves no half-published activity | TODO(qa) | |
@@ -93,9 +91,9 @@ The clone ran on a build Mac that already had the database credential, Docker im
 
 ## Child UI
 
-| ID | Scenario | Status | Evidence |
+| ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
-| UI01–UI02 | Invitation: Let's try and Later are distinct, nothing starts automatically | TODO(qa) | |
+| UI01–UI02 | Invitation: Let's try and Later are distinct; nothing starts automatically | TODO(qa) | |
 | UI03–UI04 | Number line: moves, undo and bounds | TODO(qa) | |
 | UI05–UI08 | Listening, thinking, typed fallback and disconnected states | TODO(qa) | |
 | UI09–UI11 | Independent check, saved versus assisted copy, empty and loading states | TODO(qa) | |
@@ -104,23 +102,38 @@ The clone ran on a build Mac that already had the database credential, Docker im
 
 ## Generated activities
 
-| ID | Scenario | Status | Evidence |
+| ID | Scenario | Status | Notes |
 | --- | --- | --- | --- |
-| GUI01 | Support activity records exact moves and help exposure | TODO(qa) | |
-| GUI02 | The independent activity has no marker, scaffold or preset start | TODO(qa) | |
-| GUI03 | Unknown props, wrong math, stale revision or forged evidence is rejected before render | TODO(qa) | |
-| GUI04 | Real Codex receives the component catalog and returns an accepted spec | TODO(qa) | |
-| GUI05 | `publish_activity` commits a generated spec atomically | FAIL (open) | The first support publish is rejected on the main run; prompt fix in progress |
+| GUI01 | The support activity records exact moves and help exposure | PASS | |
+| GUI02 | The independent activity has no marker, scaffold or preset start | PASS | |
+| GUI03 | Unknown props, wrong math, stale revision or forged evidence is rejected before render | PASS | |
+| GUI04 | Real Codex receives the component catalog and returns an accepted spec | PASS | |
+| GUI05 | `publish_activity` commits a generated spec atomically | PASS | |
 | GUI06 | Speech waits for the matching render acknowledgment | TODO(qa) | |
-| GUI07 | No unsolicited replacement while the child is moving objects | TODO(qa) | |
-| GUI08 | A falsified hint count from the client is ignored | TODO(qa) | |
+| GUI07 | No unsolicited replacement while the child is moving objects | FAIL (open) | A replacement shifts the make-ten workspace by 80 px |
+| GUI08 | A falsified hint count from the client is ignored | PASS | |
+
+Make-ten workspace checks:
+
+| Check | Status |
+| --- | --- |
+| Object count is conserved while moving | PASS |
+| Undo | PASS |
+| Fixed appearance in the browser | PASS |
+| Support equation derived from object positions | PASS |
+| Appearance excluded from similarity | UNPROVED |
+
+## Fixed during QA
+
+- The first support publish on the main run was rejected because the explanation prompt did not say that the lesson concept and quotes are empty for support activities. Fixed in `f1345ff`.
+- `demo:reset -- --case main` picked a random problem seed instead of the film seed. Fixed in `993c1ed`; L01 and L07 passed again afterwards.
 
 ## Engineering checks outside the film
 
 These checks are engineering QA only and never appear in the film.
 
-| Check | Status | Notes |
-| --- | --- | --- |
-| Alternate explanation on a separate run ("I missed one tap.") | TODO(qa) | `npm run demo:reset -- --case contrast` creates the run. The automatic comparison (`demo:compare`) is not implemented. |
-| A second problem seed (for example one giving 6 + 6) | TODO(qa) | |
-| Novel hypothesis (G12) | FAIL (open) | See G12 |
+| Check | Status |
+| --- | --- |
+| Alternate explanation on a separate run ("I missed one tap.") | Not run. `npm run demo:reset -- --case contrast` creates such a run; the automatic comparison between runs is not implemented. |
+| A second problem seed (for example one giving 6 + 6) | Not run |
+| Novel hypothesis (G12) | FAIL (open); see G12 |
