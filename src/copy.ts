@@ -79,6 +79,21 @@ export const STUDENT_COPY = {
   startNewRun: 'Start a new run',
   pause: 'Pause',
   doneCollapsed: 'See you next time.',
+  wordmark: 'llime',
+  // While the first run snapshot is loading; distinct from the waiting screen, which is real state.
+  loading: 'Just a moment…',
+  // The link has no run, or the server does not know it; waiting will not fix it.
+  runUnavailable: 'This link doesn’t open a lesson. Ask a grown-up for help.',
+} as const;
+
+// Number-line status text. None of it names the target or how many moves remain.
+export const NUMBER_LINE_COPY = {
+  // Explains why Check is unavailable before the child has picked a starting number.
+  chooseStart: 'Choose where to start.',
+  // Counts only moves the child made, so the support helper never shows how many are still needed.
+  moveCount: (n: number) => (n === 1 ? '1 move' : `${n} moves`),
+  position: (n: number) => `Now at ${n}`,
+  lineLabel: 'Number line',
 } as const;
 
 // The OS notification after an invitation commits. It carries no transcript, explanation or diagnosis.
@@ -113,6 +128,43 @@ export const VOICE_CONTROL_COPY = {
   end: 'End voice',
   typeInstead: 'Type instead',
   reconnect: 'Reconnect',
+} as const;
+
+// Explanation, thinking and outcome screens. Each line says only what the app knows: assisted work
+// never claims independence, and nothing claims a save the server has not confirmed.
+export const EXPLAIN_COPY = {
+  // The independent check needed help, so it is described as shared work, never as solving alone.
+  assistedTitle: 'We worked through it together.',
+  assistedBody: 'Next time, we can try a new one on your own.',
+  // A correction replaced the activity and its replacement is not published yet.
+  activityUpdating: 'Thanks. The activity is being updated.',
+  // After a practice submit, during the independent check or once the run ended, a new explanation
+  // can no longer change this run's evidence.
+  correctionClosed: 'This can’t be changed now. To explain it again, start a new run.',
+  voiceConnecting: 'Starting voice…',
+  voiceReconnecting: 'Reconnecting voice…',
+  // Voice dropped: speech in flight may be lost, so the child is asked to repeat it, never told it was kept.
+  voiceDisconnectedBody: 'I may have missed some of that. Reconnect and say it again, or type instead.',
+  microphoneDeniedTitle: 'Microphone isn’t allowed',
+  microphoneDeniedBody: 'You can type what you were thinking.',
+  stoppedTitle: 'Learning is stopped.',
+  stoppedBody: 'What you already finished stays saved. Start a new run to keep going.',
+  // A second support activity did not work either, so this run offers no further help.
+  askTrustedAdult: 'Ask a trusted adult for help.',
+  sendFailed: 'Couldn’t send. Your words are still here.',
+  stopFailed: 'Couldn’t stop yet. Please try again.',
+  startNewRunFailed: 'Couldn’t start a new run. Please try again.',
+  // Closes the final screen without sending anything.
+  done: 'Done',
+  // Pause leaves the failed run untouched for inspection; it neither cancels nor resumes it.
+  pausedTitle: 'Paused.',
+  pausedBody: 'This run stays as it is.',
+  // Caption speakers: the child's transcribed words and the tutor's, kept apart.
+  captionYou: 'You',
+  captionTutor: 'Tutor',
+  messagePreview: 'Your message',
+  characterCount: (count: number, max: number) => `${count} of ${max} characters`,
+  tooLong: (max: number) => `Use ${max} characters or fewer.`,
 } as const;
 
 // The only content the app sends to the Live session for speaking; Live may paraphrase it lightly.
@@ -158,4 +210,6 @@ export const LESSON_NOTES_COPY = {
   fileTooLarge: 'This file is larger than 16 KB.',
   notUtf8: 'This file isn\'t plain UTF-8 text.',
   textTooLarge: 'Shorten the transcript to 16 KB or less.',
+  // The page was opened without a run, or for a run the server does not know.
+  runUnavailable: 'This link doesn’t match a lesson run. Open the link for today’s class.',
 } as const;
