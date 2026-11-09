@@ -12,7 +12,7 @@ Teachers and tutors have little time to follow every learner between lessons, an
 
 Choosing a useful explanation also takes more than subject knowledge. It takes context: what this learner has tried, how they approached it, and what happened when similar learners got different kinds of support.
 
-A 2024 meta-analysis of preK–12 tutoring experiments found a pooled effect of **0.288 standard deviations** on learning outcomes ([Nickow, Oreopoulos & Quan, 2024](https://journals.sagepub.com/doi/10.3102/00028312231208687)). That supports the tutoring programs it studied. It says nothing yet about llime.
+A 2024 meta-analysis of preK–12 tutoring experiments found a pooled effect of **0.288 standard deviations** on learning outcomes ([Nickow, Oreopoulos & Quan, 2024](https://doi.org/10.3102/00028312231208687)). That supports the tutoring programs it studied. It says nothing yet about llime.
 
 llime brings that context into action. It connects today's lesson to a **personal learning memory**, uses an **agent that takes initiative** to offer a next step, and shapes **a personalized explanation and interactive activity** around the learner's own response. An invitation is an offer to try something, not a diagnosis. This is our take on [YC's request for The Primer](https://www.ycombinator.com/rfs/): a tutor that grows with the learner and supplements teachers. Arithmetic is the first testable slice, not the boundary of the product.
 
@@ -21,9 +21,9 @@ llime brings that context into action. It connects today's lesson to a **persona
 The demo makes three mechanisms observable. Memory supplies prior evidence. The agent reads the lesson, calls tools and starts a relevant invitation. Personalization changes the representation and the explanation using what the learner did and said. The result is saved to the learner's history.
 
 1. **Connects today's lesson to the child's history.** The demo learner has 18 earlier subtraction cases and no addition cases. Today's lesson is addition. Through the curriculum link between subtraction and addition, llime offers a short challenge on the iPad:
-   > Remember taking things away in subtraction? Today, let's put things together with addition. Want to try?
+   > Remember taking things away in subtraction? Today, let’s put things together with addition. Want to try?
 
-   The child chooses **Let's try** or **Later**. Nothing starts until the child accepts.
+   The child chooses **Let’s try** or **Later**. Nothing starts until the child accepts.
 2. **Asks how, not just what.** The child jumps along a number line from 8 and answers 12 instead of 13. llime asks *"How did you get 12?"* The child explains aloud, or types. An account like "I started at eight and counted eight, nine, ten, eleven, twelve" supports the hypothesis that the child counted the starting number as a move.
 3. **Uses comparable situations to choose how to explain.** llime searches other learners' recorded situations with a similar structure of actions and explanations, then compares the support they got and the independent results that followed. In the synthetic data, a ten-box ("make ten") activity leads. Codex composes the activity from validated components, so the child works with the same idea in a different form. The histories are authored to demonstrate the mechanism, not to show that one teaching method works better.
 4. **Checks a fresh attempt, then saves the evidence.** The child moves objects into a ten-box (8 + 5 becomes 10 + 3), then solves a fresh 9 + 4 with no hints and no microphone. The attempt, the explanation and the independent result are saved to the learner's memory graph. Reusing that saved case in a later session is future work.
@@ -40,11 +40,12 @@ Parents of grade 2–3 children who keep needing help with math homework. The ch
 
 ## What the demo shows, honestly
 
-- **Real execution:** the lesson save, the inbox watcher, Codex App Server tool calls, memory retrieval, the search and decision, the generated activity, the assessment and the saved result all run in the build. Main-run evidence: TODO(run): main-run capture manifest path. Storybook stories and recorded fixtures are not used as evidence of this.
+- **Real execution:** nothing in the flow is scripted or hardcoded. Proven on a clean clone: the lesson save reaches the inbox watcher, a real Codex App Server turn calls the memory tool and publishes the invitation, and a real voice session opens and closes. The complete main run, through the independent check and the saved result: TODO(run): main-run capture manifest path. Storybook stories and recorded fixtures are never used as evidence.
 - **Scripted:** the film uses problem seed 28, which gives 8 + 5 and then 9 + 4 (other seeds give other pairs). An adult plays the child and makes the planned mistake. The outcome rates in memory were written by us to show the mechanism.
-- **Synthetic:** the lesson transcript and every learner history. Start and Stop recording on the Lesson notes screen stage the prepared transcript; no classroom audio is captured or transcribed. Finish lesson really saves the transcript, and the saved file really triggers processing. The memory holds 781 situations from 120 fictional learners.
+- **Synthetic:** the lesson transcript and every learner history. Start and Stop recording on the Lesson notes screen stage the prepared transcript; no classroom audio is captured or transcribed. Finish lesson saves the transcript for real, and that saved file is what triggers processing. The memory holds 781 situations from 120 fictional learners.
 - **Simulated:** the iPad runs in the iOS Simulator, and the notification is a simulated push.
-- **Not shown:** real learning gains, long-term retention, a saved case being reused in a later session, or any real child data. Teacher features are not part of this demo.
+- **Not shown:** real learning gains, long-term retention, a saved case being reused in a later session, or any real child data.
+- **Not built:** a teacher view. The Lesson notes screen only saves the lesson transcript.
 - **Engineering checks** outside the film are listed in [docs/engineering-qa.md](docs/engineering-qa.md).
 
 ## How it works
@@ -76,6 +77,7 @@ node scripts/setup-env.mjs --init-machine   # once per computer: creates the loc
 npm run setup:env                           # writes .env (0600) from the machine credential and key
 npm run db:up                               # Neo4j 5.26 on 127.0.0.1:17474 / 17687
 npm run doctor                              # checks Node, Docker, Neo4j, Codex, key, ports, data, Simulator
+npm run dataset                             # checks the data files against their manifest
 npm run seed                                # verifies the seed hash, loads 781 cases from 120 learners
 npm run typecheck && npm test
 ```
@@ -95,7 +97,7 @@ Open `http://127.0.0.1:4317/lesson-notes?runId=RUN_ID` and press Start recording
 | `/inspector?runId=RUN_ID` | Every tool call with its arguments, result and timing |
 | `/backend?runId=RUN_ID` | The learning-memory search and the decision |
 
-**iPad app:** build and install the Simulator shell as described in [ios/README.md](ios/README.md), and launch it with `-LLIME_ORIGIN http://127.0.0.1:4317` (the shell's built-in default is a different port). To receive the simulated notification, set `SIMULATOR_UDID` in `.env` to the booted device's UDID before starting the server.
+**iPad app:** build and install the Simulator shell as described in [ios/README.md](ios/README.md), and launch it with `-LLIME_ORIGIN http://127.0.0.1:4317`, the server's address. To receive the simulated notification, set `SIMULATOR_UDID` in `.env` to the booted device's UDID before starting the server.
 
 **Recording and evidence:**
 
@@ -108,7 +110,7 @@ npm run live:voice                          # opens and closes one voice session
 
 **Stop and clean up:** Ctrl-C stops `dev` or `start`. With the server stopped, `npm run demo:purge -- --run RUN_ID` deletes that one run's data and nothing else. The database keeps running and keeps its volume.
 
-A clean clone on a second Mac ran this sequence, from `npm ci` through `demo:purge` and `npm run build-storybook`, with every step passing. That computer already had its database credential, so `--init-machine` and a cold first start of Neo4j were not exercised there, and `demo:replay` was not part of that run.
+A clean `https` clone ran this sequence, from `npm ci` through `demo:purge` and `npm run build-storybook`, and every step exited 0. It ran on a build Mac that already had the database credential, the running Neo4j service, Docker images and npm caches, so it is not a bare-machine install: `--init-machine`, a cold first start of Neo4j and the Simulator steps were not exercised, and `demo:replay` was not part of it. On npm 11, `npm ci` warns that the esbuild and fsevents install scripts are not allowlisted; build and tests are unaffected.
 
 ## Where this goes
 
@@ -124,10 +126,15 @@ Grade 2–3 math is the first loop, not the limit. The same memory should follow
 
 ## Team
 
-TODO(team): names and roles.
+**Team Zook**
+
+- **Sunho Kim:** Denison University; software engineer at Wondermove; founder of FlowSpace ([myflowspace.app](https://myflowspace.app))
+- **Suhyun Cho:** Tech University of Korea
+
+## Data and license
 
 **Data:** the learner cases and lesson transcript are authored synthetic data. Each ships with a manifest and SHA-256 hash ([`data/seed/manifest.json`](data/seed/manifest.json), [`data/lesson/manifest.json`](data/lesson/manifest.json)) that `npm run seed` and `npm run doctor` check.
 
-**License:** TODO(license): no license file is in the repository yet.
+**License:** no license yet.
 
 **Product and pitch review.** We used [gstack](https://github.com/garrytan/gstack)'s Office Hours diagnostic and CEO review questions to challenge the product framing, compare one-liners and review the 90-second demo with an independent AI reviewer. This shaped planning and presentation. It is not a runtime dependency, an official YC evaluation or evidence of customer demand.
