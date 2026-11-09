@@ -686,10 +686,13 @@ export function createEngine({ store, runtime }: EngineDeps) {
   // interrupted and the run moves to ERROR; committed work and an untouched independent check stay as
   // they are; a stopped run keeps its phase and only has its runtime and voice cleaned up. Each recovery
   // is keyed by its operation, so running this again changes nothing.
-  async function recoverInterrupted(options: { runIdPrefix?: string } = {}): Promise<{ interrupted: string[]; cleaned: string[] }> {
+  // `ownsRun` limits recovery to the runs this server owns; without it every recoverable run is
+  // recovered. Several checkouts can share one database, and one must not end another's turns.
+  async function recoverInterrupted(options: { runIdPrefix?: string; ownsRun?: (runId: string) => boolean | Promise<boolean> } = {}): Promise<{ interrupted: string[]; cleaned: string[] }> {
     const interrupted: string[] = [];
     const cleaned: string[] = [];
     for (const run of await store.listRecoverableRuns(options.runIdPrefix ?? null)) {
+      if (options.ownsRun && !(await options.ownsRun(run.id))) continue;
       if (run.state.stopped) {
         await closeOpenVoiceOperations(run.id);
         await release(run.id, [{ kind: 'stop_cleanup' }]);
