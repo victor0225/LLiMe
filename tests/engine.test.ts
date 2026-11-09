@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
+import neo4j from 'neo4j-driver';
 import { z } from 'zod';
 import { findOracleField, PROMPT_TEMPLATES } from '../src/codex.js';
 import { loadSeed, type LoadedSeed } from '../src/dataset.js';
@@ -12,7 +13,7 @@ import type { RunEvent } from '../src/events.js';
 import { contextCaseId, speechSourceId } from '../src/graph.js';
 import { FILM_SEED } from '../src/problems.js';
 import { ERROR_HTTP_STATUS, HTTP_STATUS, type HttpErrorCode } from '../src/routes.js';
-import { createRunId, DomainError, type RunRecord, Store } from '../src/store.js';
+import { createRunId, DomainError, type RunRecord, Store, storeConfigFromEnv } from '../src/store.js';
 import { callTool, getPersonalMemory, publishActivity, type ToolContext } from '../src/tools.js';
 
 const TASK_ID = 'task_6890035ba1cd';
@@ -632,6 +633,35 @@ describe('run engine (stub runtime)', () => {
     const second = await engine.recoverInterrupted({ runIdPrefix: prefix });
     assert.deepEqual(second.interrupted, []);
     assert.deepEqual(await snapshot(), before);
+  });
+
+  test('recovery skips a run stored with an older catalog version, logs one line and still recovers the valid run (stub runtime)', async () => {
+    const { runtime } = stubRuntime();
+    const logged: string[] = [];
+    const logging = await Store.connect(undefined, { log: (line) => logged.push(line) });
+    const prefix = `${TASK_ID}-legacy-${randomUUID().slice(0, 8)}`;
+    const ingesting = createRunId(prefix);
+    created.push(ingesting);
+    await store.createRun({ runId: ingesting, seed: FILM_SEED }, seed);
+    await store.beginIngestion(ingesting, { expectedRevision: 0, lesson });
+    const legacy = await invitedRun({ prefix });
+    await toPractice(createEngine({ store, runtime }), legacy);
+    const { uri, user, password } = storeConfigFromEnv();
+    const driver = neo4j.driver(uri, neo4j.auth.basic(user, password));
+    const setState = (state: string) => driver.executeQuery('MATCH (r:Run {id: $id}) SET r.state = $state', { id: legacy, state });
+    const stored = JSON.stringify((await store.getRun(legacy)).state);
+    assert.ok(stored.includes(`"catalogVersion":"${CATALOG_VERSION}"`));
+    try {
+      await setState(stored.replace(`"catalogVersion":"${CATALOG_VERSION}"`, '"catalogVersion":"legacy-math-v0"'));
+      const recovered = await createEngine({ store: logging, runtime }).recoverInterrupted({ runIdPrefix: prefix });
+      assert.deepEqual(recovered.interrupted, [ingesting]);
+      assert.equal(logged.length, 1);
+      assert.ok(logged[0]?.startsWith(`skipped run ${legacy}: `) && logged[0].includes('catalogVersion'), logged[0]);
+    } finally {
+      await setState(stored);
+      await driver.close();
+      await logging.close();
+    }
   });
 
   test('recoverInterrupted with ownsRun recovers only the runs it owns and leaves the others untouched; without it every run is recovered (stub runtime)', async () => {

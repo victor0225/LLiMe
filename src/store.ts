@@ -171,14 +171,15 @@ export class Store {
   private constructor(
     private readonly driver: Driver,
     private readonly now: () => Date,
+    private readonly log: (line: string) => void,
   ) {}
 
-  static async connect(config?: StoreConfig, options: { now?: () => Date } = {}): Promise<Store> {
+  static async connect(config?: StoreConfig, options: { now?: () => Date; log?: (line: string) => void } = {}): Promise<Store> {
     if (!config) loadWorktreeEnv();
     const { uri, user, password } = config ?? storeConfigFromEnv();
     const driver = neo4j.driver(uri, neo4j.auth.basic(user, password), { disableLosslessIntegers: true, maxTransactionRetryTime: MUTATION_DEADLINE_MS });
     await driver.verifyConnectivity();
-    const store = new Store(driver, options.now ?? (() => new Date()));
+    const store = new Store(driver, options.now ?? (() => new Date()), options.log ?? ((line) => console.error(line)));
     await store.init();
     return store;
   }
@@ -777,7 +778,23 @@ export class Store {
   async listRecoverableRuns(runIdPrefix: string | null = null): Promise<RunRecord[]> {
     const runs = await this.read(async (tx) => {
       const result = await tx.run('MATCH (r:Run) WHERE $prefix IS NULL OR r.id STARTS WITH $prefix RETURN r.id AS id, r.state AS state, r.revision AS revision, r.seq AS seq ORDER BY r.id', { prefix: runIdPrefix });
-      return result.records.map((r) => ({ id: str(r.get('id')), revision: num(r.get('revision')), seq: num(r.get('seq')), state: RunStateSchema.parse(JSON.parse(str(r.get('state')))) }));
+      return result.records.flatMap((r) => {
+        const id = str(r.get('id'));
+        // A run stored by another version (an older catalog, say) is skipped, never a startup crash.
+        let state: ReturnType<typeof RunStateSchema.safeParse>;
+        try {
+          state = RunStateSchema.safeParse(JSON.parse(str(r.get('state'))));
+        } catch (error) {
+          this.log(`skipped run ${id}: state is not JSON (${error instanceof Error ? error.message : String(error)})`.slice(0, 300));
+          return [];
+        }
+        if (!state.success) {
+          const issue = state.error.issues[0];
+          this.log(`skipped run ${id}: ${issue ? `${issue.path.join('.')} ${issue.message}` : 'invalid state'}`.slice(0, 300));
+          return [];
+        }
+        return [{ id, revision: num(r.get('revision')), seq: num(r.get('seq')), state: state.data }];
+      });
     });
     return runs.filter((r) => r.state.stopped || RECOVERABLE_PHASES.includes(r.state.phase));
   }
