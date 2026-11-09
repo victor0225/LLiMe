@@ -86,6 +86,16 @@ export const STUDENT_COPY = {
   runUnavailable: 'This learning space isn’t available right now.',
 } as const;
 
+// Number-line status text. None of it names the target or how many moves remain.
+export const NUMBER_LINE_COPY = {
+  // Explains why Check is unavailable before the child has picked a starting number.
+  chooseStart: 'Choose where to start.',
+  // The JumpCounter helper: a live count of the child's own moves.
+  moveCount: (n: number) => (n === 1 ? '1 move' : `${n} moves`),
+  position: (n: number) => `Now at ${n}`,
+  lineLabel: 'Number line',
+} as const;
+
 // The OS notification after an invitation commits. It carries no transcript, explanation or diagnosis.
 export const NOTIFICATION_COPY = {
   title: 'llime',
