@@ -197,8 +197,8 @@ describe('invitation publish: commit', () => {
     // A clock that yields an unparseable timestamp makes the outbox row fail after the activity row was written.
     const broken = await Store.connect(undefined, { now: () => Object.assign(new Date(), { toISOString: () => 'not a timestamp' }) });
     try {
-      const result = await publishActivity(broken, prepared.context, invitation(prepared));
-      assert.ok(!result.ok);
+      // A fault inside the commit is an error, not a rejection the model could fix.
+      await assert.rejects(publishActivity(broken, prepared.context, invitation(prepared)), /Invalid input|ZodError|createdAt|timestamp|datetime/i);
     } finally {
       await broken.close();
     }

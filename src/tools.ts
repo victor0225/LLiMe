@@ -43,11 +43,15 @@ export type ToolContext = Pick<RunState, 'studentId' | 'corpusHash' | 'phase' | 
 // ---------------------------------------------------------------------------------------------
 // Result plumbing
 
+// Parses what the model sent. Only this parse reports INVALID_INPUT: a schema failure anywhere else is a
+// fault in stored data or in the handler and must surface as an error, not as the model's mistake.
+function parseInput<S extends z.ZodType>(schema: S, raw: unknown): z.output<S> {
+  const parsed = schema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  throw new DomainError('INVALID_INPUT', parsed.error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
+}
+
 function failure(tool: ToolName, error: unknown): ToolResult | null {
-  const base = (code: 'INVALID_INPUT', message: string) => ({ ok: false as const, tool, error: { code, message: message.slice(0, MAX_ERROR_MESSAGE_CHARS), retryable: false }, contextCommit: null });
-  if (error instanceof z.ZodError) {
-    return base('INVALID_INPUT', error.issues.map((i) => `${i.path.join('.') || 'input'}: ${i.message}`).join('; '));
-  }
   if (error instanceof DomainError) {
     return {
       ok: false,
@@ -101,7 +105,7 @@ export function selectReturnedCases(cases: readonly StudentCase[], includeUnasse
 
 export async function getPersonalMemory(store: Store, context: ToolContext, rawInput: unknown): Promise<ToolResult> {
   return runTool('get_personal_memory', async () => {
-    const input = GetPersonalMemoryInputSchema.parse(rawInput);
+    const input = parseInput(GetPersonalMemoryInputSchema, rawInput);
     const links = await store.getConceptLinks();
     const [today, other] = input.conceptIds;
     if (today === undefined) throw new DomainError('INVALID_INPUT', 'conceptIds needs today\'s concept');
@@ -283,7 +287,7 @@ async function publishInvitation(store: Store, context: ToolContext, input: Publ
 
 export async function publishActivity(store: Store, context: ToolContext, rawInput: unknown): Promise<ToolResult> {
   return runTool('publish_activity', async () => {
-    const input = PublishActivityInputSchema.parse(rawInput);
+    const input = parseInput(PublishActivityInputSchema, rawInput);
     if (input.kind !== 'invitation') throw new DomainError('VALIDATION_FAILED', `Publishing a ${input.kind} activity is not available yet`);
     return { ok: true, tool: 'publish_activity', data: await publishInvitation(store, context, input) };
   });
