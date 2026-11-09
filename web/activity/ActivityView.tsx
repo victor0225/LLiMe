@@ -1,11 +1,11 @@
 // Host for accepted generated activities. It re-validates the stored spec against the activity's own
 // stored context, mounts it through the json-render React renderer over the shared catalog, and
 // acknowledges rendering only after the workspace controls are actually in the document.
-import { Component, createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
+import { Component, createContext, useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Spec } from '@json-render/core';
 import { defineRegistry, JSONUIProvider, Renderer } from '@json-render/react';
 import { STUDENT_COPY } from '@core/copy';
-import type { Activity, ActivityComponent, ActivitySpec, AnyAttempt, Attempt } from '@core/domain';
+import type { Activity, ActivityComponent, ActivitySpec, AnyAttempt } from '@core/domain';
 import type { RunSnapshot } from '@core/events';
 import { type ActivityRenderedCommand, HTTP_STATUS } from '@core/routes';
 import { activityCatalog, activityContextOf, ActivityValidationError, countHelpers, validateActivity } from '@core/ui/activity-catalog';
@@ -19,19 +19,9 @@ export type RenderTarget = Pick<ActivityRenderedCommand, 'activityId' | 'activit
 // The activity a submitted attempt belongs to, so the queue can drop it if that activity changed.
 export type SubmitTarget = Pick<ActivityRenderedCommand, 'activityId' | 'activityRevision'>;
 
-// The number-line workspace mounted for a NumberLine spec. The marker and counter are support-only:
-// the marker never selects the start for the child.
-export type NumberLineSlotProps = {
-  start: number;
-  addend: number;
-  startMarker: number | null;
-  showJumpCount: boolean;
-  // Help the accepted spec displays; sent with the attempt (the server derives it again).
-  hints: number;
-  draftKey: string;
-  onSubmit: (attempt: Attempt) => void;
-};
-export type NumberLineSlot = ComponentType<NumberLineSlotProps>;
+// Renders the number-line screen for an accepted NumberLine activity. That screen reads the
+// support-only marker and counter from the activity's own spec; the marker never selects the start.
+export type NumberLineSlot = (activity: Activity) => ReactNode;
 
 export type ActivityViewProps = {
   // The run's current activity with its accepted spec and stored hash, or null when there is none.
@@ -54,10 +44,8 @@ type HostState = { seen: Activity | null; current: Accepted | null; previous: Ac
 type MountedActivity = Accepted & { numberLine: NumberLineSlot; reportMounted: () => void; submit: (attempt: AnyAttempt) => void };
 
 type Workspace = Extract<ActivityComponent, { type: 'NumberLine' | 'MakeTenWorkspace' }>;
-type StartMarker = Extract<ActivityComponent, { type: 'StartMarker' }>;
 
 const isWorkspace = (component: ActivityComponent): component is Workspace => component.type === 'NumberLine' || component.type === 'MakeTenWorkspace';
-const isStartMarker = (component: ActivityComponent): component is StartMarker => component.type === 'StartMarker';
 
 const keyOf = (activity: Activity) => `${activity.id}:${activity.revision}`;
 
@@ -139,19 +127,16 @@ function MountedMakeTen({ props }: { props: MakeTenSpecProps }): ReactNode {
   return <MakeTenWorkspace spec={props} hints={mounted.hints} draftKey={mounted.key} onSubmit={mounted.submit} />;
 }
 
-function MountedNumberLine({ props }: { props: { start: number; addend: number } }): ReactNode {
+function MountedNumberLine(): ReactNode {
   const mounted = useMountedActivity();
   useReportMounted(mounted);
-  const NumberLine = mounted.numberLine;
-  const marker = mounted.spec.components.find(isStartMarker);
-  const showJumpCount = mounted.spec.components.some((component) => component.type === 'JumpCounter');
-  return <NumberLine start={props.start} addend={props.addend} startMarker={marker?.props.value ?? null} showJumpCount={showJumpCount} hints={mounted.hints} draftKey={mounted.key} onSubmit={mounted.submit} />;
+  return mounted.numberLine(mounted.activity);
 }
 
 const { registry } = defineRegistry(activityCatalog, {
   components: {
     MakeTenWorkspace: ({ props }) => <MountedMakeTen props={props} />,
-    NumberLine: ({ props }) => <MountedNumberLine props={props} />,
+    NumberLine: () => <MountedNumberLine />,
     // Marker and counter are read by the number line they target.
     StartMarker: () => null,
     JumpCounter: () => null,
@@ -205,6 +190,8 @@ export function ActivityView({ activity, store, voiceSessionId, numberLine, inde
   }, [current]);
 
   const isIndependent = current?.spec.phase === 'independent';
+  // The number-line screen brings its own title and problem; the make-ten card shows them here.
+  const ownsHeader = current?.spec.components.some((component) => component.type === 'MakeTenWorkspace') ?? false;
   const started = current !== null && (!isIndependent || startedKey === current.key);
 
   // Pressing Start removes the button, so hand keyboard focus to the first control it enabled.
@@ -220,11 +207,15 @@ export function ActivityView({ activity, store, voiceSessionId, numberLine, inde
         </p>
       ) : null}
       {current !== null && mounted !== null ? (
-        <article className="activity-card" aria-labelledby={titleId} data-activity-id={current.activity.id} data-activity-revision={current.activity.revision}>
-          <h2 id={titleId} className="activity-title">
-            {current.activity.title}
-          </h2>
-          <p className="activity-problem">{current.activity.body}</p>
+        <article className="activity-card" aria-labelledby={ownsHeader ? titleId : undefined} data-activity-id={current.activity.id} data-activity-revision={current.activity.revision}>
+          {ownsHeader ? (
+            <>
+              <h1 id={titleId} className="activity-title">
+                {current.activity.title}
+              </h1>
+              <p className="activity-problem">{current.activity.body}</p>
+            </>
+          ) : null}
           {started ? null : (
             <button type="button" className="p-button activity-start" disabled={independentStart !== 'ready'} onClick={() => setStartedKey(current.key)}>
               {STUDENT_COPY.startProblem}

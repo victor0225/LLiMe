@@ -176,7 +176,7 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
     test('an independent spec shows no highlight, no equation and no helper, with the same controls', async ({ page }) => {
       await openStory(page, 'independent');
       const { title } = ACTIVITY_COPY.independent_make_ten({ lhs: INDEPENDENT.start, rhs: INDEPENDENT.addend });
-      await expect(page.getByRole('heading', { level: 2, name: title })).toBeVisible();
+      await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
       await expect(page.locator('.mt-equation')).toHaveCount(0);
       await expect(page.locator('[data-highlight="true"]')).toHaveCount(0);
       await expect(page.getByRole('img', { name: MAKE_TEN_COPY.emptySlot })).toHaveCount(0);
