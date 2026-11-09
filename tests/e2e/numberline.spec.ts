@@ -3,7 +3,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { loadConfig } from '../../src/config.js';
 import { ACTIVITY_COPY, NUMBER_LINE_COPY, STUDENT_COPY, VOICE_STATUS_COPY, problemQuestion } from '../../src/copy.js';
 import { AttemptSchema, CommandSchema, MeaningSchema, StrategySchema } from '../../src/domain.js';
-import { routePath } from '../../src/routes.js';
+import { routePath, VoiceSnapshotSchema } from '../../src/routes.js';
 
 // The practice screen is exercised through its Storybook stories. Each story mounts the real screen
 // and the real run queue; the queue's HTTP calls are answered by a stubbed route table in the page,
@@ -41,6 +41,13 @@ const initialScreen = (page: Page) => page.getByRole('region', { name: ACTIVITY_
 const requests = (page: Page) => page.getByRole('list', { name: 'Requests (stubbed route)' }).getByRole('listitem');
 const commandRequests = (page: Page) => requests(page).filter({ hasText: COMMAND_POST.trim() });
 const position = (page: Page) => page.getByText(/^Now at \d+$/);
+
+// The independent check opens only after the voice route reports the audio gate closed.
+async function stubVoiceGate(page: Page, audioGate: 'open' | 'closed') {
+  const snapshot = VoiceSnapshotSchema.parse({ voiceSessionId: 'voice_story', status: audioGate === 'closed' ? 'closed' : 'live', activeOperationId: null, explanationRevision: 1, cancellationEpoch: 0, audioGate });
+  await page.unroute(`**${routePath('voiceSnapshot', { runId: STORY_RUN_ID })}`);
+  await page.route(`**${routePath('voiceSnapshot', { runId: STORY_RUN_ID })}`, (route) => route.fulfill({ json: snapshot }));
+}
 
 // The learning commands the page actually POSTed, validated by the shared command schema.
 async function postedCommands(page: Page) {
@@ -218,34 +225,40 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
       await expectAccessible(page);
     });
 
-    test('an unconfirmed check keeps the draft and says the save is being checked (stubbed route)', async ({ page }) => {
+    test('a failed check keeps the draft and never resends it (stubbed route)', async ({ page }) => {
       await open(page, 'initial-unavailable');
       await tick(page, 8).click();
       await moveForward(page, 4);
       await check(page).click();
       await expect(commandRequests(page)).toHaveCount(1);
       await sendReply(page);
-      await expect(page.getByText(STUDENT_COPY.checkingSave)).toBeVisible();
-      await expect(page.getByText(NUMBER_LINE_COPY.position(12))).toBeVisible();
       await expect(check(page)).toBeEnabled();
+      await expect(page.getByText(NUMBER_LINE_COPY.position(12))).toBeVisible();
       await expect(commandRequests(page)).toHaveCount(1);
       await expectAccessible(page);
     });
 
-    test('independent screen shows the new problem with zero prefilled moves and no hint, jump counter, start marker or microphone control, and shows the voice-off notice only when the voice state says teardown happened', async ({ page }, testInfo) => {
-      await open(page, 'independent');
+    test('independent screen shows the new problem with zero prefilled moves and no hint, jump counter, start marker or microphone control, and shows the voice-off notice only when the voice state says teardown happened (stubbed route)', async ({ page }, testInfo) => {
+      const startProblem = page.getByRole('button', { name: STUDENT_COPY.startProblem });
+      await stubVoiceGate(page, 'open');
+      await page.goto(storyUrl('independent'));
+      await expect(startProblem).toBeDisabled();
+      await expect(page.getByText(VOICE_STATUS_COPY.off)).toHaveCount(0);
+      await expect(line(page)).toHaveCount(0);
+      await expectAccessible(page);
+
+      await stubVoiceGate(page, 'closed');
+      await page.goto(storyUrl('independent'));
+      await expect(page.getByText(VOICE_STATUS_COPY.off)).toBeVisible();
+      await startProblem.click();
+      await expect(line(page)).toBeVisible();
       await expect(page.getByText(problemQuestion({ lhs: 9, rhs: 4 }))).toBeVisible();
+      await expect(page.getByText(VOICE_STATUS_COPY.off)).toBeVisible();
       await expect(position(page)).toHaveCount(0);
       await expect(page.getByText(/^\d+ moves?$/)).toHaveCount(0);
       await expect(page.locator('[data-start-marker]')).toHaveCount(0);
       await expect(page.getByRole('button', { name: /^Start at/ })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /voice|mute|microphone|reconnect|type instead/i })).toHaveCount(0);
-      await expect(page.getByText(VOICE_STATUS_COPY.off)).toHaveCount(0);
-      await expectAccessible(page);
-
-      await open(page, 'independent-voice-off');
-      await expect(page.getByText(VOICE_STATUS_COPY.off)).toBeVisible();
-      await expect(position(page)).toHaveCount(0);
       await expectAccessible(page);
       await page.screenshot({ path: testInfo.outputPath(`independent-${orientation}.png`) });
 

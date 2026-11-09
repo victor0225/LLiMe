@@ -8,11 +8,13 @@ import { BootstrapSchema, HttpErrorSchema, HTTP_STATUS, routePath } from '@core/
 import { countHelpers } from '@core/ui/activity-catalog';
 import { numberLineIndependent, numberLineSupport } from '@core/ui/activity-fixtures';
 import { createEventStore } from '../web/lib/event-store';
-import { Practice, sendPracticeAttempt } from '../web/student/Practice';
+import { Practice } from '../web/student/Practice';
+import { StudentApp } from '../web/student/StudentApp';
 
-// Each story mounts the practice screen on the real run queue. The queue talks to a stubbed route
-// table instead of the app server: every request is listed below the screen, and a command's reply
-// waits until "Send server reply" is pressed, so a check in flight can be inspected.
+// Each story mounts the practice screen inside the real student frame and run queue. The queue talks
+// to a stubbed route table instead of the app server: every request except event polling is listed
+// below the screen, and a command's reply waits until "Send server reply" is pressed, so a check in
+// flight can be inspected. The voice gate of the independent check reads the real voice route.
 
 const STORY_RUN_ID = 'story_run';
 const STORY_RUN_REVISION = 3;
@@ -101,6 +103,8 @@ function stubbedRoutes(initialRun: RunSnapshot, reply: ServerReply, { record, wa
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
     const method = init?.method ?? 'GET';
     const body = typeof init?.body === 'string' ? init.body : '';
+    // Polling repeats every second and says nothing about the screen, so it stays out of the log.
+    if (method === 'GET' && url.pathname === routePath('runEvents', { runId: STORY_RUN_ID })) return json(HTTP_STATUS.ok, []);
     record(method === 'POST' ? `${method} ${url.pathname} ${body}` : `${method} ${url.pathname}`);
     if (method === 'GET' && url.pathname === routePath('bootstrap')) {
       return json(HTTP_STATUS.ok, BootstrapSchema.parse({ nonce: 'story-nonce', voice: 'missing_key', inputMode: 'typed', runtime: 'stubbed route', database: 'stubbed route', dataset: 'stubbed route' }));
@@ -121,9 +125,9 @@ function stubbedRoutes(initialRun: RunSnapshot, reply: ServerReply, { record, wa
   };
 }
 
-type HarnessProps = { activity: Activity; phase: RunPhase; initial: Problem; voiceOff: boolean; reply: ServerReply };
+type HarnessProps = { activity: Activity; phase: RunPhase; initial: Problem; reply: ServerReply };
 
-function PracticeHarness({ activity, phase, initial, voiceOff, reply }: HarnessProps) {
+function PracticeHarness({ activity, phase, initial, reply }: HarnessProps) {
   const [requests, setRequests] = useState<string[]>([]);
   const [release, setRelease] = useState<(() => void) | null>(null);
   const [store] = useState(() =>
@@ -141,9 +145,11 @@ function PracticeHarness({ activity, phase, initial, voiceOff, reply }: HarnessP
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--p-background)' }}>
-      <main>
-        <Practice activity={activity} phase={phase} voiceOff={voiceOff} submit={sendPracticeAttempt(store, activity)} />
-      </main>
+      <StudentApp
+        runId={STORY_RUN_ID}
+        store={store}
+        activity={(slot) => slot.run.activity && <Practice activity={slot.run.activity} phase={slot.run.phase} voiceOff={slot.voiceOff} submit={slot.submit} />}
+      />
       <aside aria-label="Story harness" style={{ maxWidth: 1160, margin: '0 auto', padding: 'var(--p-space-2)', fontFamily: 'var(--p-font)', color: 'var(--p-text)' }}>
         <button type="button" className="p-button" data-variant="secondary" disabled={release === null} onClick={sendReply}>
           Send server reply
@@ -171,7 +177,7 @@ type Story = StoryObj<typeof meta>;
 const initialActivity = numberLineActivity({ id: 'story_initial', revision: 0, templateId: 'initial_number_line', strategy: null, problem: FILM_INITIAL, spec: null });
 
 export const Initial: Story = {
-  args: { activity: initialActivity, phase: 'INITIAL', initial: FILM_INITIAL, voiceOff: false, reply: 'saved' },
+  args: { activity: initialActivity, phase: 'INITIAL', initial: FILM_INITIAL, reply: 'saved' },
 };
 
 export const InitialConflict: Story = {
@@ -189,7 +195,6 @@ export const InitialOtherPair: Story = {
     activity: numberLineActivity({ id: 'story_initial_other', revision: 0, templateId: 'initial_number_line', strategy: null, problem: OTHER_PAIR, spec: null }),
     phase: 'INITIAL',
     initial: OTHER_PAIR,
-    voiceOff: false,
     reply: 'saved',
   },
 };
@@ -206,7 +211,6 @@ export const AnchoredSupport: Story = {
     }),
     phase: 'PRACTICE',
     initial: FILM_INITIAL,
-    voiceOff: false,
     reply: 'saved',
   },
 };
@@ -216,7 +220,6 @@ export const Retry: Story = {
     activity: numberLineActivity({ id: 'story_retry', revision: 1, templateId: 'manipulation_retry', strategy: 'retry', problem: FILM_INITIAL, spec: null }),
     phase: 'PRACTICE',
     initial: FILM_INITIAL,
-    voiceOff: false,
     reply: 'saved',
   },
 };
@@ -231,9 +234,6 @@ const independentActivity = numberLineActivity({
 });
 
 export const Independent: Story = {
-  args: { activity: independentActivity, phase: 'VERIFY', initial: FILM_INITIAL, voiceOff: false, reply: 'saved' },
+  args: { activity: independentActivity, phase: 'VERIFY', initial: FILM_INITIAL, reply: 'saved' },
 };
 
-export const IndependentVoiceOff: Story = {
-  args: { ...Independent.args, voiceOff: true },
-};
