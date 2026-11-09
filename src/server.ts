@@ -1,6 +1,6 @@
 // The local HTTP server: the API routes from the shared route table behind the request guards, and
 // the web app (built files, or the Vite dev server behind a proxy during development).
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, request as forward, type Server, type ServerResponse } from 'node:http';
@@ -52,7 +52,8 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 // for a refused host or session, a missing handler or a server bug, so these reuse the closest one.
 const FORBIDDEN = (message: string): ErrorBody => ({ code: 'INVALID_INPUT', message, retryable: false });
 const NOT_READY = (message: string): ErrorBody => ({ code: 'RUNTIME_DISCONNECTED', message, retryable: true });
-const INTERNAL: ErrorBody = { code: 'RUNTIME_DISCONNECTED', message: 'The server failed to answer this request', retryable: false };
+// The ID ties the browser's answer to the server log line without exposing the error itself.
+const INTERNAL = (errorId: string): ErrorBody => ({ code: 'RUNTIME_DISCONNECTED', message: `The server failed to answer this request (error ${errorId})`, retryable: false });
 const NOT_FOUND: ErrorBody = { code: 'NOT_FOUND', message: 'Not found', retryable: false };
 
 const isApiPath = (pathname: string) => pathname === '/api' || pathname.startsWith('/api/');
@@ -168,7 +169,8 @@ function proxyToVite(vitePort: number) {
 
 export function createAppServer({ config, nonce, handlers = {}, frontend }: { config: Config; nonce: string; handlers?: RouteHandlers; frontend: Frontend }): Server {
   const allowedHosts = new Set([`${HOST}:${config.port}`, `localhost:${config.port}`]);
-  const allowedOrigins = new Set([config.appOrigin, `http://localhost:${config.port}`]);
+  // Storybook's /api proxy forwards the story page's origin, so stories can send commands too.
+  const allowedOrigins = new Set([config.appOrigin, `http://localhost:${config.port}`, config.storybookOrigin]);
   const serveFrontend = frontend.kind === 'static' ? serveBuilt(frontend.distDir) : proxyToVite(config.vitePort);
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL) {
@@ -208,8 +210,9 @@ export function createAppServer({ config, nonce, handlers = {}, frontend }: { co
       return serveFrontend(req, res, url.pathname);
     };
     handle().catch((error: unknown) => {
-      console.error(error);
-      if (!res.headersSent) sendJson(res, HTTP_STATUS.internalError, INTERNAL);
+      const errorId = randomUUID();
+      console.error(`Request failed (error ${errorId}):`, error);
+      if (!res.headersSent) sendJson(res, HTTP_STATUS.internalError, INTERNAL(errorId));
       else res.destroy();
     });
   });
