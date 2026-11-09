@@ -2,6 +2,9 @@
 // and the child moves one object at a time with select-then-destination buttons. Every move is
 // recorded as an ordered placement; nothing is placed, counted or answered for the child.
 import { useEffect, useId, useReducer, useRef, useState, type ReactNode } from 'react';
+import appleUrl from '../assets/objects/apple.svg?no-inline';
+import pearUrl from '../assets/objects/pear.svg?no-inline';
+import '../styles/make-ten.css';
 import { MAKE_TEN_COPY, STUDENT_COPY } from '@core/copy';
 import { type ActivityComponent, type Appearance, type MakeTenAttempt, MakeTenAttemptSchema, type MakeTenZone } from '@core/domain';
 
@@ -17,8 +20,6 @@ export type MakeTenWorkspaceProps = {
   // Identifies this activity revision, so a refresh can tell that its unsent try was dropped.
   draftKey: string;
   onSubmit: (attempt: MakeTenAttempt) => void;
-  // Called once the controls are in the document; the host acknowledges rendering only after it.
-  onMounted?: () => void;
 };
 
 // A ten-frame has ten slots; the box never holds more.
@@ -32,10 +33,8 @@ const UNSENT_DRAFT_KEY = 'llime.makeTen.unsentDraft';
 
 const ANSWER_PATTERN = /^\d+$/;
 
-const OBJECT_ASSET: { readonly [A in Exclude<Appearance, 'dot'>]: string } = {
-  apple: new URL('../assets/objects/apple.svg', import.meta.url).href,
-  pear: new URL('../assets/objects/pear.svg', import.meta.url).href,
-};
+// Served as files rather than inlined, so an image that fails to load falls back to dots.
+const OBJECT_ASSET: { readonly [A in Exclude<Appearance, 'dot'>]: string } = { apple: appleUrl, pear: pearUrl };
 
 const movableIds = (count: number) => Array.from({ length: count }, (_, i) => `t${i}`);
 
@@ -157,7 +156,7 @@ function ObjectArt({ appearance, onMissing }: { appearance: Appearance; onMissin
   return <img className="mt-art" src={OBJECT_ASSET[appearance]} alt="" width={48} height={48} draggable={false} onError={onMissing} />;
 }
 
-export function MakeTenWorkspace({ spec, hints, draftKey, onSubmit, onMounted }: MakeTenWorkspaceProps): ReactNode {
+export function MakeTenWorkspace({ spec, hints, draftKey, onSubmit }: MakeTenWorkspaceProps): ReactNode {
   const { first, second, highlightEmptySlots, showEquation } = spec;
   const [draft, dispatch] = useReducer((current: Draft, action: DraftAction) => reduceDraft(current, action, first, second), EMPTY_DRAFT);
   // The requested appearance holds for the whole attempt; only a missing asset switches it to dots.
@@ -172,10 +171,6 @@ export function MakeTenWorkspace({ spec, hints, draftKey, onSubmit, onMounted }:
   const layout = layoutOf(second, draft.placements);
   const answer = parseAnswer(draft.answer);
   const canSubmit = !draft.submitted && answer !== null;
-
-  useEffect(() => {
-    onMounted?.();
-  }, [onMounted]);
 
   useEffect(() => {
     if (draft.submitted) writeUnsentDraft(null);
@@ -252,7 +247,7 @@ export function MakeTenWorkspace({ spec, hints, draftKey, onSubmit, onMounted }:
   return (
     <div className="mt" data-appearance={appearance} data-submitted={draft.submitted}>
       {wasReset ? (
-        <p className="mt-notice" role="status">
+        <p className="p-status mt-notice" role="status">
           {STUDENT_COPY.draftReset}
         </p>
       ) : null}
@@ -286,29 +281,29 @@ export function MakeTenWorkspace({ spec, hints, draftKey, onSubmit, onMounted }:
         </div>
       ) : null}
       <div className="mt-controls">
-        <button type="button" className="mt-button" aria-describedby={ids.moveHint} disabled={!canPlace(draft, layout, first, 'ten_frame')} onClick={() => place('ten_frame')}>
+        <button type="button" className="p-button" aria-describedby={ids.moveHint} disabled={!canPlace(draft, layout, first, 'ten_frame')} onClick={() => place('ten_frame')}>
           {STUDENT_COPY.putInBox}
         </button>
-        <button type="button" className="mt-button" aria-describedby={ids.moveHint} disabled={!canPlace(draft, layout, first, 'remaining')} onClick={() => place('remaining')}>
+        <button type="button" className="p-button" aria-describedby={ids.moveHint} disabled={!canPlace(draft, layout, first, 'remaining')} onClick={() => place('remaining')}>
           {STUDENT_COPY.putToSide}
         </button>
-        <button type="button" className="mt-button" data-variant="secondary" disabled={!canUndo(draft)} onClick={undo}>
+        <button type="button" className="p-button" data-variant="secondary" disabled={!canUndo(draft)} onClick={undo}>
           {MAKE_TEN_COPY.undo}
         </button>
       </div>
       {draft.submitted ? null : (
-        <p id={ids.moveHint} className="mt-hint" aria-live="polite">
+        <p id={ids.moveHint} className="p-helper mt-hint" aria-live="polite">
           {draft.selected === null ? MAKE_TEN_COPY.selectFirst(appearance) : MAKE_TEN_COPY.selected}
         </p>
       )}
       <div className="mt-answer">
-        <label htmlFor={ids.answer} className="mt-answer-label">
+        <label htmlFor={ids.answer} className="p-label">
           {STUDENT_COPY.yourAnswer}
         </label>
         <input
           id={ids.answer}
           ref={answerInput}
-          className="mt-answer-input"
+          className="p-input mt-answer-input"
           type="text"
           inputMode="numeric"
           autoComplete="off"
@@ -316,12 +311,12 @@ export function MakeTenWorkspace({ spec, hints, draftKey, onSubmit, onMounted }:
           disabled={draft.submitted}
           onChange={(event) => dispatch({ type: 'answer', text: event.target.value })}
         />
-        <button type="button" className="mt-button" data-variant="primary" disabled={!canSubmit} aria-busy={draft.submitted} aria-describedby={canSubmit || draft.submitted ? undefined : ids.answerReason} onClick={submit}>
+        <button type="button" className="p-button" disabled={!canSubmit} aria-busy={draft.submitted} aria-describedby={canSubmit || draft.submitted ? undefined : ids.answerReason} onClick={submit}>
           {STUDENT_COPY.checkAnswer}
         </button>
       </div>
       {canSubmit || draft.submitted ? null : (
-        <p id={ids.answerReason} className="mt-hint">
+        <p id={ids.answerReason} className="p-helper mt-hint">
           {MAKE_TEN_COPY.answerFirst}
         </p>
       )}
