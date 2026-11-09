@@ -2,7 +2,7 @@
 // the web app (built files, or the Vite dev server behind a proxy during development).
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, request as forward, type Server, type ServerResponse } from 'node:http';
 import { connect } from 'node:net';
 import { extname, join, sep } from 'node:path';
@@ -24,14 +24,14 @@ import {
   SDP_MAX_BYTES,
   SESSION_HEADER,
   utf8ByteLength,
-  type VoiceCommand,
-  type VoiceSessionInputSchema,
-  type VoiceSessionOutputSchema,
-  type VoiceSnapshot,
 } from './routes.js';
 import { loadSeed } from './dataset.js';
 import { loadPreparedLesson, readLesson, saveTranscript, watchInbox } from './inbox.js';
-import { defaultSimctlRunner, parseNotifyConfig, startOutboxLoop } from './notify.js';
+import { createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, type SettleOperation } from './codex.js';
+import { createEngine } from './engine.js';
+import { defaultSimctlRunner, type OutboxLoop, parseNotifyConfig, startOutboxLoop } from './notify.js';
+import { callTool } from './tools.js';
+import { createVoiceHandlers, createVoiceService } from './voice.js';
 import { createRunId, type RunRecord, Store } from './store.js';
 
 type Routes = typeof ROUTES;
@@ -318,15 +318,10 @@ export function listen(server: Server, port: number): Promise<void> {
 
 export type RunStorePort = Pick<Store, 'getRun' | 'events' | 'getNotification' | 'appendEvents' | 'close'>;
 
-type EngineVoiceCommand = Extract<VoiceCommand, { type: 'typed_correction' | 'activity_rendered' }>;
-type SessionVoiceCommand = Exclude<VoiceCommand, EngineVoiceCommand>;
 type CommandOutcome = Promise<{ run: RunRecord; replayed: boolean }>;
 
 export type EnginePort = {
   command(runId: string, command: Command): CommandOutcome;
-  // Both are run transitions, so the voice route hands them to the engine.
-  typedCorrection(runId: string, command: Extract<EngineVoiceCommand, { type: 'typed_correction' }>): CommandOutcome;
-  activityRendered(runId: string, command: Extract<EngineVoiceCommand, { type: 'activity_rendered' }>): CommandOutcome;
   // Moves operations a restart cut off to their honest end state and repeats the Codex and voice
   // cleanup of stopped runs. Idempotent: a second call changes nothing.
   recoverInterrupted(): Promise<{ interrupted: string[]; cleaned: string[] }>;
@@ -338,11 +333,8 @@ export type LessonPort = {
   saveTranscript(runId: string, text: string): Promise<{ saved: true; contentHash: string }>;
 };
 
-export type VoicePort = {
-  createSession(runId: string, input: z.infer<typeof VoiceSessionInputSchema>, signal: AbortSignal): Promise<z.input<typeof VoiceSessionOutputSchema>>;
-  snapshot(runId: string): Promise<VoiceSnapshot>;
-  command(runId: string, command: SessionVoiceCommand): Promise<VoiceSnapshot>;
-};
+// The voice module answers its own three routes; the server puts its guards and error mapping around them.
+export type VoiceRoutes = Pick<Required<RouteHandlers>, 'createVoiceSession' | 'voiceSnapshot' | 'voiceCommand'>;
 
 export type RuntimePort = {
   interruptActiveTurns(): Promise<void>;
@@ -358,7 +350,7 @@ export type ServerPorts = {
   createRun(input: RunCreateInput): Promise<RunRecord>;
   lessons: LessonPort;
   engine?: EnginePort;
-  voice?: VoicePort;
+  voice?: { routes: VoiceRoutes; closeAll(): Promise<void> };
   runtime?: RuntimePort;
   // Started after recovery, so neither a lesson file nor a pending notification acts on a run that
   // is still being reconciled.
@@ -391,12 +383,12 @@ const runIdOf = (params: object): string | undefined => {
 // Turns a lane failure into its HTTP answer. A conflict always names the current revision so the
 // browser can refresh before deciding anything; anything unrecognized stays a server fault (500).
 async function toRouteError(error: unknown, store: RunStorePort, runId: string | undefined): Promise<unknown> {
-  if (error instanceof RouteError) return error;
   if (isDatabaseUnreachable(error)) return new RouteError({ code: 'NOT_READY', message: 'The database is not reachable', retryable: true });
-  const lane = LaneErrorSchema.safeParse(error);
+  const lane = LaneErrorSchema.safeParse(error instanceof RouteError ? error.body : error);
   if (!lane.success || !isRouteErrorCode(lane.data.code)) return error;
   const { code, message, retryable = false } = lane.data;
   const isConflict = ERROR_HTTP_STATUS[code] === HTTP_STATUS.conflict;
+  if (error instanceof RouteError && (!isConflict || lane.data.revision !== undefined)) return error;
   const revision = lane.data.revision ?? (isConflict && runId !== undefined ? (await store.getRun(runId)).revision : undefined);
   return new RouteError({ code, message: message.slice(0, 300), retryable, ...(revision === undefined ? {} : { revision }) });
 }
@@ -458,39 +450,15 @@ export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'createRu
     : {};
   const voiceRoutes: RouteHandlers = voice
     ? {
-        createVoiceSession: handle('createVoiceSession', async ({ params, body, signal }) => {
-          await store.getRun(params.runId);
-          return voice.createSession(params.runId, body, signal);
-        }),
-        voiceSnapshot: handle('voiceSnapshot', async ({ params }) => {
-          await store.getRun(params.runId);
-          return voice.snapshot(params.runId);
-        }),
+        createVoiceSession: handle('createVoiceSession', voice.routes.createVoiceSession),
+        voiceSnapshot: handle('voiceSnapshot', voice.routes.voiceSnapshot),
+        voiceCommand: handle('voiceCommand', voice.routes.voiceCommand),
       }
     : {};
-  // One route carries both kinds of voice command, so it waits for both modules.
-  const voiceCommandRoute: RouteHandlers =
-    engine && voice
-      ? {
-          voiceCommand: handle('voiceCommand', async ({ params, body }) => {
-            switch (body.type) {
-              case 'typed_correction':
-                return snapshotAt(store, (await engine.typedCorrection(params.runId, body)).run);
-              case 'activity_rendered':
-                return snapshotAt(store, (await engine.activityRendered(params.runId, body)).run);
-              case 'close_voice':
-              case 'audio_gate_closed':
-                await store.getRun(params.runId);
-                return voice.command(params.runId, body);
-            }
-          }),
-        }
-      : {};
 
   return {
     ...engineRoutes,
     ...voiceRoutes,
-    ...voiceCommandRoute,
     bootstrap: handle('bootstrap', async () => ({
       nonce: options.nonce,
       voice: isVoiceConfigured ? 'configured_unverified' : 'missing_key',
@@ -580,7 +548,7 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
   const address = server.address();
   if (address === null || typeof address !== 'object') throw new Error('The server is not listening on a TCP port');
 
-  const { runtime } = ports;
+  const { runtime, voice } = ports;
   let isStopping = false;
   const loops: Stoppable[] = [];
   const admit = () => {
@@ -625,6 +593,7 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
       const sequence = async () => {
         await ready.catch(() => undefined);
         await step('stop the inbox watcher and the outbox', () => Promise.all(loops.map((loop) => loop.stop())));
+        if (voice) await step('close the voice sessions', () => voice.closeAll());
         if (runtime) await step('interrupt active turns', () => runtime.interruptActiveTurns());
         // An answer is sent only after its commit, so waiting for open responses waits for their writes.
         await step('finish requests in progress', responsesDone);
@@ -658,20 +627,14 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
 
 // Notifications go only to an explicitly configured Simulator. Without one the outbox stays off and
 // pending rows wait, instead of guessing a device that may belong to another worker.
-async function startConfiguredOutbox(config: Config, store: Store): Promise<Stoppable> {
+async function startConfiguredOutbox(config: Config, store: Store): Promise<OutboxLoop | null> {
   if (config.simulatorUdid === undefined) {
     console.log('Notifications are off: set SIMULATOR_UDID to the iPad Simulator that should receive them.');
-    return { stop: async () => {} };
+    return null;
   }
   const notify = parseNotifyConfig({ deviceUdid: config.simulatorUdid });
   return startOutboxLoop({ store, runSimctl: defaultSimctlRunner, config: notify, onOutcome: (outcome) => console.log(`Outbox: ${JSON.stringify(outcome)}`) });
 }
-
-// The Codex runtime is not wired into this server yet, so a detected lesson reaches INGESTING and the
-// inbox reports its turn as failed; nothing pretends a turn ran.
-const startIngestionTurn = async (runId: string): Promise<void> => {
-  throw new Error(`No Codex runtime is connected, so run ${runId} cannot start its ingestion turn`);
-};
 
 async function main() {
   const config = loadConfig();
@@ -683,6 +646,30 @@ async function main() {
   const rootDir = repoRoot;
   const lesson = await loadPreparedLesson({ rootDir });
   if (lesson.problem) console.log(lesson.problem);
+
+  // The outbox starts after recovery, but a publish must be able to wake it whenever it runs.
+  let outbox: OutboxLoop | null = null;
+  const wakeOutbox = { kick: () => void outbox?.kick() };
+  // A Codex child works in an empty directory, so no project instructions or settings reach it.
+  const agentDir = join(rootDir, '.runtime', 'agent');
+  await mkdir(agentDir, { recursive: true });
+  const codex = createCodexRuntime({
+    store,
+    callTool: (context, name, args) => callTool({ store, outbox: wakeOutbox }, context, name, args),
+    config: { command: join(rootDir, 'node_modules', '.bin', 'codex'), cwd: agentDir, model: config.model, serviceTier: config.serviceTier, stderrLogPath: join(rootDir, '.runtime', 'logs', 'codex.stderr.log') },
+  });
+  const voiceService = createVoiceService({ apiKey: config.openaiApiKey, store });
+  // The engine and the runtime refer to each other: a finished turn settles through the engine.
+  const settle: SettleOperation = (runId, settlement) => engine.settleOperation(runId, settlement);
+  const engine = createEngine({
+    store,
+    runtime: createRuntimePort({ runtime: codex, settle, closeVoice: async (runId) => void (await voiceService.close(runId)) }),
+  });
+  const voiceRoutes = createVoiceHandlers(voiceService, {
+    typedCorrection: async (runId, request) => snapshotAt(store, (await engine.typedCorrection(runId, request.command)).run),
+    activityRendered: async (runId, command) => snapshotAt(store, (await engine.activityRendered(runId, command)).run),
+  });
+
   // Vite runs only in development; recording serves the built files with no dev server.
   const vite = isDev ? await (await import('vite')).createServer({ configFile: join(repoRoot, 'vite.config.ts') }) : undefined;
   await vite?.listen();
@@ -695,8 +682,21 @@ async function main() {
         readLesson: (runId) => readLesson(runId, { rootDir, prepared: lesson.prepared }),
         saveTranscript: (runId, text) => saveTranscript(runId, text, { rootDir }),
       },
-      startInbox: () => watchInbox({ rootDir, store, startIngestionTurn, now: Date.now, onOutcome: (outcome) => console.log(`Inbox: ${JSON.stringify(outcome)}`) }),
-      startOutbox: () => startConfiguredOutbox(config, store),
+      engine,
+      voice: { routes: voiceRoutes, closeAll: () => voiceService.closeAll() },
+      runtime: createServerRuntimePort(codex),
+      startInbox: () =>
+        watchInbox({
+          rootDir,
+          store,
+          startIngestionTurn: createIngestionStarter({ runtime: codex, store, settle }),
+          now: Date.now,
+          onOutcome: (outcome) => console.log(`Inbox: ${JSON.stringify(outcome)}`),
+        }),
+      startOutbox: async () => {
+        outbox = await startConfiguredOutbox(config, store);
+        return outbox ?? { stop: async () => {} };
+      },
     },
     {
       config,
