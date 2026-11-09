@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import { ACTIVITY_COPY, OUTCOME_COPY, STUDENT_COPY } from '@core/copy';
-import { ActivitySchema, type Problem } from '@core/domain';
+import type { Problem } from '@core/domain';
 import { createEventStore } from '../web/lib/event-store';
-import { Explanation, RetryIntro, Thinking, learningCommandSender, type VoiceControls } from '../web/student/Explanation';
+import { Explanation, Thinking, learningCommandSender, type VoiceControls } from '../web/student/Explanation';
 import type { VoiceView } from '../web/voice';
 import { ConnectionNotice } from '../web/student/Outcome';
 
@@ -123,31 +123,5 @@ export const ConnectionCheckingSave: Story = {
       <ConnectionNotice saveUnconfirmed />
       {explanation({ voice: null, canSend: false })}
     </>
-  ),
-};
-
-const retryActivity = ActivitySchema.parse({
-  id: 'story_activity_retry',
-  revision: 2,
-  runId: STORY_RUN_ID,
-  kind: 'retry',
-  templateId: 'manipulation_retry',
-  strategy: 'retry',
-  problem,
-  ...ACTIVITY_COPY.manipulation_retry(problem),
-  activitySpec: null,
-  specHash: null,
-  helperCount: 0,
-  evidenceIds: [],
-  decisionSummary: '',
-});
-// The number-line practice mounts in this slot in the app; the story shows only where it goes.
-export const RetryIntroduction: Story = {
-  render: () => (
-    <div style={{ maxWidth: 1160, margin: '0 auto', padding: 'var(--p-space-4) var(--p-space-2)' }}>
-      <RetryIntro activity={retryActivity}>
-        <div style={{ minHeight: 240, border: '2px dashed var(--p-control-border)', borderRadius: 'var(--p-radius-card)' }} aria-hidden="true" />
-      </RetryIntro>
-    </div>
   ),
 };

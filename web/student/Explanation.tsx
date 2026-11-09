@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '@core/copy';
-import { EXPLANATION_MAX_CHARS, type Activity, type Command, type Problem, type RunPhase, type SavedAttempt } from '@core/domain';
+import { EXPLANATION_MAX_CHARS, type Command, type Problem, type RunPhase, type SavedAttempt } from '@core/domain';
 import type { RunEvent, RunSnapshot } from '@core/events';
 import { useRunEvents, type EventStore } from '../lib/event-store';
 import type { VoiceClient, VoiceView } from '../voice';
@@ -375,18 +375,6 @@ export function Thinking({ isUpdating, problem, answer, voice, voiceControls, se
   );
 }
 
-// "Let's try the taps again." above the unassisted practice the retry reuses (passed as children).
-export function RetryIntro({ activity, children }: { activity: Activity; children: ReactNode }) {
-  return (
-    <div className="ex ex-retry">
-      <p className="p-speech ex-intro" aria-live="polite">
-        {activity.title}
-      </p>
-      {children}
-    </div>
-  );
-}
-
 // Whether a typed or spoken correction can still replace the activity. After the practice attempt
 // was submitted, in the independent check or once the run ended, it needs a fresh run instead.
 export function correctionWindow(run: RunSnapshot): 'open' | 'closed' {
@@ -404,8 +392,8 @@ function isCorrectionPending(run: RunSnapshot, events: readonly RunEvent[]): boo
   );
 }
 
-// Phases this flow renders, plus any stopped run. Practice, support and the independent check
-// belong to their own screens; a retry wraps practice in RetryIntro.
+// Phases this flow renders, plus any stopped run. Practice, support, the retry and the independent
+// check belong to their own screens.
 export const EXPLAIN_FLOW_PHASES: readonly RunPhase[] = ['EXPLAIN', 'PROCESSING', 'CLARIFY', 'NEEDS_SUPPORT', 'COMPLETE', 'ERROR'];
 
 export function isExplainFlowRun(run: RunSnapshot): boolean {

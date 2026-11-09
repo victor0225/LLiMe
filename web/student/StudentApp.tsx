@@ -1,11 +1,15 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { STUDENT_COPY, VOICE_STATUS_COPY } from '@core/copy';
-import type { Activity, Command } from '@core/domain';
+import { type Activity, type Command, RunCreateInputSchema, type TemplateId } from '@core/domain';
 import type { RunEvent, RunSnapshot } from '@core/events';
-import { HTTP_STATUS, NotificationOpenedInputSchema, ROUTES, routePath } from '@core/routes';
+import { BootstrapSchema, HTTP_STATUS, NotificationOpenedInputSchema, ROUTES, routePath, SESSION_HEADER } from '@core/routes';
 import { createEventStore, EVENT_POLL_INTERVAL_MS, type EventStore, RunRequestError, useRunEvents } from '../lib/event-store';
+import { browserVoiceEnv, createVoiceClient, eventStoreVoiceApi, useVoice, type VoiceClient, type VoiceView } from '../voice';
+import { ExplainFlow, isExplainFlowRun, VoiceStatus } from './Explanation';
 import { DeferredInvitation, Invitation } from './Invitation';
 import { Mascot } from './Mascot';
+import { ActivityUnavailable } from './Outcome';
+import { Practice } from './Practice';
 import '../styles/student.css';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -33,7 +37,8 @@ export type StudentSlot = {
 
 export type StudentAppProps = {
   readonly runId: string | null;
-  // Mounted for every phase after the invitation (and for a stopped run).
+  // Mounted for every phase after the invitation (and for a stopped run). Without it the app composes
+  // its own screens; stories pass one to show a single screen.
   readonly activity?: (slot: StudentSlot) => ReactNode;
   // Shown when a notification's activity cannot open.
   readonly unavailable?: (reason: UnavailableReason) => ReactNode;
@@ -89,8 +94,9 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
   const saveUnconfirmed = unansweredRevision !== null && run?.revision === unansweredRevision;
   const connection = view.status === 'live' || view.status === 'loading' ? 'live' : 'paused';
   const voiceOff = useAudioGateClosed(runId, run?.phase === 'VERIFY');
+  const voice = useRunVoice(store, runId, run?.phase === 'VERIFY');
 
-  if (openedUnavailable) return <StudentFrame>{unavailable ? unavailable(openedUnavailable) : <RunUnavailableCard />}</StudentFrame>;
+  if (openedUnavailable) return <StudentFrame>{unavailable ? unavailable(openedUnavailable) : <ActivityUnavailable />}</StudentFrame>;
   if (!run) {
     if (view.status === 'failed') return <RunUnavailable />;
     return (
@@ -107,7 +113,7 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
   const slot: StudentSlot = { run, events: view.events, connection, saveUnconfirmed, voiceOff, submit };
   return (
     <StudentFrame>
-      <RunScreen slot={slot} isPending={isPending} activity={activity} />
+      <RunScreen slot={slot} isPending={isPending} activity={activity ?? ((current) => <ComposedActivity slot={current} store={store} voice={voice} />)} />
       <ConnectionStatus connection={connection} saveUnconfirmed={saveUnconfirmed} />
     </StudentFrame>
   );
@@ -205,6 +211,100 @@ function ConnectionStatus({ connection, saveUnconfirmed }: { connection: Student
       {message}
     </p>
   );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The screen for each phase after the invitation.
+
+// Number-line activities, whether app-owned (initial, retry) or generated (anchored support,
+// independent check); the make-ten templates mount the generated workspace instead.
+const NUMBER_LINE_TEMPLATES: ReadonlySet<TemplateId> = new Set(['initial_number_line', 'anchor_start_number_line', 'manipulation_retry', 'independent_number_line']);
+
+type RunVoice = { view: VoiceView; client: VoiceClient } | null;
+
+function ComposedActivity({ slot, store, voice }: { slot: StudentSlot; store: EventStore; voice: RunVoice }) {
+  const { run } = slot;
+  if (isExplainFlowRun(run)) return <ExplainFlow store={store} voice={voice?.view ?? null} voiceControls={voice?.client ?? SILENT_VOICE} startNewRun={startNewRun} />;
+  const activity = run.activity;
+  if (activity === null || !NUMBER_LINE_TEMPLATES.has(activity.templateId)) return null;
+  // During support the tutor may still be talking, so the child keeps Mute and End voice; voice is
+  // offered fresh only at the explanation step.
+  const showVoice = voice !== null && run.phase === 'PRACTICE' && voice.view.phase !== 'idle';
+  return (
+    <>
+      {showVoice && <VoiceStatus voice={voice.view} controls={voice.client} offerStart={false} />}
+      <Practice activity={activity} phase={run.phase} voiceOff={slot.voiceOff} submit={slot.submit} />
+    </>
+  );
+}
+
+// Controls for a run without voice; no voice control is shown then, so none is ever pressed.
+const SILENT_VOICE = { start: async () => {}, toggleMute: () => {}, end: async () => {}, interruptPlayback: () => {} };
+
+// Creates a run and returns its ID; the caller decides whether to open it.
+export async function createRun(): Promise<string> {
+  const bootstrap = await fetch(routePath('bootstrap'), { headers: { accept: 'application/json' } });
+  if (!bootstrap.ok) throw new Error(`The app could not be reached (HTTP ${bootstrap.status})`);
+  const { nonce } = BootstrapSchema.parse(await bootstrap.json());
+  const response = await fetch(routePath('createRun'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', [SESSION_HEADER]: nonce },
+    body: JSON.stringify(RunCreateInputSchema.parse({})),
+  });
+  if (response.status !== ROUTES.createRun.status) throw new Error(`The run was not created (HTTP ${response.status})`);
+  return ROUTES.createRun.response.parse(await response.json()).id;
+}
+
+async function startNewRun(): Promise<void> {
+  const runId = await createRun();
+  window.location.assign(`${window.location.pathname}?runId=${encodeURIComponent(runId)}`);
+}
+
+// One voice client per run, offered only when this server has voice configured for live input.
+function useRunVoice(store: EventStore, runId: string | null, isIndependent: boolean): RunVoice {
+  const [isOffered, setOffered] = useState(false);
+  useEffect(() => {
+    let isCurrent = true;
+    fetch(routePath('bootstrap'), { headers: { accept: 'application/json' } })
+      .then(async (response) => BootstrapSchema.safeParse(response.ok ? await response.json() : null))
+      .then((bootstrap) => isCurrent && setOffered(bootstrap.success && bootstrap.data.voice === 'configured_unverified' && bootstrap.data.inputMode === 'live'))
+      // Unreachable: typing stays available and voice is simply not offered.
+      .catch(() => isCurrent && setOffered(false));
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+  const client = useMemo(() => createVoiceClient({ env: browserVoiceEnv(), api: eventStoreVoiceApi(store, runId ?? '') }), [store, runId]);
+  // Leaving the run releases the microphone and closes the session.
+  useEffect(() => () => void client.end(), [client]);
+  const view = useVoice(client);
+  useIndependentTeardown(client, view, isIndependent);
+  return isOffered && runId !== null ? { view, client } : null;
+}
+
+// The tutor's handover may still be playing when the independent check arrives. Once its transcript
+// has stopped growing for a moment, or at the latest after the cap, microphone and playback are torn
+// down and the server records it; the check opens only after that record.
+const HANDOVER_SETTLE_MS = 1500;
+const HANDOVER_CAP_MS = 8000;
+
+function useIndependentTeardown(client: VoiceClient, view: VoiceView, isIndependent: boolean) {
+  const since = useRef<number | null>(null);
+  const hasAudio = view.phase === 'starting' || view.phase === 'connecting' || view.phase === 'live' || view.phase === 'ending';
+  useEffect(() => {
+    if (!isIndependent) {
+      since.current = null;
+      return;
+    }
+    if (!hasAudio) return;
+    since.current ??= Date.now();
+    const remaining = HANDOVER_CAP_MS - (Date.now() - since.current);
+    const timer = setTimeout(() => {
+      // A failed acknowledgement leaves the check closed; the next transcript change retries.
+      client.teardownForIndependentWork().catch(() => {});
+    }, Math.max(0, Math.min(HANDOVER_SETTLE_MS, remaining)));
+    return () => clearTimeout(timer);
+  }, [client, isIndependent, hasAudio, view.captions.output]);
 }
 
 // ---------------------------------------------------------------------------------------------

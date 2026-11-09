@@ -4,7 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 import { z } from 'zod';
 import { repoRoot, loadConfig } from '../../src/config.js';
-import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected } from '../../src/copy.js';
+import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '../../src/copy.js';
 import {
   CommandSchema,
   EXPLANATION_MAX_CHARS,
@@ -135,8 +135,8 @@ async function openStory(page: Page, id: string) {
   await expect(page.locator('#storybook-root main')).toBeVisible();
 }
 
-async function expectNoAxeViolations(page: Page) {
-  const { violations } = await new AxeBuilder({ page }).include('#storybook-root').analyze();
+async function expectNoAxeViolations(page: Page, root = '#storybook-root') {
+  const { violations } = await new AxeBuilder({ page }).include(root).analyze();
   expect(violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
@@ -434,6 +434,55 @@ for (const viewport of IPAD_VIEWPORTS) {
         // Axe includes the WCAG text-contrast rule.
         await expectNoAxeViolations(page);
       }
+    });
+
+    test('the composed /student page walks a run from the wrong-answer question through Thinking to the committed success, and Done sends nothing (stubbed route)', async ({ page }) => {
+      const state = { snapshot: runSnapshot({ seq: 3 }), events: [] as RunEvent[] };
+      await stubRun(page, state);
+      const processing = runEvent(4, 'state.committed', { phase: 'PROCESSING', revision: 5, caseIds: [] });
+      const commands: Command[] = [];
+      await page.route(pathIs(routePath('runCommand', { runId: RUN_ID })), (route) => {
+        commands.push(CommandSchema.parse(route.request().postDataJSON()));
+        state.events = [processing];
+        state.snapshot = runSnapshot({ phase: 'PROCESSING', revision: 5, seq: 4, execution: { throughSeq: 4, events: [processing] } });
+        return route.fulfill({ json: state.snapshot });
+      });
+
+      await page.goto(`/student?runId=${encodeURIComponent(RUN_ID)}`);
+      const heading = page.getByRole('heading', { level: 1 });
+      await expect(heading).toHaveText(STUDENT_COPY.howDidYouGet(12));
+      await expect(page.getByText(problemQuestion(problem))).toBeVisible();
+      // This server offers no voice, so the labeled typed fallback is open from the start.
+      await page.getByLabel(STUDENT_COPY.explanationLabel).fill('  I counted eight first. ');
+      await page.getByRole('button', { name: STUDENT_COPY.sendExplanation }).click();
+      await expect(heading).toHaveText(STUDENT_COPY.interpreting);
+      expect(commands).toEqual([expect.objectContaining({ type: 'explain', text: 'I counted eight first.', revision: 4 })]);
+      expect(await page.locator('body').innerText()).not.toContain(OUTCOME_COPY.completeTitle);
+      await expectNoAxeViolations(page, 'body');
+
+      const outcome = runEvent(5, 'outcome.committed', {
+        queryId: 'query_run',
+        persistedCaseId: 'case_run',
+        strategy: 'make_ten',
+        outcome: 'independent',
+        saved: true,
+        nodes: [],
+        edges: [],
+        source: { id: 'run', text: 'This run' },
+      });
+      const complete = runEvent(6, 'state.committed', { phase: 'COMPLETE', revision: 6, caseIds: ['case_run'] });
+      state.events = [processing, outcome, complete];
+      state.snapshot = runSnapshot({ phase: 'COMPLETE', revision: 6, seq: 6, attempts: [initialAttempt, independentAttempt], execution: { throughSeq: 6, events: [processing, outcome, complete] } });
+      await expect(heading).toHaveText(OUTCOME_COPY.completeTitle);
+      await expectNoAxeViolations(page, 'body');
+
+      const posts: string[] = [];
+      page.on('request', (request) => {
+        if (request.method() === 'POST') posts.push(request.url());
+      });
+      await page.getByRole('button', { name: EXPLAIN_COPY.done }).click();
+      await expect(heading).toHaveText(STUDENT_COPY.doneCollapsed);
+      expect(posts).toEqual([]);
     });
 
     test('every explain and outcome story renders without errors, overflow or accessibility violations (stubbed route)', async ({ page, request }) => {

@@ -1,23 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ACTIVITY_COPY } from '@core/copy';
-import { RunCreateInputSchema } from '@core/domain';
-import { BootstrapSchema, ROUTES, SESSION_HEADER, routePath } from '@core/routes';
 import { ActivityUnavailable, CorrectionClosed, Outcome, type OutcomeView } from '../web/student/Outcome';
+import { createRun } from '../web/student/StudentApp';
 import { StudentPage } from './student-explain.stories';
 
-// Creates a run the way the student app does before opening it; stories stop after creation.
-// Without a server behind Storybook it fails visibly.
+// Creates a run as the student app does; stories stay on the page instead of opening it.
 export async function createStoryRun(): Promise<void> {
-  const bootstrap = await fetch(routePath('bootstrap'), { headers: { accept: 'application/json' } });
-  if (!bootstrap.ok) throw new Error(`The app could not be reached (HTTP ${bootstrap.status})`);
-  const { nonce } = BootstrapSchema.parse(await bootstrap.json());
-  const response = await fetch(routePath('createRun'), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', [SESSION_HEADER]: nonce },
-    body: JSON.stringify(RunCreateInputSchema.parse({})),
-  });
-  if (response.status !== ROUTES.createRun.status) throw new Error(`The run was not created (HTTP ${response.status})`);
-  ROUTES.createRun.response.parse(await response.json());
+  await createRun();
 }
 
 const outcome = (view: OutcomeView) => <Outcome view={view} startNewRun={createStoryRun} />;
