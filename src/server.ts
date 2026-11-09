@@ -26,12 +26,12 @@ import {
   utf8ByteLength,
 } from './routes.js';
 import { loadSeed } from './dataset.js';
-import { loadPreparedLesson, readLesson, saveTranscript, watchInbox } from './inbox.js';
+import { hasInboxLesson, loadPreparedLesson, readLesson, saveTranscript, watchInbox } from './inbox.js';
 import { type CodexRuntime, createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, type SettleOperation } from './codex.js';
 import { createEngine } from './engine.js';
 import { defaultSimctlRunner, type OutboxLoop, parseNotifyConfig, startOutboxLoop } from './notify.js';
 import { callTool } from './tools.js';
-import { createVoiceHandlers, createVoiceService } from './voice.js';
+import { createVoiceDelegation, createVoiceHandlers, createVoiceService } from './voice.js';
 import { createRunId, type RunRecord, Store } from './store.js';
 
 type Routes = typeof ROUTES;
@@ -692,17 +692,21 @@ async function main() {
     callTool: (context, name, args) => callTool({ store, outbox: wakeOutbox }, context, name, args),
     config: { command: join(rootDir, 'node_modules', '.bin', 'codex'), cwd: agentDir, model: config.model, serviceTier: config.serviceTier, stderrLogPath: join(rootDir, '.runtime', 'logs', 'codex.stderr.log') },
   });
-  const voiceService = createVoiceService({ apiKey: config.openaiApiKey, store });
-  // The engine and the runtime refer to each other: a finished turn settles through the engine.
+  // The engine, the runtime and voice delegation refer to each other: a finished turn settles
+  // through the engine, and a stopped run closes its voice through delegation. The lambdas resolve
+  // these names only when they run, after every one exists.
   const turns = trackTurnSettlement(codex, (runId, settlement) => engine.settleOperation(runId, settlement));
   const engine = createEngine({
     store,
-    runtime: createRuntimePort({ runtime: turns.runtime, settle: turns.settle, closeVoice: async (runId) => void (await voiceService.close(runId)) }),
+    runtime: createRuntimePort({ runtime: turns.runtime, settle: turns.settle, closeVoice: async (runId) => void (await delegation.closeVoice(runId)) }),
   });
+  const delegation = createVoiceDelegation({ store, engine });
+  const voiceService = createVoiceService({ apiKey: config.openaiApiKey, store, hooks: delegation.hooks });
+  delegation.attach(voiceService);
   const serverRuntime = createServerRuntimePort(codex);
   const voiceRoutes = createVoiceHandlers(voiceService, {
     typedCorrection: async (runId, request) => snapshotAt(store, (await engine.typedCorrection(runId, request.command)).run),
-    activityRendered: async (runId, command) => snapshotAt(store, (await engine.activityRendered(runId, command)).run),
+    activityRendered: async (runId, command) => snapshotAt(store, (await delegation.activityRendered(runId, command)).run),
   });
 
   // Vite runs only in development; recording serves the built files with no dev server.
@@ -717,7 +721,12 @@ async function main() {
         readLesson: (runId) => readLesson(runId, { rootDir, prepared: lesson.prepared }),
         saveTranscript: (runId, text) => saveTranscript(runId, text, { rootDir }),
       },
-      engine,
+      engine: {
+        command: (runId, command) => engine.command(runId, command),
+        // Several checkouts share the local database; this one recovers only the runs whose lesson
+        // is in its own inbox, the same owner test the outbox uses.
+        recoverInterrupted: () => engine.recoverInterrupted({ ownsRun: (runId) => hasInboxLesson(runId, { rootDir }) }),
+      },
       voice: { routes: voiceRoutes, closeAll: () => voiceService.closeAll() },
       runtime: {
         interruptActiveTurns: async () => {
