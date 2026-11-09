@@ -90,6 +90,11 @@ describe('configuration', () => {
     assert.deepEqual([defaults.port, defaults.vitePort, defaults.storybookPort], [4317, 5173, 6006]);
   });
 
+  test('reads the notification Simulator UDID, and treats an empty one as unset', () => {
+    assert.equal(parseConfig({ SIMULATOR_UDID: '7C1F0B6E-2A3D-4E5F-8A9B-0C1D2E3F4A5B' }).simulatorUdid, '7C1F0B6E-2A3D-4E5F-8A9B-0C1D2E3F4A5B');
+    assert.equal(parseConfig({ SIMULATOR_UDID: '' }).simulatorUdid, undefined);
+  });
+
   test('treats an empty secret as missing, never as an empty password', () => {
     assert.equal(parseConfig({ NEO4J_PASSWORD: '', OPENAI_API_KEY: '' }).neo4j.password, undefined);
   });
@@ -125,11 +130,11 @@ describe('request guards', () => {
 
   test('rejects a request whose Host is not the configured app origin', async () => {
     await withServer({}, async (server) => {
-      for (const host of ['evil.example:4999', `${HOST}:4317`, `localhost:${config.port + 1}`]) {
+      for (const host of ['evil.example:4999', `${HOST}:4317`, `localhost:${config.port}`, `localhost:${config.port + 1}`]) {
         const reply = await send(server, { path: '/', headers: { host } });
         assert.equal(reply.status, 403, host);
       }
-      assert.equal((await send(server, { path: '/', headers: { host: `localhost:${config.port}` } })).status, 200);
+      assert.equal((await send(server, { path: '/', headers: { host: appHost } })).status, 200);
     });
   });
 
@@ -268,7 +273,9 @@ describe('API routes', () => {
       const reply = await send(server, { path: `${routePath('runEvents', { runId: RUN_ID })}?after=0` });
       assert.equal(reply.status, 500);
       assert.doesNotMatch(reply.text, /seq/);
-      assert.match(errorOf(reply).message, /error [0-9a-f-]{36}/);
+      const error = errorOf(reply);
+      assert.equal(error.code, 'INTERNAL');
+      assert.match(error.errorId ?? '', /^err_[0-9a-f]{16}$/);
     });
   });
 });
