@@ -125,11 +125,11 @@ describe('request guards', () => {
 
   test('rejects a request whose Host is not the configured app origin', async () => {
     await withServer({}, async (server) => {
-      for (const host of ['evil.example:4999', `${HOST}:4317`, `localhost:${config.port + 1}`]) {
+      for (const host of ['evil.example:4999', `${HOST}:4317`, `localhost:${config.port}`, `localhost:${config.port + 1}`]) {
         const reply = await send(server, { path: '/', headers: { host } });
         assert.equal(reply.status, 403, host);
       }
-      assert.equal((await send(server, { path: '/', headers: { host: `localhost:${config.port}` } })).status, 200);
+      assert.equal((await send(server, { path: '/', headers: { host: appHost } })).status, 200);
     });
   });
 
