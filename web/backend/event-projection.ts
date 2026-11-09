@@ -5,7 +5,7 @@
 // Two rules shape everything here. The scene shows what the search module decided (`admitted`,
 // `decision.groups`, `scores`) and never recomputes it, and the query graph grows only through events the
 // server committed, so a rejected or foreign event leaves the snapshot exactly as it was.
-import type { ConceptLink, Decision, ErrorCode, GraphEdge, GraphNode, LearningCase, MemorySummary, NodeType, Outcome, SearchResult, Strategy } from '@core/domain';
+import type { ConceptLink, ErrorCode, GraphEdge, GraphNode, LearningCase, MemorySummary, NodeType, Outcome, SearchResult, Strategy } from '@core/domain';
 import { validateCase } from '@core/domain';
 import type { EventPayload, EventType } from '@core/events';
 import { hypothesisText } from './learning-copy.js';
@@ -83,13 +83,6 @@ export interface OperationFailure {
   readonly message: string;
 }
 
-// What the footer needs to say about agent activity, without keeping whole payloads alive.
-export interface AgentEventSummary {
-  readonly type: 'runtime.input' | 'tool.started' | 'tool.completed' | 'tool.failed' | 'runtime.message' | 'runtime.completed';
-  readonly label: string;
-  readonly elapsedMs?: number;
-}
-
 export interface ProjectionSnapshot {
   readonly runId: string;
   // Sequence of the last applied event; -1 before the first.
@@ -106,13 +99,12 @@ export interface ProjectionSnapshot {
   readonly outcome: CommittedOutcome | null;
   readonly status: 'active' | 'complete' | 'error';
   readonly failure: OperationFailure | null;
-  readonly agentEvents: readonly AgentEventSummary[];
   // The last event worth showing as the raw footer line. runtime.completed never replaces it.
   readonly raw: ViewEvent | null;
 }
 
 export function createProjection(runId: string, corpus: CorpusIndex | null = null): ProjectionSnapshot {
-  return { runId, sequence: -1, corpus, queryId: null, graph: null, addedNodeTypes: [], memory: null, search: null, searching: false, outcome: null, status: 'active', failure: null, agentEvents: [], raw: null };
+  return { runId, sequence: -1, corpus, queryId: null, graph: null, addedNodeTypes: [], memory: null, search: null, searching: false, outcome: null, status: 'active', failure: null, raw: null };
 }
 
 const reject = (message: string): never => {
@@ -175,24 +167,6 @@ function checkOutcome(payload: EventPayload<'outcome.committed'>, current: Proje
   return { strategy: payload.strategy, outcome: payload.outcome, saved: payload.saved, persistedCaseId: payload.persistedCaseId };
 }
 
-const agentSummary = (event: ViewEvent): AgentEventSummary | null => {
-  const elapsed = event.elapsedMs === undefined ? {} : { elapsedMs: event.elapsedMs };
-  switch (event.type) {
-    case 'runtime.input':
-      return { type: event.type, label: event.payload.model, ...elapsed };
-    case 'tool.started':
-    case 'tool.completed':
-    case 'tool.failed':
-      return { type: event.type, label: event.payload.name, ...elapsed };
-    case 'runtime.message':
-      return { type: event.type, label: event.payload.text, ...elapsed };
-    case 'runtime.completed':
-      return { type: event.type, label: event.payload.status, ...elapsed };
-    default:
-      return null;
-  }
-};
-
 const isProjected = (type: string): type is ProjectedEventType => (PROJECTED_EVENT_TYPES as readonly string[]).includes(type);
 
 function apply(current: ProjectionSnapshot, event: ViewEvent): ProjectionSnapshot {
@@ -254,11 +228,9 @@ export function project(snapshot: ProjectionSnapshot, event: ViewEvent): Project
   if (event.sequence <= snapshot.sequence) return snapshot;
   if (event.sequence !== snapshot.sequence + 1) throw new ProjectionGapError(snapshot.sequence + 1, event.sequence);
   const applied = apply(snapshot, event);
-  const summary = agentSummary(event);
   return {
     ...applied,
     sequence: event.sequence,
-    agentEvents: summary ? [...applied.agentEvents, summary] : applied.agentEvents,
     raw: event.type === 'runtime.completed' ? applied.raw : event,
   };
 }
@@ -285,10 +257,6 @@ export function litEdgeIds(snapshot: ProjectionSnapshot): ReadonlySet<string> {
 // Similarity of every ranked case, for the field's brightness. Empty until the search completed.
 export function visibleScores(snapshot: ProjectionSnapshot): ReadonlyMap<string, number> {
   return new Map(snapshot.search ? snapshot.search.scores : []);
-}
-
-export function strategyGroups(snapshot: ProjectionSnapshot): Decision['groups'] {
-  return snapshot.search?.decision.groups ?? [];
 }
 
 export function memoryHighlight(snapshot: ProjectionSnapshot): { caseIds: readonly string[]; links: readonly ConceptLink[] } {
