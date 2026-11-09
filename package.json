@@ -22,7 +22,12 @@
     "seed": "tsx scripts/seed.ts",
     "test:runtime": "tsx --test tests/runtime/*.test.ts",
     "live:codex": "tsx scripts/live-codex.ts",
-    "live:voice": "tsx scripts/live-voice.ts"
+    "live:voice": "tsx scripts/live-voice.ts",
+    "demo:reset": "tsx scripts/demo-reset.ts",
+    "demo:drop": "tsx scripts/demo-drop.ts",
+    "demo:export": "tsx scripts/export-capture.ts",
+    "demo:replay": "tsx scripts/demo-replay.ts",
+    "demo:purge": "tsx scripts/reset-live.ts"
   },
   "dependencies": {
     "@json-render/core": "0.22.0",
