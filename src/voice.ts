@@ -220,7 +220,18 @@ export type VoiceDeps = {
   fetch?: typeof fetch;
   openSideband?: OpenSideband;
   hooks?: VoiceHooks;
+  // One server log line per failed Live session request; defaults to stderr.
+  log?: (line: string) => void;
 };
+
+// The provider's own error fields for the server log, with anything shaped like a key removed.
+function providerErrorFields(body: unknown, key: string): string {
+  const parsed = z.object({ error: z.object({ type: z.string().nullish(), code: z.string().nullish(), message: z.string().nullish() }) }).safeParse(body);
+  if (!parsed.success) return '';
+  const { type, code, message } = parsed.data.error;
+  const redact = (text: string) => text.replaceAll(key, '[key]').replace(/sk-[\w*-]+/g, '[key]');
+  return [type ? `type ${type}` : '', code ? `code ${code}` : '', message ? `message ${JSON.stringify(redact(message).slice(0, 200))}` : ''].filter(Boolean).map((part) => `, ${redact(part)}`).join('');
+}
 
 type Session = {
   runId: string;
@@ -272,6 +283,7 @@ export type VoiceService = ReturnType<typeof createVoiceService>;
 export function createVoiceService(deps: VoiceDeps) {
   const { apiKey, store } = deps;
   const request = deps.fetch ?? fetch;
+  const log = deps.log ?? ((line: string) => console.error(line));
   const openSideband = deps.openSideband ?? openLiveSideband;
   const sessionsByRun = new Map<string, Session[]>();
   const queues = new Map<string, Promise<unknown>>();
@@ -440,6 +452,7 @@ export function createVoiceService(deps: VoiceDeps) {
   async function callProvider(key: string, offer: string): Promise<{ liveSessionId: string; sdpAnswer: string }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CREATE_TIMEOUT_MS);
+    let reason: string | null = null;
     try {
       const response = await request(LIVE_SESSIONS_URL, {
         method: 'POST',
@@ -449,10 +462,16 @@ export function createVoiceService(deps: VoiceDeps) {
       });
       const body: unknown = await response.json().catch(() => undefined);
       const parsed = z.object({ session: z.object({ id: z.string().regex(SESSION_ID_PATTERN) }), transport: z.object({ sdp: z.string().min(1) }) }).safeParse(body);
-      if (response.status !== HTTP_STATUS.created || !parsed.success) throw new Error(`The Live session request answered HTTP ${response.status}`);
+      if (response.status !== HTTP_STATUS.created) reason = `status ${response.status}${providerErrorFields(body, key)}`;
+      else if (!parsed.success) reason = `status ${response.status} but no session id or SDP answer`;
+      if (reason !== null || !parsed.success) throw new Error(reason ?? 'unparsed');
       return { liveSessionId: parsed.data.session.id, sdpAnswer: parsed.data.transport.sdp };
-    } catch {
-      // Provider details are not passed on: the student sees only the typed-input recovery.
+    } catch (error) {
+      // The server log names the provider's answer, never the key, headers or SDP; the student sees
+      // only the typed-input recovery.
+      if (controller.signal.aborted) reason = `timed out after ${CREATE_TIMEOUT_MS} ms`;
+      reason ??= `no response (${error instanceof Error ? `${error.name}: ${error.message}`.replaceAll(key, '[key]').slice(0, 200) : 'unknown error'})`;
+      log(`Live session request failed: ${reason}`);
       throw unavailable('Voice could not start. Use typed input instead.', true);
     } finally {
       clearTimeout(timer);
