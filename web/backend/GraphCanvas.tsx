@@ -201,8 +201,8 @@ function createController(host: HTMLElement, initial: GraphCanvasProps, startSta
   // Nodes: one instanced mesh per shape, all drawn once, each instance a fixed place.
   const meshes = new Map<'sphere' | 'ring' | 'box' | 'octa', { mesh: THREE.InstancedMesh; ids: string[] }>();
   const shapes: Record<'sphere' | 'ring' | 'box' | 'octa', THREE.BufferGeometry> = {
-    sphere: trash.geometry(new THREE.SphereGeometry(0.55, 10, 8)),
-    ring: trash.geometry(new THREE.TorusGeometry(0.6, 0.16, 6, 14)),
+    sphere: trash.geometry(new THREE.SphereGeometry(0.55, 6, 4)),
+    ring: trash.geometry(new THREE.TorusGeometry(0.6, 0.16, 4, 8)),
     box: trash.geometry(new THREE.BoxGeometry(1, 1, 1)),
     octa: trash.geometry(new THREE.OctahedronGeometry(0.75)),
   };

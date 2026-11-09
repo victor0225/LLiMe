@@ -19,10 +19,12 @@ const VIEWPORTS = [
 const MIN_TEXT_PX = 14;
 // Transitions run up to 0.9 s plus a stagger; this lets a step settle before it is measured.
 const SETTLE_MS = 1700;
-const STORY = (id: string) => `${storybookOrigin}/iframe.html?id=backend-learning-memory--${id}&viewMode=story`;
-const STORY_IDS = ['execution-and-graph', 'graph-overview', 'outcome-not-yet', 'opening-memory-recalled'] as const;
+const STORY = (id: string) => `${storybookOrigin}/iframe.html?id=${id}&viewMode=story`;
+const GRAPH_3D = 'backend-3d-graph--searched-memory';
+const STORY_IDS = ['backend-learning-memory--execution-and-graph', 'backend-learning-memory--graph-overview', 'backend-learning-memory--outcome-not-yet', 'backend-learning-memory--opening-memory-recalled', GRAPH_3D] as const;
 // Steps of the player: 0..6, then the committed outcome.
 const LAST_STEP = 6;
+const PLAYER = 'backend-learning-memory--execution-and-graph';
 
 const ranked = rank(
   validateCase((readJson('captures/backend.capture.json') as { query: unknown }).query),
@@ -34,6 +36,7 @@ const search = buildSearchResult({ query, corpusHash: (readJson('seed/manifest.j
 async function open(page: Page, id: string): Promise<void> {
   await page.goto(STORY(id), { waitUntil: 'domcontentloaded' });
   await page.locator('.learning-memory').waitFor({ timeout: 60_000 });
+  if (id === GRAPH_3D) await page.locator('.graph-canvas[data-nodes]').waitFor({ timeout: 60_000 });
 }
 
 async function advance(page: Page, presses: number): Promise<void> {
@@ -90,7 +93,7 @@ test.describe('Learning memory scene', () => {
     test(`every step fits ${viewport.width}x${viewport.height} with text of at least ${MIN_TEXT_PX}px and no scrolling`, async ({ page }) => {
       mkdirSync(EVIDENCE_DIR, { recursive: true });
       await page.setViewportSize(viewport);
-      await open(page, 'execution-and-graph');
+      await open(page, PLAYER);
       const hashes: string[] = [];
       for (let step = 0; step <= LAST_STEP + 1; step++) {
         await page.waitForTimeout(SETTLE_MS);
@@ -108,7 +111,7 @@ test.describe('Learning memory scene', () => {
   }
 
   test('nothing from the search is visible before it completes, and what is lifted and lit is exactly what the search admitted', async ({ page }) => {
-    await open(page, 'execution-and-graph');
+    await open(page, PLAYER);
     await advance(page, 3);
     const beforeSearch = await stateOf(page);
     expect(beforeSearch.step).toBe('3');
@@ -139,7 +142,7 @@ test.describe('Learning memory scene', () => {
   });
 
   test('the committed outcome adds +1 NEW and a result, and the source chip says simulation and not saved', async ({ page }) => {
-    await open(page, 'execution-and-graph');
+    await open(page, PLAYER);
     await advance(page, LAST_STEP + 1);
     const done = await stateOf(page);
     expect(done.step).toBe('outcome');
@@ -155,7 +158,7 @@ test.describe('Learning memory scene', () => {
     const finalState = async (reducedMotion: 'reduce' | 'no-preference') => {
       const context = await browser.newContext({ reducedMotion, viewport: VIEWPORTS[0] });
       const page = await context.newPage();
-      await open(page, 'execution-and-graph');
+      await open(page, PLAYER);
       await advance(page, LAST_STEP + 1);
       const state = await stateOf(page);
       const transitions = await page.evaluate(() => getComputedStyle(document.querySelector('.glyph') as Element).transitionDuration);
@@ -181,7 +184,7 @@ test.describe('Learning memory scene', () => {
   test('p95 frame time over a 10-second scene is measured and reported', async ({ page }, testInfo) => {
     mkdirSync(EVIDENCE_DIR, { recursive: true });
     await page.setViewportSize(VIEWPORTS[0]);
-    await open(page, 'execution-and-graph');
+    await open(page, PLAYER);
     await page.waitForTimeout(SETTLE_MS);
     await page.evaluate(() => {
       const frames: number[] = [];
@@ -208,5 +211,55 @@ test.describe('Learning memory scene', () => {
     testInfo.annotations.push({ type: 'p95 frame time', description: `${report.p95Ms.toFixed(1)} ms over ${report.frames} frames` });
     console.log(`p95 frame time ${report.p95Ms.toFixed(1)} ms (p50 ${report.p50Ms.toFixed(1)}, p99 ${report.p99Ms.toFixed(1)}, max ${report.maxMs.toFixed(1)}) over ${report.frames} frames; target <= ${report.targetMs} ms`);
     expect(report.frames).toBeGreaterThan(100);
+  });
+
+  test('the 3D graph draws every learner and unmounting releases the renderer, geometry and materials', async ({ page }) => {
+    await page.setViewportSize(VIEWPORTS[0]);
+    await open(page, GRAPH_3D);
+    const nodes = Number(await page.locator('.graph-canvas').getAttribute('data-nodes'));
+    expect(nodes).toBeGreaterThan(5000);
+    // The canvas has real content: its frame compresses far worse than the empty page left after unmounting.
+    await page.waitForTimeout(1000);
+    const clip = { x: 0, y: 100, width: 800, height: 500 };
+    const withScene = (await page.screenshot({ clip })).length;
+    await page.keyboard.press('u');
+    await expect(page.locator('[data-disposal]')).toHaveCount(1);
+    const report = JSON.parse((await page.locator('[data-disposal]').getAttribute('data-disposal')) ?? '{}') as { geometriesBefore: number; geometriesAfter: number; disposedGeometries: number; disposedMaterials: number; rendererDisposed: boolean };
+    expect(report.rendererDisposed).toBe(true);
+    expect(report.geometriesBefore).toBeGreaterThan(0);
+    expect(report.geometriesAfter).toBe(0);
+    expect(report.disposedGeometries).toBeGreaterThan(0);
+    expect(report.disposedMaterials).toBeGreaterThan(0);
+    await expect(page.locator('canvas')).toHaveCount(0);
+    expect(withScene).toBeGreaterThan((await page.screenshot({ clip })).length * 2);
+  });
+
+  test('p95 frame time of the 3D graph over 10 seconds is measured and reported', async ({ page }, testInfo) => {
+    mkdirSync(EVIDENCE_DIR, { recursive: true });
+    await page.setViewportSize(VIEWPORTS[0]);
+    await open(page, GRAPH_3D);
+    await page.waitForTimeout(1000);
+    const frames = await page.evaluate(
+      () =>
+        new Promise<number[]>((resolve) => {
+          const deltas: number[] = [];
+          const start = performance.now();
+          let last = start;
+          const sample = (now: number) => {
+            deltas.push(now - last);
+            last = now;
+            if (now - start < 10_000) requestAnimationFrame(sample);
+            else resolve(deltas);
+          };
+          requestAnimationFrame(sample);
+        }),
+    );
+    const sorted = [...frames].sort((a, b) => a - b);
+    const percentile = (p: number) => sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)] ?? 0;
+    const report = { frames: frames.length, p50Ms: percentile(0.5), p95Ms: percentile(0.95), p99Ms: percentile(0.99), maxMs: sorted.at(-1) ?? 0, targetMs: 33 };
+    writeFileSync(`${EVIDENCE_DIR}frame-times-3d.json`, `${JSON.stringify(report, null, 2)}\n`);
+    testInfo.annotations.push({ type: 'p95 frame time 3D', description: `${report.p95Ms.toFixed(1)} ms over ${report.frames} frames` });
+    console.log(`3D p95 frame time ${report.p95Ms.toFixed(1)} ms (p50 ${report.p50Ms.toFixed(1)}, p99 ${report.p99Ms.toFixed(1)}, max ${report.maxMs.toFixed(1)}) over ${report.frames} frames; target <= ${report.targetMs} ms`);
+    expect(report.frames).toBeGreaterThan(5);
   });
 });
