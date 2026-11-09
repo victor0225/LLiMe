@@ -133,7 +133,9 @@ support both arrays are empty. Keep the full decision evidence in the search res
 For clarification or retry,
 activitySpec is null (the app builds the plain retry). Publish exactly the kind and
 templateId named by the returned decision with publish_activity; never choose another
-activity, and do not force teaching. Never claim a retry was confirmed before the recorded retry succeeds.
+activity, and do not force teaching. Only an invitation carries todayConceptId and quotes, so every
+publish_activity in this phase sends todayConceptId: null and quotes: null.
+Never claim a retry was confirmed before the recorded retry succeeds.
 Never say a child has a permanent misconception.
 INPUT_JSON: {{observation, clarification, memory snapshot, revision}}`;
 

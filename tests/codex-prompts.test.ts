@@ -9,7 +9,7 @@ import { FakeAppServer, FakeRunStore, ManualClock, MODEL, okResult, RUN_ID, TIER
 const PINNED_HASHES = {
   base: '0b9f76f9a07b31d7e501281bb20241a26033182f9949372fae8fa05a72ad4146',
   ingestion: '56710c0c392e874a45b52a9024f101dd805c2bb47b0f5bdfa736d7f03014f104',
-  explanation: '1f23bbb85c1dea671a070a9f5fcf6427c26b2fc2e8704810cb8db1aceb676d85',
+  explanation: '9d0801fb579c5b2de50b3fd8bb44beacf4d26050ad6016ab9d24610be9d02e77',
   verification: '6a77b1d4b3b1bc1b32496d51405d7c83a3d375e0d8505d5eb7dd3d25713ef0db',
 };
 
@@ -51,6 +51,10 @@ describe('prompts', () => {
     assert.equal(payload.instructions, `${PROMPT_TEMPLATES.base}\n\n${submitted[0]?.text}`);
     assert.ok(payload.instructions.includes('Today we add 8 and 5.'));
     assert.ok(!payload.instructions.includes('{{'));
+  });
+
+  test('the explanation prompt tells publish_activity to send todayConceptId and quotes as null', () => {
+    assert.ok(PROMPT_TEMPLATES.explanation.includes('sends todayConceptId: null and quotes: null'));
   });
 
   test('lesson text cannot step out of the input section (mocked Codex)', () => {
