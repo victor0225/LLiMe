@@ -11,7 +11,7 @@ This page records what was tested, how, and what is still unproven. It is engine
 | Check | Commit | Result |
 | --- | --- | --- |
 | `npm run typecheck` (server and web) | `993c1ed` | exit 0 |
-| `npm test` (node:test, no model calls) | `993c1ed` | 774 tests, 114 suites, 774 pass, 0 fail, 0 skipped |
+| `npm test` (node:test, no model calls) | `993c1ed` | 775 tests, 775 pass, 0 fail, 0 skipped |
 | `npm run doctor` | `993c1ed` | 13 pass, 1 warning (Storybook port in use by another local process), 0 fail |
 | `npm run test:e2e` (Playwright + axe) | — | TODO(qa) |
 | iPad shell unit tests (`xcodebuild test`) | — | TODO(qa) |
