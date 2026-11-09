@@ -1,0 +1,20 @@
+[
+  {
+    "from": "subtraction",
+    "to": "addition",
+    "kind": "similar",
+    "reason": "related arithmetic concepts: taking away and putting together"
+  },
+  {
+    "from": "subtraction_within_20",
+    "to": "subtraction",
+    "kind": "subconcept",
+    "reason": "subtraction within 20 is a scope of subtraction"
+  },
+  {
+    "from": "addition_within_20",
+    "to": "addition",
+    "kind": "subconcept",
+    "reason": "addition within 20 is a scope of addition"
+  }
+]
