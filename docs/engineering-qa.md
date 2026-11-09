@@ -11,7 +11,7 @@ This page records what was tested, how, and what is still unproven. It is engine
 | Suite | Result |
 | --- | --- |
 | `npm run typecheck` (server and web) | exit 0 |
-| `npm test` (node:test, no model calls) | 784/784 at `3561f5d` |
+| `npm test` (node:test, no model calls) | 785/785 at `05b412c` |
 | `npm run test:e2e` (Playwright + axe), per surface | explain 28, number line 27, invitation and lesson notes 34, make-ten 26, inspector 30, graph 10: all passing |
 | iPad shell unit tests (`xcodebuild test`) | 30/30 |
 | Server-level voice tests | 141/141 |
@@ -52,7 +52,7 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | V06 | A duplicate delegation or provider event gives one logical analysis | PASS | |
 | V07 | Sideband disconnect or microphone denied gives an explicit degraded state and the typed path | PASS | Microphone denied live; sideband drop in a controlled test |
 | V08 | Stop learning during analysis and practice; late results and resumes are refused | UNPROVED | Live stop during analysis behaved correctly; the practice leg was not run live |
-| V09 | A correction after speech begins stops the obsolete playback | FAIL (open) | Fix in progress |
+| V09 | A correction after speech begins stops the obsolete playback | FAIL (open) | Fix merged in `05b412c`; recheck pending |
 | V10 | Voice is fully off before the independent problem is enabled | PASS | Live, in the app |
 | V11 | Closing or reloading the page closes the session within bounds | PASS | |
 | V12 | Instruction-like text in a transcript is treated as learner data | PASS | After the voice-instruction fix; before it, the voice model answered an injected instruction itself with a hint |
