@@ -34,6 +34,10 @@ final class ShellModel: NSObject {
         // The tutor's WebRTC audio starts when the remote track arrives, not on a tap, so playback
         // cannot wait for a fresh user gesture.
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        #if targetEnvironment(simulator)
+        // WebKit captures from mock devices in the Simulator by default; the shell needs the Mac's mic.
+        Self.disableMockCaptureDevices(configuration.preferences)
+        #endif
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         // The model lives as long as the app, so the controller's strong reference to it is harmless.
@@ -46,6 +50,21 @@ final class ShellModel: NSObject {
             Task { @MainActor in ShellLog.write("webview.microphone", Self.describe(webView.microphoneCaptureState)) }
         }
     }
+
+    #if targetEnvironment(simulator)
+    /// Calls the private `_setMockCaptureDevicesEnabled:` with a real `Bool`; `perform(_:with:)` would
+    /// pass an object, which reads as true. Logs when this WebKit no longer has the setter.
+    private static func disableMockCaptureDevices(_ preferences: WKPreferences) {
+        let selector = NSSelectorFromString("_setMockCaptureDevicesEnabled:")
+        guard preferences.responds(to: selector) else {
+            ShellLog.write("webview.mock_capture", "setter missing")
+            return
+        }
+        typealias Setter = @convention(c) (AnyObject, Selector, Bool) -> Void
+        unsafeBitCast(preferences.method(for: selector), to: Setter.self)(preferences, selector, false)
+        ShellLog.write("webview.mock_capture", "off")
+    }
+    #endif
 
     // MARK: Lifecycle
 
