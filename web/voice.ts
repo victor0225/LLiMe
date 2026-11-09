@@ -390,3 +390,36 @@ export function eventStoreVoiceApi(store: EventStore, runId: string): VoiceApi {
 export function useVoice(client: VoiceClient): VoiceView {
   return useSyncExternalStore(client.subscribe, client.getSnapshot);
 }
+
+// ---------------------------------------------------------------------------------------------
+// Which revision may reopen the speaker after a correction. Playback itself is the client's
+// interruptPlayback and resumePlayback; this decides only when to call them.
+
+export type CorrectionPlayback = {
+  readonly isInterrupted: boolean;
+  // Call the moment a correction is sent or observed (a newer explanation revision in the run).
+  correctionStarted(explanationRevision: number): void;
+  // Call after the server accepted activity_rendered for the activity of `explanationRevision`.
+  // Only the replacement for the newest correction reopens the speaker, so the child hears the
+  // corrected commentary and never the stale one.
+  replacementRendered(explanationRevision: number): boolean;
+};
+
+export function createCorrectionPlayback(client: Pick<VoiceClient, 'interruptPlayback' | 'resumePlayback'>): CorrectionPlayback {
+  let awaitedRevision: number | null = null;
+  return {
+    get isInterrupted() {
+      return awaitedRevision !== null;
+    },
+    correctionStarted(explanationRevision) {
+      awaitedRevision = Math.max(awaitedRevision ?? explanationRevision, explanationRevision);
+      client.interruptPlayback();
+    },
+    replacementRendered(explanationRevision) {
+      if (awaitedRevision === null || explanationRevision < awaitedRevision) return false;
+      awaitedRevision = null;
+      client.resumePlayback();
+      return true;
+    },
+  };
+}
