@@ -17,7 +17,7 @@ import {
   type ViewEvent,
   visibleScores,
 } from '../web/backend/event-projection.js';
-import type { RunEvent } from '../src/events.js';
+import { EventSchema, type RunEvent } from '../src/events.js';
 import { adaptRunEvents, foldViewEvents } from '../web/backend/server-adapter.js';
 
 const readJson = (relative: string): unknown => JSON.parse(readFileSync(new URL(`../data/${relative}`, import.meta.url), 'utf8'));
@@ -292,6 +292,27 @@ describe('a server run through the adapter', () => {
       assert.ok(snapshot.graph);
       assert.deepEqual(snapshot.search, search);
       assert.equal(snapshot.outcome?.outcome, 'independent');
+    } finally {
+      console.error = originalError;
+    }
+  });
+
+  test('a live run outcome saved under its persisted case projects with no rejection and attaches to the graph attempt', () => {
+    const events = (JSON.parse(readFileSync(new URL('./fixtures/live-outcome-run.json', import.meta.url), 'utf8')) as RunEvent[]).map((e) => EventSchema.parse(e));
+    const runId = events[0]?.runId ?? '';
+    const rejections: unknown[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => void rejections.push(args);
+    try {
+      const snapshot = foldViewEvents(runId, corpus, adaptRunEvents(events));
+      assert.deepEqual(rejections, []);
+      assert.equal(snapshot.outcome?.outcome, 'independent');
+      const graph = snapshot.graph;
+      assert.ok(graph);
+      const attempt = graph.nodes.find((n) => n.type === 'Attempt' && n.stage !== 'result');
+      const intervention = graph.nodes.find((n) => n.type === 'Intervention');
+      assert.ok(attempt && intervention);
+      assert.ok(graph.edges.some((e) => e.type === 'FOLLOWED_BY' && e.from === attempt.id && e.to === intervention.id), 'the result branch starts at the drawn attempt');
     } finally {
       console.error = originalError;
     }

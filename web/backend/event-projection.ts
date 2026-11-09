@@ -148,21 +148,36 @@ function checkSearch(result: SearchResult, current: ProjectionSnapshot): void {
   }
 }
 
+// The server saves the result under the renamed case (persistedCaseId), so its ids and the
+// FOLLOWED_BY edge's attempt sit under that prefix; a recording may keep the query's own ids.
+const resultScope = (payload: EventPayload<'outcome.committed'>, queryId: string): string | null =>
+  [`${payload.persistedCaseId}:`, `${queryId}:`].find((prefix) => payload.source.id.startsWith(prefix)) ?? null;
+
+// Result edges with a renamed node id pointed at the same node of the drawn query graph.
+function resultEdges(payload: EventPayload<'outcome.committed'>, graph: LearningCase): GraphEdge[] {
+  const renamed = `${payload.persistedCaseId}:`;
+  const onGraph = (id: string) => {
+    const original = id.startsWith(renamed) ? `${graph.id}:${id.slice(renamed.length)}` : null;
+    return original !== null && graph.nodes.some((n) => n.id === original) ? original : id;
+  };
+  return payload.edges.map((e) => ({ ...e, from: onGraph(e.from), to: onGraph(e.to) }));
+}
+
 function checkOutcome(payload: EventPayload<'outcome.committed'>, current: ProjectionSnapshot): CommittedOutcome {
   const graph = current.graph;
   if (!graph || payload.queryId !== current.queryId) reject('The outcome belongs to another query');
   if (!graph) return reject('There is no query graph to extend');
   if (hasResult(graph)) reject('The query already has a committed result');
-  const prefix = `${payload.queryId}:`;
+  const prefix = resultScope(payload, graph.id) ?? reject('The result source is not scoped to the query');
   const intervention = payload.nodes.find((n) => n.type === 'Intervention');
   const result = payload.nodes.find((n) => n.type === 'Outcome');
   if (payload.nodes.length !== 2 || !intervention || !result) return reject('An outcome commits one intervention and one outcome');
   if (payload.outcome !== 'independent' && payload.outcome !== 'failed') return reject('Only an independent check or a failed one is committed');
   if (intervention.meaning !== payload.strategy || result.meaning !== payload.outcome) reject('Result nodes disagree with the committed values');
-  if (!payload.source.id.startsWith(prefix)) reject('The result source is not scoped to the query');
   if (payload.nodes.some((n) => !n.id.startsWith(prefix) || n.stage !== 'result' || !n.sourceIds.includes(payload.source.id))) reject('Result nodes must be scoped result nodes grounded in the source');
   const attempt = graph.nodes.find((n) => n.type === 'Attempt');
-  const links = (from: string, to: string, type: GraphEdge['type']) => payload.edges.some((e) => e.from === from && e.to === to && e.type === type && e.stage === 'result' && e.id.startsWith(prefix));
+  const edges = resultEdges(payload, graph);
+  const links = (from: string, to: string, type: GraphEdge['type']) => edges.some((e) => e.from === from && e.to === to && e.type === type && e.stage === 'result' && e.id.startsWith(prefix));
   if (!attempt || payload.edges.length !== 2 || !links(attempt.id, intervention.id, 'FOLLOWED_BY') || !links(intervention.id, result.id, 'EVALUATED_BY')) reject('Result edges must run attempt, intervention, outcome');
   return { strategy: payload.strategy, outcome: payload.outcome, saved: payload.saved, persistedCaseId: payload.persistedCaseId };
 }
@@ -198,11 +213,11 @@ function apply(current: ProjectionSnapshot, event: ViewEvent): ProjectionSnapsho
       const outcome = checkOutcome(event.payload, current);
       const graph = current.graph;
       if (!graph) return current;
-      const { nodes, edges, source } = event.payload;
+      const { nodes, source } = event.payload;
       return {
         ...current,
         outcome,
-        graph: { ...graph, nodes: [...graph.nodes, ...nodes], edges: [...graph.edges, ...edges], sources: [...graph.sources, source], strategy: outcome.strategy, outcome: outcome.outcome },
+        graph: { ...graph, nodes: [...graph.nodes, ...nodes], edges: [...graph.edges, ...resultEdges(event.payload, graph)], sources: [...graph.sources, source], strategy: outcome.strategy, outcome: outcome.outcome },
         failure: null,
       };
     }

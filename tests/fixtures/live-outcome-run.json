@@ -1,0 +1,4162 @@
+[
+ {
+  "runId": "90172001-6abe-40b1-8c14-da5223cba194",
+  "seq": 15,
+  "type": "memory.retrieved",
+  "payload": {
+   "conceptIds": [
+    "addition_within_20",
+    "subtraction_within_20"
+   ],
+   "caseIds": [
+    "seed_7_0",
+    "seed_7_1",
+    "seed_7_2",
+    "seed_7_3",
+    "seed_7_4",
+    "seed_7_5",
+    "seed_7_6",
+    "seed_7_7"
+   ],
+   "summaries": [
+    {
+     "conceptId": "addition_within_20",
+     "link": "today",
+     "total": 0,
+     "independent": 0,
+     "assisted": 0,
+     "failed": 0,
+     "notAssessed": 0,
+     "firstAt": null,
+     "lastAt": null
+    },
+    {
+     "conceptId": "subtraction_within_20",
+     "link": "similar",
+     "total": 18,
+     "independent": 8,
+     "assisted": 4,
+     "failed": 4,
+     "notAssessed": 2,
+     "firstAt": "2026-09-07T09:00:00.000Z",
+     "lastAt": "2026-10-15T09:00:00.000Z"
+    }
+   ],
+   "links": [
+    {
+     "from": "subtraction",
+     "to": "addition",
+     "kind": "similar",
+     "reason": "related arithmetic concepts: taking away and putting together"
+    },
+    {
+     "from": "addition_within_20",
+     "to": "addition",
+     "kind": "subconcept",
+     "reason": "addition within 20 is a scope of addition"
+    },
+    {
+     "from": "subtraction_within_20",
+     "to": "subtraction",
+     "kind": "subconcept",
+     "reason": "subtraction within 20 is a scope of subtraction"
+    }
+   ]
+  },
+  "at": "2026-11-09T04:52:35.185Z"
+ },
+ {
+  "runId": "90172001-6abe-40b1-8c14-da5223cba194",
+  "seq": 42,
+  "type": "context.committed",
+  "payload": {
+   "caseId": "90172001-6abe-40b1-8c14-da5223cba194_context_1",
+   "explanationRevision": 1,
+   "graph": {
+    "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1",
+    "studentId": "student_7",
+    "provenance": "live_demo",
+    "createdAt": "2026-11-09T04:53:15.798Z",
+    "concept": "addition_within_20",
+    "sources": [
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:actions",
+      "text": "{\"start\":8,\"moves\":[9,10,11,12],\"answer\":12,\"hints\":0}"
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:speech",
+      "text": "I counted 8,9,10,11,12. So that’s 12."
+     }
+    ],
+    "nodes": [
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "type": "Attempt",
+      "meaning": "addition",
+      "stage": "context",
+      "sourceIds": [
+       "90172001-6abe-40b1-8c14-da5223cba194_context_1:actions"
+      ]
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "type": "Concept",
+      "meaning": "addition_within_20",
+      "stage": "context",
+      "sourceIds": [
+       "90172001-6abe-40b1-8c14-da5223cba194_context_1:actions"
+      ]
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "type": "Observation",
+      "meaning": "one_move_short",
+      "stage": "context",
+      "sourceIds": [
+       "90172001-6abe-40b1-8c14-da5223cba194_context_1:actions"
+      ]
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "type": "Explanation",
+      "meaning": "learner_account",
+      "stage": "context",
+      "sourceIds": [
+       "90172001-6abe-40b1-8c14-da5223cba194_context_1:speech"
+      ]
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start",
+      "type": "Hypothesis",
+      "meaning": "count_start",
+      "stage": "context",
+      "sourceIds": [
+       "90172001-6abe-40b1-8c14-da5223cba194_context_1:speech"
+      ]
+     }
+    ],
+    "edges": [
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:e0",
+      "from": "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "to": "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "type": "TARGETS",
+      "stage": "context"
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:e1",
+      "from": "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "to": "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "type": "OBSERVED",
+      "stage": "context"
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:e2",
+      "from": "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "to": "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "type": "EXPLAINED_BY",
+      "stage": "context"
+     },
+     {
+      "id": "90172001-6abe-40b1-8c14-da5223cba194_context_1:e3",
+      "from": "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "to": "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start",
+      "type": "SUPPORTS",
+      "stage": "context"
+     }
+    ],
+    "strategy": "clarify",
+    "outcome": "not_assessed",
+    "retention": "pending"
+   }
+  },
+  "at": "2026-11-09T04:53:15.798Z"
+ },
+ {
+  "runId": "90172001-6abe-40b1-8c14-da5223cba194",
+  "seq": 44,
+  "type": "search.started",
+  "payload": {
+   "matchingVersion": "typed-path-v1",
+   "queryId": "90172001-6abe-40b1-8c14-da5223cba194_context_1",
+   "candidateCount": 659,
+   "queryNodeIds": [
+    "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+    "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+    "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+    "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+    "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+   ]
+  },
+  "at": "2026-11-09T04:53:15.955Z"
+ },
+ {
+  "runId": "90172001-6abe-40b1-8c14-da5223cba194",
+  "seq": 45,
+  "type": "search.completed",
+  "payload": {
+   "matchingVersion": "typed-path-v1",
+   "corpusHash": "22541eed813af88b09f8c30e26d49a6c21144cc968643311dc8fe8cad96f1bbe",
+   "queryId": "90172001-6abe-40b1-8c14-da5223cba194_context_1",
+   "candidateCount": 659,
+   "rankingHash": "b1ba755b98c2c276ae3c237208c8be33dc64dd88ad6be8eaac1ac67814d4ab48",
+   "candidates": [
+    {
+     "id": "hist_102_0",
+     "studentId": "student_102",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_102_0:attempt",
+      "hist_102_0:concept",
+      "hist_102_0:observation",
+      "hist_102_0:explanation",
+      "hist_102_0:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_102_2",
+     "studentId": "student_102",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "failed",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_102_2:attempt",
+      "hist_102_2:concept",
+      "hist_102_2:observation",
+      "hist_102_2:explanation",
+      "hist_102_2:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_11_2",
+     "studentId": "student_11",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "failed",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_11_2:attempt",
+      "hist_11_2:concept",
+      "hist_11_2:observation",
+      "hist_11_2:explanation",
+      "hist_11_2:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_112_3",
+     "studentId": "student_112",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "assisted",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_112_3:attempt",
+      "hist_112_3:concept",
+      "hist_112_3:observation",
+      "hist_112_3:explanation",
+      "hist_112_3:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_119_1",
+     "studentId": "student_119",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_119_1:attempt",
+      "hist_119_1:concept",
+      "hist_119_1:observation",
+      "hist_119_1:explanation",
+      "hist_119_1:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_12_0",
+     "studentId": "student_12",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_12_0:attempt",
+      "hist_12_0:concept",
+      "hist_12_0:observation",
+      "hist_12_0:explanation",
+      "hist_12_0:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_13_5",
+     "studentId": "student_13",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_13_5:attempt",
+      "hist_13_5:concept",
+      "hist_13_5:observation",
+      "hist_13_5:explanation",
+      "hist_13_5:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_14_3",
+     "studentId": "student_14",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "assisted",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_14_3:attempt",
+      "hist_14_3:concept",
+      "hist_14_3:observation",
+      "hist_14_3:explanation",
+      "hist_14_3:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_14_4",
+     "studentId": "student_14",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_14_4:attempt",
+      "hist_14_4:concept",
+      "hist_14_4:observation",
+      "hist_14_4:explanation",
+      "hist_14_4:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_18_6",
+     "studentId": "student_18",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_18_6:attempt",
+      "hist_18_6:concept",
+      "hist_18_6:observation",
+      "hist_18_6:explanation",
+      "hist_18_6:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_19_2",
+     "studentId": "student_19",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_19_2:attempt",
+      "hist_19_2:concept",
+      "hist_19_2:observation",
+      "hist_19_2:explanation",
+      "hist_19_2:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_28_2",
+     "studentId": "student_28",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_28_2:attempt",
+      "hist_28_2:concept",
+      "hist_28_2:observation",
+      "hist_28_2:explanation",
+      "hist_28_2:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_28_4",
+     "studentId": "student_28",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_28_4:attempt",
+      "hist_28_4:concept",
+      "hist_28_4:observation",
+      "hist_28_4:explanation",
+      "hist_28_4:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_28_5",
+     "studentId": "student_28",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "assisted",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_28_5:attempt",
+      "hist_28_5:concept",
+      "hist_28_5:observation",
+      "hist_28_5:explanation",
+      "hist_28_5:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_31_2",
+     "studentId": "student_31",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_31_2:attempt",
+      "hist_31_2:concept",
+      "hist_31_2:observation",
+      "hist_31_2:explanation",
+      "hist_31_2:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_31_3",
+     "studentId": "student_31",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_31_3:attempt",
+      "hist_31_3:concept",
+      "hist_31_3:observation",
+      "hist_31_3:explanation",
+      "hist_31_3:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_37_5",
+     "studentId": "student_37",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_37_5:attempt",
+      "hist_37_5:concept",
+      "hist_37_5:observation",
+      "hist_37_5:explanation",
+      "hist_37_5:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_38_0",
+     "studentId": "student_38",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "assisted",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_38_0:attempt",
+      "hist_38_0:concept",
+      "hist_38_0:observation",
+      "hist_38_0:explanation",
+      "hist_38_0:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_45_2",
+     "studentId": "student_45",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_45_2:attempt",
+      "hist_45_2:concept",
+      "hist_45_2:observation",
+      "hist_45_2:explanation",
+      "hist_45_2:hypothesis_count_start"
+     ]
+    },
+    {
+     "id": "hist_45_6",
+     "studentId": "student_45",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedQueryNodeIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:attempt",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:concept",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:observation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:explanation",
+      "90172001-6abe-40b1-8c14-da5223cba194_context_1:hypothesis_count_start"
+     ],
+     "matchedCandidateNodeIds": [
+      "hist_45_6:attempt",
+      "hist_45_6:concept",
+      "hist_45_6:observation",
+      "hist_45_6:explanation",
+      "hist_45_6:hypothesis_count_start"
+     ]
+    }
+   ],
+   "decision": {
+    "strategy": "make_ten",
+    "templateId": "make_ten_blocks",
+    "basis": "evidence",
+    "evidenceIds": [
+     "hist_102_0",
+     "hist_119_1",
+     "hist_12_0",
+     "hist_13_5",
+     "hist_14_4",
+     "hist_28_4",
+     "hist_28_5",
+     "hist_31_3",
+     "hist_37_5",
+     "hist_38_0",
+     "hist_45_6",
+     "hist_46_1",
+     "hist_54_0",
+     "hist_54_4",
+     "hist_55_3",
+     "hist_56_0",
+     "hist_61_3",
+     "hist_61_7",
+     "hist_70_3",
+     "hist_75_0",
+     "hist_81_0",
+     "hist_84_1",
+     "hist_84_3",
+     "hist_87_3",
+     "hist_88_4",
+     "hist_91_3",
+     "hist_92_2",
+     "hist_93_6",
+     "hist_63_7"
+    ],
+    "reason": "23/29 comparable historical cases have an independent result; observational evidence, not a treatment effect.",
+    "groups": [
+     {
+      "strategy": "make_ten",
+      "independent": 23,
+      "total": 29
+     },
+     {
+      "strategy": "anchor_start",
+      "independent": 14,
+      "total": 22
+     },
+     {
+      "strategy": "repeat_count",
+      "independent": 3,
+      "total": 8
+     }
+    ]
+   },
+   "scores": [
+    [
+     "hist_102_0",
+     1
+    ],
+    [
+     "hist_102_2",
+     1
+    ],
+    [
+     "hist_11_2",
+     1
+    ],
+    [
+     "hist_112_3",
+     1
+    ],
+    [
+     "hist_119_1",
+     1
+    ],
+    [
+     "hist_12_0",
+     1
+    ],
+    [
+     "hist_13_5",
+     1
+    ],
+    [
+     "hist_14_3",
+     1
+    ],
+    [
+     "hist_14_4",
+     1
+    ],
+    [
+     "hist_18_6",
+     1
+    ],
+    [
+     "hist_19_2",
+     1
+    ],
+    [
+     "hist_28_2",
+     1
+    ],
+    [
+     "hist_28_4",
+     1
+    ],
+    [
+     "hist_28_5",
+     1
+    ],
+    [
+     "hist_31_2",
+     1
+    ],
+    [
+     "hist_31_3",
+     1
+    ],
+    [
+     "hist_37_5",
+     1
+    ],
+    [
+     "hist_38_0",
+     1
+    ],
+    [
+     "hist_45_2",
+     1
+    ],
+    [
+     "hist_45_6",
+     1
+    ],
+    [
+     "hist_46_1",
+     1
+    ],
+    [
+     "hist_47_3",
+     1
+    ],
+    [
+     "hist_53_1",
+     1
+    ],
+    [
+     "hist_54_0",
+     1
+    ],
+    [
+     "hist_54_1",
+     1
+    ],
+    [
+     "hist_54_4",
+     1
+    ],
+    [
+     "hist_55_3",
+     1
+    ],
+    [
+     "hist_56_0",
+     1
+    ],
+    [
+     "hist_57_2",
+     1
+    ],
+    [
+     "hist_57_3",
+     1
+    ],
+    [
+     "hist_57_8",
+     1
+    ],
+    [
+     "hist_61_3",
+     1
+    ],
+    [
+     "hist_61_7",
+     1
+    ],
+    [
+     "hist_63_0",
+     1
+    ],
+    [
+     "hist_64_7",
+     1
+    ],
+    [
+     "hist_70_3",
+     1
+    ],
+    [
+     "hist_73_1",
+     1
+    ],
+    [
+     "hist_75_0",
+     1
+    ],
+    [
+     "hist_81_0",
+     1
+    ],
+    [
+     "hist_84_1",
+     1
+    ],
+    [
+     "hist_84_3",
+     1
+    ],
+    [
+     "hist_87_3",
+     1
+    ],
+    [
+     "hist_88_3",
+     1
+    ],
+    [
+     "hist_88_4",
+     1
+    ],
+    [
+     "hist_91_3",
+     1
+    ],
+    [
+     "hist_92_2",
+     1
+    ],
+    [
+     "hist_93_0",
+     1
+    ],
+    [
+     "hist_93_3",
+     1
+    ],
+    [
+     "hist_93_5",
+     1
+    ],
+    [
+     "hist_93_6",
+     1
+    ],
+    [
+     "hist_98_5",
+     1
+    ],
+    [
+     "seed_0_0",
+     1
+    ],
+    [
+     "seed_1_0",
+     1
+    ],
+    [
+     "seed_2_0",
+     1
+    ],
+    [
+     "seed_3_0",
+     1
+    ],
+    [
+     "seed_4_0",
+     1
+    ],
+    [
+     "seed_5_0",
+     1
+    ],
+    [
+     "seed_6_0",
+     1
+    ],
+    [
+     "hist_63_7",
+     0.917
+    ],
+    [
+     "hist_83_1",
+     0.846
+    ],
+    [
+     "hist_103_3",
+     0.733
+    ],
+    [
+     "hist_93_2",
+     0.733
+    ],
+    [
+     "hist_37_1",
+     0.688
+    ],
+    [
+     "hist_45_3",
+     0.688
+    ],
+    [
+     "hist_56_2",
+     0.688
+    ],
+    [
+     "hist_84_7",
+     0.688
+    ],
+    [
+     "hist_97_5",
+     0.688
+    ],
+    [
+     "hist_37_3",
+     0.647
+    ],
+    [
+     "hist_66_6",
+     0.647
+    ],
+    [
+     "hist_45_0",
+     0.579
+    ],
+    [
+     "hist_58_8",
+     0.579
+    ],
+    [
+     "hist_63_5",
+     0.579
+    ],
+    [
+     "hist_61_2",
+     0.55
+    ],
+    [
+     "hist_63_2",
+     0.55
+    ],
+    [
+     "hist_98_4",
+     0.55
+    ],
+    [
+     "seed_0_2",
+     0.55
+    ],
+    [
+     "seed_1_2",
+     0.55
+    ],
+    [
+     "seed_2_2",
+     0.55
+    ],
+    [
+     "seed_3_2",
+     0.55
+    ],
+    [
+     "seed_4_2",
+     0.55
+    ],
+    [
+     "seed_5_2",
+     0.55
+    ],
+    [
+     "seed_6_2",
+     0.55
+    ],
+    [
+     "hist_57_6",
+     0.524
+    ],
+    [
+     "hist_76_1",
+     0.524
+    ],
+    [
+     "hist_97_4",
+     0.524
+    ],
+    [
+     "seed_0_4",
+     0.524
+    ],
+    [
+     "seed_1_4",
+     0.524
+    ],
+    [
+     "seed_2_4",
+     0.524
+    ],
+    [
+     "seed_3_4",
+     0.524
+    ],
+    [
+     "seed_4_4",
+     0.524
+    ],
+    [
+     "seed_5_4",
+     0.524
+    ],
+    [
+     "seed_6_4",
+     0.524
+    ],
+    [
+     "hist_119_2",
+     0.478
+    ],
+    [
+     "hist_14_0",
+     0.478
+    ],
+    [
+     "hist_38_2",
+     0.478
+    ],
+    [
+     "hist_63_1",
+     0.458
+    ],
+    [
+     "hist_108_1",
+     0.44
+    ],
+    [
+     "hist_13_2",
+     0.44
+    ],
+    [
+     "hist_92_6",
+     0.44
+    ],
+    [
+     "hist_18_1",
+     0.423
+    ],
+    [
+     "hist_66_8",
+     0.423
+    ],
+    [
+     "hist_96_0",
+     0.423
+    ],
+    [
+     "hist_14_1",
+     0.367
+    ],
+    [
+     "hist_46_0",
+     0.367
+    ],
+    [
+     "hist_49_2",
+     0.344
+    ],
+    [
+     "hist_58_0",
+     0.344
+    ],
+    [
+     "hist_85_4",
+     0.344
+    ],
+    [
+     "hist_32_0",
+     0.333
+    ],
+    [
+     "hist_58_1",
+     0.324
+    ],
+    [
+     "hist_61_6",
+     0.324
+    ],
+    [
+     "hist_19_5",
+     0.314
+    ],
+    [
+     "hist_55_0",
+     0.314
+    ],
+    [
+     "hist_81_4",
+     0.314
+    ],
+    [
+     "hist_17_4",
+     0.306
+    ],
+    [
+     "hist_18_4",
+     0.306
+    ],
+    [
+     "hist_97_2",
+     0.306
+    ],
+    [
+     "hist_111_1",
+     0.297
+    ],
+    [
+     "hist_31_1",
+     0.297
+    ],
+    [
+     "hist_47_2",
+     0.297
+    ],
+    [
+     "hist_94_5",
+     0.297
+    ],
+    [
+     "hist_97_1",
+     0.297
+    ],
+    [
+     "hist_10_4",
+     0.294
+    ],
+    [
+     "hist_10_5",
+     0.294
+    ],
+    [
+     "hist_100_1",
+     0.294
+    ],
+    [
+     "hist_104_2",
+     0.294
+    ],
+    [
+     "hist_104_4",
+     0.294
+    ],
+    [
+     "hist_104_7",
+     0.294
+    ],
+    [
+     "hist_105_1",
+     0.294
+    ],
+    [
+     "hist_105_5",
+     0.294
+    ],
+    [
+     "hist_106_3",
+     0.294
+    ],
+    [
+     "hist_109_3",
+     0.294
+    ],
+    [
+     "hist_113_5",
+     0.294
+    ],
+    [
+     "hist_115_0",
+     0.294
+    ],
+    [
+     "hist_115_1",
+     0.294
+    ],
+    [
+     "hist_116_7",
+     0.294
+    ],
+    [
+     "hist_118_3",
+     0.294
+    ],
+    [
+     "hist_13_3",
+     0.294
+    ],
+    [
+     "hist_15_0",
+     0.294
+    ],
+    [
+     "hist_15_3",
+     0.294
+    ],
+    [
+     "hist_15_6",
+     0.294
+    ],
+    [
+     "hist_20_2",
+     0.294
+    ],
+    [
+     "hist_20_8",
+     0.294
+    ],
+    [
+     "hist_22_2",
+     0.294
+    ],
+    [
+     "hist_23_2",
+     0.294
+    ],
+    [
+     "hist_24_4",
+     0.294
+    ],
+    [
+     "hist_25_7",
+     0.294
+    ],
+    [
+     "hist_29_1",
+     0.294
+    ],
+    [
+     "hist_35_3",
+     0.294
+    ],
+    [
+     "hist_36_3",
+     0.294
+    ],
+    [
+     "hist_40_1",
+     0.294
+    ],
+    [
+     "hist_40_3",
+     0.294
+    ],
+    [
+     "hist_42_4",
+     0.294
+    ],
+    [
+     "hist_44_2",
+     0.294
+    ],
+    [
+     "hist_44_3",
+     0.294
+    ],
+    [
+     "hist_48_6",
+     0.294
+    ],
+    [
+     "hist_50_1",
+     0.294
+    ],
+    [
+     "hist_50_3",
+     0.294
+    ],
+    [
+     "hist_52_6",
+     0.294
+    ],
+    [
+     "hist_53_3",
+     0.294
+    ],
+    [
+     "hist_59_1",
+     0.294
+    ],
+    [
+     "hist_60_2",
+     0.294
+    ],
+    [
+     "hist_69_0",
+     0.294
+    ],
+    [
+     "hist_69_5",
+     0.294
+    ],
+    [
+     "hist_71_1",
+     0.294
+    ],
+    [
+     "hist_71_2",
+     0.294
+    ],
+    [
+     "hist_72_5",
+     0.294
+    ],
+    [
+     "hist_72_7",
+     0.294
+    ],
+    [
+     "hist_74_1",
+     0.294
+    ],
+    [
+     "hist_74_3",
+     0.294
+    ],
+    [
+     "hist_76_7",
+     0.294
+    ],
+    [
+     "hist_77_4",
+     0.294
+    ],
+    [
+     "hist_77_6",
+     0.294
+    ],
+    [
+     "hist_78_4",
+     0.294
+    ],
+    [
+     "hist_79_1",
+     0.294
+    ],
+    [
+     "hist_79_2",
+     0.294
+    ],
+    [
+     "hist_79_4",
+     0.294
+    ],
+    [
+     "hist_79_7",
+     0.294
+    ],
+    [
+     "hist_79_8",
+     0.294
+    ],
+    [
+     "hist_8_3",
+     0.294
+    ],
+    [
+     "hist_80_1",
+     0.294
+    ],
+    [
+     "hist_81_3",
+     0.294
+    ],
+    [
+     "hist_81_5",
+     0.294
+    ],
+    [
+     "hist_82_0",
+     0.294
+    ],
+    [
+     "hist_85_0",
+     0.294
+    ],
+    [
+     "hist_85_2",
+     0.294
+    ],
+    [
+     "hist_87_0",
+     0.294
+    ],
+    [
+     "hist_94_3",
+     0.294
+    ],
+    [
+     "hist_94_4",
+     0.294
+    ],
+    [
+     "hist_96_3",
+     0.294
+    ],
+    [
+     "hist_98_1",
+     0.294
+    ],
+    [
+     "hist_99_1",
+     0.294
+    ],
+    [
+     "hist_99_3",
+     0.294
+    ],
+    [
+     "seed_0_1",
+     0.294
+    ],
+    [
+     "seed_1_1",
+     0.294
+    ],
+    [
+     "seed_2_1",
+     0.294
+    ],
+    [
+     "seed_3_1",
+     0.294
+    ],
+    [
+     "seed_4_1",
+     0.294
+    ],
+    [
+     "seed_5_1",
+     0.294
+    ],
+    [
+     "seed_6_1",
+     0.294
+    ],
+    [
+     "hist_61_4",
+     0.289
+    ],
+    [
+     "hist_90_1",
+     0.289
+    ],
+    [
+     "hist_113_0",
+     0.278
+    ],
+    [
+     "hist_59_0",
+     0.278
+    ],
+    [
+     "hist_87_1",
+     0.278
+    ],
+    [
+     "seed_0_7",
+     0.278
+    ],
+    [
+     "seed_1_7",
+     0.278
+    ],
+    [
+     "seed_2_7",
+     0.278
+    ],
+    [
+     "seed_3_7",
+     0.278
+    ],
+    [
+     "seed_4_7",
+     0.278
+    ],
+    [
+     "seed_5_7",
+     0.278
+    ],
+    [
+     "seed_6_7",
+     0.278
+    ],
+    [
+     "hist_28_1",
+     0.275
+    ],
+    [
+     "hist_18_3",
+     0.268
+    ],
+    [
+     "hist_56_5",
+     0.268
+    ],
+    [
+     "hist_93_1",
+     0.268
+    ],
+    [
+     "hist_44_1",
+     0.263
+    ],
+    [
+     "hist_60_0",
+     0.263
+    ],
+    [
+     "hist_70_0",
+     0.263
+    ],
+    [
+     "hist_77_5",
+     0.263
+    ],
+    [
+     "hist_18_0",
+     0.262
+    ],
+    [
+     "hist_47_6",
+     0.262
+    ],
+    [
+     "hist_55_4",
+     0.262
+    ],
+    [
+     "hist_56_3",
+     0.262
+    ],
+    [
+     "hist_57_7",
+     0.262
+    ],
+    [
+     "hist_61_0",
+     0.262
+    ],
+    [
+     "hist_65_5",
+     0.262
+    ],
+    [
+     "seed_0_3",
+     0.262
+    ],
+    [
+     "seed_1_3",
+     0.262
+    ],
+    [
+     "seed_2_3",
+     0.262
+    ],
+    [
+     "seed_3_3",
+     0.262
+    ],
+    [
+     "seed_4_3",
+     0.262
+    ],
+    [
+     "seed_5_3",
+     0.262
+    ],
+    [
+     "seed_6_3",
+     0.262
+    ],
+    [
+     "hist_61_5",
+     0.256
+    ],
+    [
+     "hist_18_2",
+     0.25
+    ],
+    [
+     "hist_19_1",
+     0.25
+    ],
+    [
+     "hist_106_0",
+     0.238
+    ],
+    [
+     "hist_15_1",
+     0.238
+    ],
+    [
+     "hist_20_7",
+     0.238
+    ],
+    [
+     "hist_35_0",
+     0.238
+    ],
+    [
+     "hist_41_2",
+     0.238
+    ],
+    [
+     "hist_96_2",
+     0.238
+    ],
+    [
+     "hist_83_2",
+     0.234
+    ],
+    [
+     "hist_112_0",
+     0.229
+    ],
+    [
+     "hist_17_1",
+     0.229
+    ],
+    [
+     "hist_50_0",
+     0.229
+    ],
+    [
+     "hist_61_1",
+     0.229
+    ],
+    [
+     "hist_83_4",
+     0.229
+    ],
+    [
+     "hist_108_2",
+     0.227
+    ],
+    [
+     "hist_23_1",
+     0.227
+    ],
+    [
+     "hist_21_2",
+     0.224
+    ],
+    [
+     "hist_71_0",
+     0.224
+    ],
+    [
+     "hist_92_3",
+     0.224
+    ],
+    [
+     "hist_55_2",
+     0.22
+    ],
+    [
+     "hist_75_2",
+     0.22
+    ],
+    [
+     "hist_21_4",
+     0.212
+    ],
+    [
+     "hist_109_0",
+     0.208
+    ],
+    [
+     "hist_98_3",
+     0.208
+    ],
+    [
+     "hist_66_1",
+     0.204
+    ],
+    [
+     "hist_78_0",
+     0.204
+    ],
+    [
+     "hist_84_0",
+     0.204
+    ],
+    [
+     "hist_62_1",
+     0.2
+    ],
+    [
+     "hist_72_1",
+     0.2
+    ],
+    [
+     "hist_47_1",
+     0.196
+    ],
+    [
+     "hist_81_2",
+     0.196
+    ],
+    [
+     "hist_18_8",
+     0.193
+    ],
+    [
+     "hist_31_4",
+     0.193
+    ],
+    [
+     "hist_86_1",
+     0.193
+    ],
+    [
+     "hist_71_4",
+     0.192
+    ],
+    [
+     "hist_89_0",
+     0.192
+    ],
+    [
+     "hist_58_7",
+     0.19
+    ],
+    [
+     "hist_98_2",
+     0.19
+    ],
+    [
+     "hist_108_5",
+     0.186
+    ],
+    [
+     "hist_57_0",
+     0.186
+    ],
+    [
+     "hist_30_0",
+     0.185
+    ],
+    [
+     "hist_69_7",
+     0.185
+    ],
+    [
+     "hist_75_1",
+     0.185
+    ],
+    [
+     "hist_87_2",
+     0.185
+    ],
+    [
+     "hist_99_0",
+     0.185
+    ],
+    [
+     "seed_0_5",
+     0.185
+    ],
+    [
+     "seed_1_5",
+     0.185
+    ],
+    [
+     "seed_2_5",
+     0.185
+    ],
+    [
+     "seed_3_5",
+     0.185
+    ],
+    [
+     "seed_4_5",
+     0.185
+    ],
+    [
+     "seed_5_5",
+     0.185
+    ],
+    [
+     "seed_6_5",
+     0.185
+    ],
+    [
+     "hist_105_2",
+     0.18
+    ],
+    [
+     "hist_112_2",
+     0.18
+    ],
+    [
+     "hist_14_2",
+     0.18
+    ],
+    [
+     "hist_28_0",
+     0.179
+    ],
+    [
+     "hist_48_0",
+     0.179
+    ],
+    [
+     "hist_28_3",
+     0.177
+    ],
+    [
+     "hist_66_4",
+     0.177
+    ],
+    [
+     "hist_70_2",
+     0.177
+    ],
+    [
+     "hist_92_4",
+     0.177
+    ],
+    [
+     "hist_97_0",
+     0.177
+    ],
+    [
+     "hist_110_6",
+     0.175
+    ],
+    [
+     "hist_54_3",
+     0.175
+    ],
+    [
+     "hist_58_4",
+     0.175
+    ],
+    [
+     "hist_80_4",
+     0.172
+    ],
+    [
+     "hist_119_0",
+     0.169
+    ],
+    [
+     "hist_67_3",
+     0.169
+    ],
+    [
+     "hist_9_0",
+     0.169
+    ],
+    [
+     "hist_97_6",
+     0.169
+    ],
+    [
+     "hist_104_6",
+     0.167
+    ],
+    [
+     "hist_28_6",
+     0.167
+    ],
+    [
+     "hist_76_4",
+     0.167
+    ],
+    [
+     "hist_92_1",
+     0.164
+    ],
+    [
+     "hist_41_4",
+     0.161
+    ],
+    [
+     "hist_90_2",
+     0.161
+    ],
+    [
+     "hist_42_0",
+     0.159
+    ],
+    [
+     "hist_84_4",
+     0.159
+    ],
+    [
+     "hist_39_3",
+     0.157
+    ],
+    [
+     "hist_10_3",
+     0.156
+    ],
+    [
+     "hist_108_4",
+     0.156
+    ],
+    [
+     "hist_76_0",
+     0.156
+    ],
+    [
+     "hist_99_2",
+     0.156
+    ],
+    [
+     "hist_45_5",
+     0.155
+    ],
+    [
+     "hist_66_5",
+     0.155
+    ],
+    [
+     "hist_76_2",
+     0.155
+    ],
+    [
+     "hist_43_2",
+     0.151
+    ],
+    [
+     "hist_118_1",
+     0.149
+    ],
+    [
+     "hist_66_0",
+     0.149
+    ],
+    [
+     "hist_38_1",
+     0.147
+    ],
+    [
+     "hist_48_5",
+     0.147
+    ],
+    [
+     "hist_73_2",
+     0.145
+    ],
+    [
+     "hist_47_0",
+     0.143
+    ],
+    [
+     "hist_11_0",
+     0.141
+    ],
+    [
+     "hist_118_2",
+     0.139
+    ],
+    [
+     "hist_58_5",
+     0.139
+    ],
+    [
+     "hist_97_7",
+     0.139
+    ],
+    [
+     "hist_115_3",
+     0.139
+    ],
+    [
+     "hist_34_4",
+     0.139
+    ],
+    [
+     "hist_49_0",
+     0.139
+    ],
+    [
+     "hist_94_8",
+     0.139
+    ],
+    [
+     "hist_106_1",
+     0.138
+    ],
+    [
+     "hist_48_2",
+     0.138
+    ],
+    [
+     "hist_53_0",
+     0.138
+    ],
+    [
+     "hist_58_2",
+     0.138
+    ],
+    [
+     "hist_17_3",
+     0.136
+    ],
+    [
+     "hist_79_0",
+     0.136
+    ],
+    [
+     "hist_60_1",
+     0.135
+    ],
+    [
+     "hist_67_2",
+     0.135
+    ],
+    [
+     "hist_56_4",
+     0.134
+    ],
+    [
+     "hist_85_6",
+     0.134
+    ],
+    [
+     "hist_20_6",
+     0.132
+    ],
+    [
+     "hist_23_0",
+     0.132
+    ],
+    [
+     "hist_56_1",
+     0.132
+    ],
+    [
+     "hist_70_5",
+     0.132
+    ],
+    [
+     "hist_85_5",
+     0.132
+    ],
+    [
+     "hist_94_6",
+     0.132
+    ],
+    [
+     "hist_53_4",
+     0.131
+    ],
+    [
+     "hist_10_6",
+     0.128
+    ],
+    [
+     "hist_118_5",
+     0.128
+    ],
+    [
+     "hist_25_2",
+     0.128
+    ],
+    [
+     "hist_42_1",
+     0.128
+    ],
+    [
+     "hist_57_1",
+     0.128
+    ],
+    [
+     "hist_70_4",
+     0.128
+    ],
+    [
+     "hist_72_0",
+     0.128
+    ],
+    [
+     "hist_45_1",
+     0.128
+    ],
+    [
+     "hist_53_5",
+     0.128
+    ],
+    [
+     "hist_54_2",
+     0.128
+    ],
+    [
+     "hist_57_4",
+     0.128
+    ],
+    [
+     "hist_86_3",
+     0.128
+    ],
+    [
+     "hist_105_0",
+     0.125
+    ],
+    [
+     "hist_70_7",
+     0.125
+    ],
+    [
+     "hist_72_4",
+     0.125
+    ],
+    [
+     "hist_79_6",
+     0.125
+    ],
+    [
+     "hist_21_0",
+     0.122
+    ],
+    [
+     "hist_83_3",
+     0.122
+    ],
+    [
+     "hist_23_7",
+     0.122
+    ],
+    [
+     "hist_35_1",
+     0.122
+    ],
+    [
+     "hist_89_3",
+     0.122
+    ],
+    [
+     "hist_102_4",
+     0.121
+    ],
+    [
+     "hist_90_3",
+     0.121
+    ],
+    [
+     "hist_103_1",
+     0.119
+    ],
+    [
+     "hist_107_0",
+     0.119
+    ],
+    [
+     "hist_15_5",
+     0.119
+    ],
+    [
+     "hist_19_4",
+     0.119
+    ],
+    [
+     "hist_30_4",
+     0.119
+    ],
+    [
+     "hist_43_0",
+     0.119
+    ],
+    [
+     "hist_77_0",
+     0.119
+    ],
+    [
+     "hist_8_5",
+     0.119
+    ],
+    [
+     "hist_86_0",
+     0.119
+    ],
+    [
+     "hist_21_1",
+     0.118
+    ],
+    [
+     "hist_29_3",
+     0.118
+    ],
+    [
+     "hist_96_7",
+     0.118
+    ],
+    [
+     "hist_105_4",
+     0.117
+    ],
+    [
+     "hist_65_2",
+     0.117
+    ],
+    [
+     "hist_66_7",
+     0.117
+    ],
+    [
+     "hist_25_1",
+     0.116
+    ],
+    [
+     "hist_8_1",
+     0.116
+    ],
+    [
+     "hist_96_6",
+     0.116
+    ],
+    [
+     "hist_105_6",
+     0.115
+    ],
+    [
+     "hist_115_2",
+     0.115
+    ],
+    [
+     "hist_63_4",
+     0.115
+    ],
+    [
+     "hist_72_6",
+     0.114
+    ],
+    [
+     "hist_80_0",
+     0.114
+    ],
+    [
+     "hist_102_3",
+     0.113
+    ],
+    [
+     "hist_92_0",
+     0.112
+    ],
+    [
+     "hist_85_3",
+     0.11
+    ],
+    [
+     "hist_19_0",
+     0.109
+    ],
+    [
+     "hist_34_0",
+     0.109
+    ],
+    [
+     "hist_69_2",
+     0.109
+    ],
+    [
+     "hist_78_2",
+     0.109
+    ],
+    [
+     "hist_119_3",
+     0.108
+    ],
+    [
+     "hist_46_2",
+     0.108
+    ],
+    [
+     "hist_46_4",
+     0.108
+    ],
+    [
+     "hist_33_4",
+     0.107
+    ],
+    [
+     "hist_34_7",
+     0.106
+    ],
+    [
+     "hist_70_6",
+     0.106
+    ],
+    [
+     "hist_76_3",
+     0.106
+    ],
+    [
+     "hist_96_4",
+     0.106
+    ],
+    [
+     "hist_17_2",
+     0.106
+    ],
+    [
+     "hist_73_3",
+     0.106
+    ],
+    [
+     "hist_13_4",
+     0.104
+    ],
+    [
+     "hist_30_3",
+     0.104
+    ],
+    [
+     "hist_35_4",
+     0.104
+    ],
+    [
+     "hist_49_3",
+     0.104
+    ],
+    [
+     "hist_76_6",
+     0.104
+    ],
+    [
+     "hist_109_1",
+     0.102
+    ],
+    [
+     "hist_18_5",
+     0.102
+    ],
+    [
+     "hist_20_5",
+     0.102
+    ],
+    [
+     "hist_25_3",
+     0.102
+    ],
+    [
+     "hist_41_0",
+     0.102
+    ],
+    [
+     "hist_76_5",
+     0.102
+    ],
+    [
+     "hist_112_1",
+     0.102
+    ],
+    [
+     "hist_25_5",
+     0.102
+    ],
+    [
+     "hist_103_2",
+     0.1
+    ],
+    [
+     "hist_31_5",
+     0.1
+    ],
+    [
+     "hist_109_2",
+     0.098
+    ],
+    [
+     "hist_57_5",
+     0.096
+    ],
+    [
+     "hist_10_0",
+     0.096
+    ],
+    [
+     "hist_100_4",
+     0.096
+    ],
+    [
+     "hist_20_0",
+     0.096
+    ],
+    [
+     "hist_59_2",
+     0.096
+    ],
+    [
+     "hist_78_1",
+     0.096
+    ],
+    [
+     "hist_34_5",
+     0.094
+    ],
+    [
+     "hist_49_1",
+     0.094
+    ],
+    [
+     "hist_96_8",
+     0.094
+    ],
+    [
+     "hist_15_2",
+     0.093
+    ],
+    [
+     "hist_31_0",
+     0.093
+    ],
+    [
+     "hist_42_3",
+     0.093
+    ],
+    [
+     "hist_79_5",
+     0.093
+    ],
+    [
+     "hist_84_6",
+     0.093
+    ],
+    [
+     "hist_96_1",
+     0.093
+    ],
+    [
+     "hist_37_0",
+     0.092
+    ],
+    [
+     "hist_86_2",
+     0.092
+    ],
+    [
+     "hist_92_5",
+     0.092
+    ],
+    [
+     "hist_100_0",
+     0.091
+    ],
+    [
+     "hist_91_0",
+     0.091
+    ],
+    [
+     "hist_94_0",
+     0.091
+    ],
+    [
+     "hist_83_0",
+     0.089
+    ],
+    [
+     "hist_23_3",
+     0.089
+    ],
+    [
+     "hist_37_4",
+     0.088
+    ],
+    [
+     "hist_107_4",
+     0.088
+    ],
+    [
+     "hist_24_3",
+     0.088
+    ],
+    [
+     "hist_30_2",
+     0.087
+    ],
+    [
+     "hist_118_0",
+     0.086
+    ],
+    [
+     "hist_15_4",
+     0.086
+    ],
+    [
+     "hist_40_4",
+     0.086
+    ],
+    [
+     "hist_50_2",
+     0.086
+    ],
+    [
+     "hist_67_1",
+     0.086
+    ],
+    [
+     "hist_79_3",
+     0.085
+    ],
+    [
+     "hist_34_1",
+     0.083
+    ],
+    [
+     "hist_71_3",
+     0.083
+    ],
+    [
+     "hist_55_1",
+     0.082
+    ],
+    [
+     "hist_100_6",
+     0.081
+    ],
+    [
+     "hist_22_1",
+     0.081
+    ],
+    [
+     "hist_22_4",
+     0.081
+    ],
+    [
+     "hist_77_1",
+     0.081
+    ],
+    [
+     "hist_105_3",
+     0.079
+    ],
+    [
+     "hist_85_7",
+     0.079
+    ],
+    [
+     "hist_114_0",
+     0.078
+    ],
+    [
+     "hist_36_2",
+     0.078
+    ],
+    [
+     "hist_36_1",
+     0.077
+    ],
+    [
+     "hist_89_1",
+     0.077
+    ],
+    [
+     "hist_73_4",
+     0.075
+    ],
+    [
+     "hist_107_1",
+     0.075
+    ],
+    [
+     "hist_107_3",
+     0.075
+    ],
+    [
+     "hist_42_2",
+     0.075
+    ],
+    [
+     "hist_69_1",
+     0.075
+    ],
+    [
+     "hist_80_5",
+     0.075
+    ],
+    [
+     "hist_22_0",
+     0.074
+    ],
+    [
+     "hist_25_6",
+     0.074
+    ],
+    [
+     "hist_67_4",
+     0.074
+    ],
+    [
+     "hist_34_3",
+     0.072
+    ],
+    [
+     "hist_94_1",
+     0.072
+    ],
+    [
+     "hist_41_3",
+     0.071
+    ],
+    [
+     "hist_100_3",
+     0.07
+    ],
+    [
+     "hist_104_0",
+     0.07
+    ],
+    [
+     "hist_108_0",
+     0.07
+    ],
+    [
+     "hist_40_0",
+     0.07
+    ],
+    [
+     "hist_41_5",
+     0.07
+    ],
+    [
+     "hist_48_4",
+     0.07
+    ],
+    [
+     "hist_51_3",
+     0.07
+    ],
+    [
+     "hist_87_4",
+     0.07
+    ],
+    [
+     "hist_106_2",
+     0.069
+    ],
+    [
+     "hist_20_4",
+     0.069
+    ],
+    [
+     "hist_25_0",
+     0.069
+    ],
+    [
+     "hist_40_2",
+     0.069
+    ],
+    [
+     "hist_8_4",
+     0.069
+    ],
+    [
+     "hist_96_5",
+     0.069
+    ],
+    [
+     "hist_20_1",
+     0.068
+    ],
+    [
+     "hist_69_3",
+     0.068
+    ],
+    [
+     "hist_71_5",
+     0.068
+    ],
+    [
+     "hist_77_2",
+     0.067
+    ],
+    [
+     "hist_59_3",
+     0.066
+    ],
+    [
+     "hist_103_0",
+     0.065
+    ],
+    [
+     "hist_104_3",
+     0.065
+    ],
+    [
+     "hist_20_3",
+     0.065
+    ],
+    [
+     "hist_63_3",
+     0.065
+    ],
+    [
+     "hist_85_1",
+     0.065
+    ],
+    [
+     "hist_91_2",
+     0.065
+    ],
+    [
+     "hist_38_3",
+     0.064
+    ],
+    [
+     "hist_97_3",
+     0.064
+    ],
+    [
+     "hist_39_0",
+     0.063
+    ],
+    [
+     "hist_48_1",
+     0.063
+    ],
+    [
+     "hist_39_2",
+     0.063
+    ],
+    [
+     "hist_10_2",
+     0.063
+    ],
+    [
+     "hist_41_1",
+     0.063
+    ],
+    [
+     "hist_47_5",
+     0.063
+    ],
+    [
+     "hist_106_4",
+     0.062
+    ],
+    [
+     "hist_47_4",
+     0.062
+    ],
+    [
+     "hist_78_5",
+     0.062
+    ],
+    [
+     "hist_81_1",
+     0.062
+    ],
+    [
+     "hist_94_7",
+     0.062
+    ],
+    [
+     "hist_100_5",
+     0.061
+    ],
+    [
+     "hist_21_3",
+     0.061
+    ],
+    [
+     "hist_34_6",
+     0.061
+    ],
+    [
+     "hist_52_0",
+     0.061
+    ],
+    [
+     "hist_39_1",
+     0.059
+    ],
+    [
+     "hist_100_2",
+     0.058
+    ],
+    [
+     "hist_25_4",
+     0.058
+    ],
+    [
+     "hist_46_3",
+     0.058
+    ],
+    [
+     "hist_104_1",
+     0.057
+    ],
+    [
+     "hist_67_0",
+     0.057
+    ],
+    [
+     "hist_92_7",
+     0.057
+    ],
+    [
+     "hist_94_2",
+     0.056
+    ],
+    [
+     "hist_30_1",
+     0.056
+    ],
+    [
+     "hist_77_3",
+     0.055
+    ],
+    [
+     "hist_89_2",
+     0.055
+    ],
+    [
+     "hist_71_8",
+     0.054
+    ],
+    [
+     "hist_117_1",
+     0.054
+    ],
+    [
+     "hist_8_2",
+     0.053
+    ],
+    [
+     "hist_10_1",
+     0.053
+    ],
+    [
+     "hist_36_0",
+     0.053
+    ],
+    [
+     "hist_72_3",
+     0.052
+    ],
+    [
+     "hist_53_2",
+     0.052
+    ],
+    [
+     "hist_36_4",
+     0.049
+    ],
+    [
+     "hist_69_6",
+     0.049
+    ],
+    [
+     "hist_50_4",
+     0.048
+    ],
+    [
+     "hist_52_1",
+     0.048
+    ],
+    [
+     "hist_80_3",
+     0.048
+    ],
+    [
+     "hist_101_1",
+     0.048
+    ],
+    [
+     "hist_110_3",
+     0.048
+    ],
+    [
+     "hist_114_2",
+     0.048
+    ],
+    [
+     "hist_114_4",
+     0.048
+    ],
+    [
+     "hist_114_6",
+     0.048
+    ],
+    [
+     "hist_117_3",
+     0.048
+    ],
+    [
+     "hist_13_8",
+     0.048
+    ],
+    [
+     "hist_16_1",
+     0.048
+    ],
+    [
+     "hist_23_5",
+     0.048
+    ],
+    [
+     "hist_24_2",
+     0.048
+    ],
+    [
+     "hist_26_7",
+     0.048
+    ],
+    [
+     "hist_32_1",
+     0.048
+    ],
+    [
+     "hist_32_2",
+     0.048
+    ],
+    [
+     "hist_32_4",
+     0.048
+    ],
+    [
+     "hist_34_2",
+     0.048
+    ],
+    [
+     "hist_45_4",
+     0.048
+    ],
+    [
+     "hist_52_8",
+     0.048
+    ],
+    [
+     "hist_58_6",
+     0.048
+    ],
+    [
+     "hist_62_0",
+     0.048
+    ],
+    [
+     "hist_62_3",
+     0.048
+    ],
+    [
+     "hist_62_4",
+     0.048
+    ],
+    [
+     "hist_62_6",
+     0.048
+    ],
+    [
+     "hist_65_3",
+     0.048
+    ],
+    [
+     "hist_69_4",
+     0.048
+    ],
+    [
+     "hist_73_0",
+     0.048
+    ],
+    [
+     "hist_75_3",
+     0.048
+    ],
+    [
+     "hist_82_2",
+     0.048
+    ],
+    [
+     "hist_82_6",
+     0.048
+    ],
+    [
+     "hist_88_1",
+     0.048
+    ],
+    [
+     "hist_22_3",
+     0.046
+    ],
+    [
+     "hist_100_7",
+     0.046
+    ],
+    [
+     "hist_117_2",
+     0.045
+    ],
+    [
+     "hist_46_5",
+     0.045
+    ],
+    [
+     "hist_62_5",
+     0.045
+    ],
+    [
+     "hist_72_2",
+     0.045
+    ],
+    [
+     "hist_113_1",
+     0.045
+    ],
+    [
+     "hist_80_2",
+     0.045
+    ],
+    [
+     "hist_16_0",
+     0.04
+    ],
+    [
+     "hist_65_1",
+     0.04
+    ],
+    [
+     "hist_98_0",
+     0.04
+    ],
+    [
+     "hist_111_0",
+     0.034
+    ],
+    [
+     "hist_68_4",
+     0.033
+    ],
+    [
+     "hist_118_4",
+     0.032
+    ],
+    [
+     "hist_82_5",
+     0.031
+    ],
+    [
+     "hist_110_7",
+     0.029
+    ],
+    [
+     "hist_71_7",
+     0.029
+    ],
+    [
+     "hist_66_3",
+     0.025
+    ],
+    [
+     "hist_26_3",
+     0.024
+    ],
+    [
+     "hist_111_3",
+     0.024
+    ],
+    [
+     "hist_33_7",
+     0.023
+    ],
+    [
+     "hist_59_4",
+     0.022
+    ],
+    [
+     "hist_65_0",
+     0.022
+    ],
+    [
+     "hist_114_1",
+     0.022
+    ],
+    [
+     "hist_114_7",
+     0.021
+    ],
+    [
+     "hist_32_3",
+     0.021
+    ],
+    [
+     "hist_9_1",
+     0.021
+    ],
+    [
+     "hist_117_0",
+     0.019
+    ],
+    [
+     "hist_32_5",
+     0.019
+    ],
+    [
+     "hist_69_8",
+     0.018
+    ],
+    [
+     "hist_90_5",
+     0.018
+    ],
+    [
+     "hist_110_5",
+     0.017
+    ],
+    [
+     "hist_44_0",
+     0.017
+    ],
+    [
+     "hist_66_2",
+     0.017
+    ],
+    [
+     "hist_110_2",
+     0.016
+    ],
+    [
+     "hist_35_2",
+     0.016
+    ],
+    [
+     "hist_52_4",
+     0.016
+    ],
+    [
+     "hist_114_5",
+     0.015
+    ],
+    [
+     "hist_82_1",
+     0.015
+    ],
+    [
+     "hist_32_7",
+     0.015
+    ],
+    [
+     "hist_11_1",
+     0.014
+    ],
+    [
+     "hist_24_5",
+     0.014
+    ],
+    [
+     "hist_84_5",
+     0.014
+    ],
+    [
+     "hist_52_2",
+     0.014
+    ],
+    [
+     "hist_13_6",
+     0.014
+    ],
+    [
+     "hist_110_4",
+     0.013
+    ],
+    [
+     "hist_52_7",
+     0.013
+    ],
+    [
+     "hist_71_6",
+     0.013
+    ],
+    [
+     "hist_101_2",
+     0.013
+    ],
+    [
+     "hist_18_7",
+     0.013
+    ],
+    [
+     "hist_52_5",
+     0.013
+    ],
+    [
+     "hist_24_0",
+     0.012
+    ],
+    [
+     "hist_26_6",
+     0.012
+    ],
+    [
+     "hist_102_1",
+     0.011
+    ],
+    [
+     "hist_108_3",
+     0.011
+    ],
+    [
+     "hist_78_6",
+     0.011
+    ],
+    [
+     "hist_84_2",
+     0.011
+    ],
+    [
+     "hist_101_0",
+     0.011
+    ],
+    [
+     "hist_82_4",
+     0.011
+    ],
+    [
+     "hist_111_2",
+     0.01
+    ],
+    [
+     "hist_78_3",
+     0.01
+    ],
+    [
+     "hist_60_3",
+     0.01
+    ],
+    [
+     "hist_62_2",
+     0.01
+    ],
+    [
+     "hist_104_8",
+     0.01
+    ],
+    [
+     "hist_110_1",
+     0.01
+    ],
+    [
+     "hist_24_1",
+     0.01
+    ],
+    [
+     "hist_19_3",
+     0.009
+    ],
+    [
+     "hist_26_0",
+     0.009
+    ],
+    [
+     "hist_26_5",
+     0.009
+    ],
+    [
+     "hist_32_6",
+     0.009
+    ],
+    [
+     "hist_65_4",
+     0.009
+    ],
+    [
+     "hist_114_3",
+     0.008
+    ],
+    [
+     "hist_101_3",
+     0.008
+    ],
+    [
+     "hist_26_4",
+     0.008
+    ],
+    [
+     "hist_26_2",
+     0.007
+    ],
+    [
+     "hist_17_0",
+     0.007
+    ]
+   ],
+   "admitted": [
+    {
+     "caseId": "hist_102_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_102_0:e0",
+      "hist_102_0:e1",
+      "hist_102_0:e2",
+      "hist_102_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_102_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_102_2:e0",
+      "hist_102_2:e1",
+      "hist_102_2:e2",
+      "hist_102_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_11_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_11_2:e0",
+      "hist_11_2:e1",
+      "hist_11_2:e2",
+      "hist_11_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_112_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_112_3:e0",
+      "hist_112_3:e1",
+      "hist_112_3:e2",
+      "hist_112_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_119_1",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_119_1:e0",
+      "hist_119_1:e1",
+      "hist_119_1:e2",
+      "hist_119_1:e3"
+     ]
+    },
+    {
+     "caseId": "hist_12_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_12_0:e0",
+      "hist_12_0:e1",
+      "hist_12_0:e2",
+      "hist_12_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_13_5",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_13_5:e0",
+      "hist_13_5:e1",
+      "hist_13_5:e2",
+      "hist_13_5:e3"
+     ]
+    },
+    {
+     "caseId": "hist_14_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_14_3:e0",
+      "hist_14_3:e1",
+      "hist_14_3:e2",
+      "hist_14_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_14_4",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_14_4:e0",
+      "hist_14_4:e1",
+      "hist_14_4:e2",
+      "hist_14_4:e3"
+     ]
+    },
+    {
+     "caseId": "hist_18_6",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_18_6:e0",
+      "hist_18_6:e1",
+      "hist_18_6:e2",
+      "hist_18_6:e3"
+     ]
+    },
+    {
+     "caseId": "hist_19_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_19_2:e0",
+      "hist_19_2:e1",
+      "hist_19_2:e2",
+      "hist_19_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_28_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_28_2:e0",
+      "hist_28_2:e1",
+      "hist_28_2:e2",
+      "hist_28_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_28_4",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_28_4:e0",
+      "hist_28_4:e1",
+      "hist_28_4:e2",
+      "hist_28_4:e3"
+     ]
+    },
+    {
+     "caseId": "hist_28_5",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_28_5:e0",
+      "hist_28_5:e1",
+      "hist_28_5:e2",
+      "hist_28_5:e3"
+     ]
+    },
+    {
+     "caseId": "hist_31_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_31_2:e0",
+      "hist_31_2:e1",
+      "hist_31_2:e2",
+      "hist_31_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_31_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_31_3:e0",
+      "hist_31_3:e1",
+      "hist_31_3:e2",
+      "hist_31_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_37_5",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_37_5:e0",
+      "hist_37_5:e1",
+      "hist_37_5:e2",
+      "hist_37_5:e3"
+     ]
+    },
+    {
+     "caseId": "hist_38_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_38_0:e0",
+      "hist_38_0:e1",
+      "hist_38_0:e2",
+      "hist_38_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_45_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_45_2:e0",
+      "hist_45_2:e1",
+      "hist_45_2:e2",
+      "hist_45_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_45_6",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_45_6:e0",
+      "hist_45_6:e1",
+      "hist_45_6:e2",
+      "hist_45_6:e3"
+     ]
+    },
+    {
+     "caseId": "hist_46_1",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_46_1:e0",
+      "hist_46_1:e1",
+      "hist_46_1:e2",
+      "hist_46_1:e3"
+     ]
+    },
+    {
+     "caseId": "hist_47_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_47_3:e0",
+      "hist_47_3:e1",
+      "hist_47_3:e2",
+      "hist_47_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_53_1",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_53_1:e0",
+      "hist_53_1:e1",
+      "hist_53_1:e2",
+      "hist_53_1:e3"
+     ]
+    },
+    {
+     "caseId": "hist_54_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_54_0:e0",
+      "hist_54_0:e1",
+      "hist_54_0:e2",
+      "hist_54_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_54_1",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_54_1:e0",
+      "hist_54_1:e1",
+      "hist_54_1:e2",
+      "hist_54_1:e3"
+     ]
+    },
+    {
+     "caseId": "hist_54_4",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_54_4:e0",
+      "hist_54_4:e1",
+      "hist_54_4:e2",
+      "hist_54_4:e3"
+     ]
+    },
+    {
+     "caseId": "hist_55_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_55_3:e0",
+      "hist_55_3:e1",
+      "hist_55_3:e2",
+      "hist_55_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_56_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_56_0:e0",
+      "hist_56_0:e1",
+      "hist_56_0:e2",
+      "hist_56_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_57_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_57_2:e0",
+      "hist_57_2:e1",
+      "hist_57_2:e2",
+      "hist_57_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_57_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_57_3:e0",
+      "hist_57_3:e1",
+      "hist_57_3:e2",
+      "hist_57_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_57_8",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_57_8:e0",
+      "hist_57_8:e1",
+      "hist_57_8:e2",
+      "hist_57_8:e3"
+     ]
+    },
+    {
+     "caseId": "hist_61_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_61_3:e0",
+      "hist_61_3:e1",
+      "hist_61_3:e2",
+      "hist_61_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_61_7",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_61_7:e0",
+      "hist_61_7:e1",
+      "hist_61_7:e2",
+      "hist_61_7:e3"
+     ]
+    },
+    {
+     "caseId": "hist_63_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_63_0:e0",
+      "hist_63_0:e1",
+      "hist_63_0:e2",
+      "hist_63_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_64_7",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_64_7:e0",
+      "hist_64_7:e1",
+      "hist_64_7:e2",
+      "hist_64_7:e3"
+     ]
+    },
+    {
+     "caseId": "hist_70_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_70_3:e0",
+      "hist_70_3:e1",
+      "hist_70_3:e2",
+      "hist_70_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_73_1",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_73_1:e0",
+      "hist_73_1:e1",
+      "hist_73_1:e2",
+      "hist_73_1:e3"
+     ]
+    },
+    {
+     "caseId": "hist_75_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_75_0:e0",
+      "hist_75_0:e1",
+      "hist_75_0:e2",
+      "hist_75_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_81_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_81_0:e0",
+      "hist_81_0:e1",
+      "hist_81_0:e2",
+      "hist_81_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_84_1",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_84_1:e0",
+      "hist_84_1:e1",
+      "hist_84_1:e2",
+      "hist_84_1:e3"
+     ]
+    },
+    {
+     "caseId": "hist_84_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_84_3:e0",
+      "hist_84_3:e1",
+      "hist_84_3:e2",
+      "hist_84_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_87_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_87_3:e0",
+      "hist_87_3:e1",
+      "hist_87_3:e2",
+      "hist_87_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_88_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_88_3:e0",
+      "hist_88_3:e1",
+      "hist_88_3:e2",
+      "hist_88_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_88_4",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_88_4:e0",
+      "hist_88_4:e1",
+      "hist_88_4:e2",
+      "hist_88_4:e3"
+     ]
+    },
+    {
+     "caseId": "hist_91_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_91_3:e0",
+      "hist_91_3:e1",
+      "hist_91_3:e2",
+      "hist_91_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_92_2",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_92_2:e0",
+      "hist_92_2:e1",
+      "hist_92_2:e2",
+      "hist_92_2:e3"
+     ]
+    },
+    {
+     "caseId": "hist_93_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_93_0:e0",
+      "hist_93_0:e1",
+      "hist_93_0:e2",
+      "hist_93_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_93_3",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "assisted",
+     "matchedEdgeIds": [
+      "hist_93_3:e0",
+      "hist_93_3:e1",
+      "hist_93_3:e2",
+      "hist_93_3:e3"
+     ]
+    },
+    {
+     "caseId": "hist_93_5",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_93_5:e0",
+      "hist_93_5:e1",
+      "hist_93_5:e2",
+      "hist_93_5:e3"
+     ]
+    },
+    {
+     "caseId": "hist_93_6",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_93_6:e0",
+      "hist_93_6:e1",
+      "hist_93_6:e2",
+      "hist_93_6:e3"
+     ]
+    },
+    {
+     "caseId": "hist_98_5",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "repeat_count",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "hist_98_5:e0",
+      "hist_98_5:e1",
+      "hist_98_5:e2",
+      "hist_98_5:e3"
+     ]
+    },
+    {
+     "caseId": "seed_0_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "seed_0_0:e0",
+      "seed_0_0:e1",
+      "seed_0_0:e2",
+      "seed_0_0:e3"
+     ]
+    },
+    {
+     "caseId": "seed_1_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "seed_1_0:e0",
+      "seed_1_0:e1",
+      "seed_1_0:e2",
+      "seed_1_0:e3"
+     ]
+    },
+    {
+     "caseId": "seed_2_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "seed_2_0:e0",
+      "seed_2_0:e1",
+      "seed_2_0:e2",
+      "seed_2_0:e3"
+     ]
+    },
+    {
+     "caseId": "seed_3_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "seed_3_0:e0",
+      "seed_3_0:e1",
+      "seed_3_0:e2",
+      "seed_3_0:e3"
+     ]
+    },
+    {
+     "caseId": "seed_4_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "seed_4_0:e0",
+      "seed_4_0:e1",
+      "seed_4_0:e2",
+      "seed_4_0:e3"
+     ]
+    },
+    {
+     "caseId": "seed_5_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "seed_5_0:e0",
+      "seed_5_0:e1",
+      "seed_5_0:e2",
+      "seed_5_0:e3"
+     ]
+    },
+    {
+     "caseId": "seed_6_0",
+     "score": 1,
+     "coverage": 1,
+     "strategy": "anchor_start",
+     "outcome": "failed",
+     "matchedEdgeIds": [
+      "seed_6_0:e0",
+      "seed_6_0:e1",
+      "seed_6_0:e2",
+      "seed_6_0:e3"
+     ]
+    },
+    {
+     "caseId": "hist_63_7",
+     "score": 0.917,
+     "coverage": 1,
+     "strategy": "make_ten",
+     "outcome": "independent",
+     "matchedEdgeIds": [
+      "hist_63_7:e0",
+      "hist_63_7:e1",
+      "hist_63_7:e2",
+      "hist_63_7:e3"
+     ]
+    }
+   ]
+  },
+  "at": "2026-11-09T04:53:15.955Z"
+ },
+ {
+  "runId": "90172001-6abe-40b1-8c14-da5223cba194",
+  "seq": 75,
+  "type": "outcome.committed",
+  "payload": {
+   "queryId": "90172001-6abe-40b1-8c14-da5223cba194_context_1",
+   "persistedCaseId": "90172001-6abe-40b1-8c14-da5223cba194_outcome",
+   "strategy": "make_ten",
+   "outcome": "independent",
+   "saved": true,
+   "nodes": [
+    {
+     "id": "90172001-6abe-40b1-8c14-da5223cba194_outcome:intervention",
+     "type": "Intervention",
+     "meaning": "make_ten",
+     "stage": "result",
+     "sourceIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_outcome:evaluation"
+     ]
+    },
+    {
+     "id": "90172001-6abe-40b1-8c14-da5223cba194_outcome:outcome",
+     "type": "Outcome",
+     "meaning": "independent",
+     "stage": "result",
+     "sourceIds": [
+      "90172001-6abe-40b1-8c14-da5223cba194_outcome:evaluation"
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "id": "90172001-6abe-40b1-8c14-da5223cba194_outcome:intervention-link",
+     "from": "90172001-6abe-40b1-8c14-da5223cba194_outcome:attempt",
+     "to": "90172001-6abe-40b1-8c14-da5223cba194_outcome:intervention",
+     "type": "FOLLOWED_BY",
+     "stage": "result"
+    },
+    {
+     "id": "90172001-6abe-40b1-8c14-da5223cba194_outcome:outcome-link",
+     "from": "90172001-6abe-40b1-8c14-da5223cba194_outcome:intervention",
+     "to": "90172001-6abe-40b1-8c14-da5223cba194_outcome:outcome",
+     "type": "EVALUATED_BY",
+     "stage": "result"
+    }
+   ],
+   "source": {
+    "id": "90172001-6abe-40b1-8c14-da5223cba194_outcome:evaluation",
+    "text": "{\"independentAttemptId\":\"90172001-6abe-40b1-8c14-da5223cba194_attempt_3\",\"supportAttemptId\":\"90172001-6abe-40b1-8c14-da5223cba194_attempt_2\",\"assessment\":{\"attemptId\":\"90172001-6abe-40b1-8c14-da5223cba194_attempt_3\",\"passed\":true,\"processCorrect\":true,\"answerCorrect\":true,\"hints\":0,\"retention\":\"pending\"}}"
+   }
+  },
+  "at": "2026-11-09T04:56:04.403Z"
+ }
+]
