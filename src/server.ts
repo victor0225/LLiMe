@@ -11,7 +11,6 @@ import neo4j, { Neo4jError } from 'neo4j-driver';
 import { z } from 'zod';
 import { type Config, HOST, loadConfig, repoRoot } from './config.js';
 import { type Command, type ErrorBody, type ErrorCode, ErrorCodeSchema, IdSchema, type NotificationOutbox, type RunCreateInput, type RunState } from './domain.js';
-import type { EventPayload, RunEvent } from './events.js';
 import {
   ERROR_HTTP_STATUS,
   HTTP_STATUS,
@@ -30,6 +29,10 @@ import {
   type VoiceSessionOutputSchema,
   type VoiceSnapshot,
 } from './routes.js';
+import { loadSeed } from './dataset.js';
+import { loadPreparedLesson, readLesson, saveTranscript, watchInbox } from './inbox.js';
+import { defaultSimctlRunner, parseNotifyConfig, startOutboxLoop } from './notify.js';
+import { createRunId, type RunRecord, Store } from './store.js';
 
 type Routes = typeof ROUTES;
 type ParamNames<P extends string> = P extends `${string}:${infer Name}/${infer Rest}` ? Name | ParamNames<`/${Rest}`> : P extends `${string}:${infer Name}` ? Name : never;
@@ -310,33 +313,23 @@ export function listen(server: Server, port: number): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// What the routes need from the other modules. The store, engine, inbox, voice and Codex modules
-// satisfy these shapes; tests bind stand-ins.
+// What the routes need from the other modules. Tests bind stand-ins. The engine, voice and Codex
+// modules are optional until their lanes land; their routes answer NOT_READY meanwhile.
 
-export type RunRecord = { id: string; revision: number; seq: number; state: RunState };
-type NotificationOpened = { type: 'notification.opened'; payload: EventPayload<'notification.opened'> };
-
-export type RunStorePort = {
-  getRun(runId: string): Promise<RunRecord>;
-  events(runId: string, after?: number): Promise<RunEvent[]>;
-  getNotification(notificationId: string): Promise<NotificationOutbox | null>;
-  appendEvents(runId: string, events: readonly NotificationOpened[]): Promise<RunEvent[]>;
-  close(): Promise<void>;
-};
+export type RunStorePort = Pick<Store, 'getRun' | 'events' | 'getNotification' | 'appendEvents' | 'close'>;
 
 type EngineVoiceCommand = Extract<VoiceCommand, { type: 'typed_correction' | 'activity_rendered' }>;
 type SessionVoiceCommand = Exclude<VoiceCommand, EngineVoiceCommand>;
+type CommandOutcome = Promise<{ run: RunRecord; replayed: boolean }>;
 
 export type EnginePort = {
-  createRun(input: RunCreateInput): Promise<RunRecord>;
-  command(runId: string, command: Command): Promise<RunRecord>;
-  // typed_correction and activity_rendered are run transitions, so they go through the engine.
-  voiceCommand(runId: string, command: EngineVoiceCommand): Promise<RunRecord>;
-  // Moves operations a restart cut off to their honest end state; runs listed for cleanup still need
-  // their Codex turn interrupted and their voice session closed.
-  recoverInterrupted(): Promise<{ cleanupRunIds: readonly string[] }>;
-  // Resolves once no background write (a model turn's result) is still being committed.
-  settle(): Promise<void>;
+  command(runId: string, command: Command): CommandOutcome;
+  // Both are run transitions, so the voice route hands them to the engine.
+  typedCorrection(runId: string, command: Extract<EngineVoiceCommand, { type: 'typed_correction' }>): CommandOutcome;
+  activityRendered(runId: string, command: Extract<EngineVoiceCommand, { type: 'activity_rendered' }>): CommandOutcome;
+  // Moves operations a restart cut off to their honest end state and repeats the Codex and voice
+  // cleanup of stopped runs. Idempotent: a second call changes nothing.
+  recoverInterrupted(): Promise<{ interrupted: string[]; cleaned: string[] }>;
 };
 
 export type LessonPort = {
@@ -349,11 +342,9 @@ export type VoicePort = {
   createSession(runId: string, input: z.infer<typeof VoiceSessionInputSchema>, signal: AbortSignal): Promise<z.input<typeof VoiceSessionOutputSchema>>;
   snapshot(runId: string): Promise<VoiceSnapshot>;
   command(runId: string, command: SessionVoiceCommand): Promise<VoiceSnapshot>;
-  closeRun(runId: string): Promise<void>;
 };
 
 export type RuntimePort = {
-  interruptRun(runId: string): Promise<void>;
   interruptActiveTurns(): Promise<void>;
   // Closes every Codex child's stdin and waits for it to exit.
   close(): Promise<void>;
@@ -363,10 +354,12 @@ export type Stoppable = { stop(): Promise<void> };
 
 export type ServerPorts = {
   store: RunStorePort;
-  engine: EnginePort;
+  // Pins the corpus and stores the seed; the run starts WAITING with no events.
+  createRun(input: RunCreateInput): Promise<RunRecord>;
   lessons: LessonPort;
-  voice: VoicePort;
-  runtime: RuntimePort;
+  engine?: EnginePort;
+  voice?: VoicePort;
+  runtime?: RuntimePort;
   // Started after recovery, so neither a lesson file nor a pending notification acts on a run that
   // is still being reconciled.
   startInbox(): Promise<Stoppable>;
@@ -445,7 +438,7 @@ export type HandlerOptions = {
   admit?: () => void;
 };
 
-export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'engine' | 'lessons' | 'voice'>, options: HandlerOptions): Required<RouteHandlers> {
+export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'createRun' | 'engine' | 'lessons' | 'voice'>, options: HandlerOptions): RouteHandlers {
   const { store, engine, lessons, voice } = ports;
   const serialized = perRunQueue();
   const handle =
@@ -460,7 +453,44 @@ export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'engine' 
     };
   const isVoiceConfigured = options.config.openaiApiKey !== undefined;
 
+  const engineRoutes: RouteHandlers = engine
+    ? { runCommand: handle('runCommand', async ({ params, body }) => snapshotAt(store, (await engine.command(params.runId, body)).run)) }
+    : {};
+  const voiceRoutes: RouteHandlers = voice
+    ? {
+        createVoiceSession: handle('createVoiceSession', async ({ params, body, signal }) => {
+          await store.getRun(params.runId);
+          return voice.createSession(params.runId, body, signal);
+        }),
+        voiceSnapshot: handle('voiceSnapshot', async ({ params }) => {
+          await store.getRun(params.runId);
+          return voice.snapshot(params.runId);
+        }),
+      }
+    : {};
+  // One route carries both kinds of voice command, so it waits for both modules.
+  const voiceCommandRoute: RouteHandlers =
+    engine && voice
+      ? {
+          voiceCommand: handle('voiceCommand', async ({ params, body }) => {
+            switch (body.type) {
+              case 'typed_correction':
+                return snapshotAt(store, (await engine.typedCorrection(params.runId, body)).run);
+              case 'activity_rendered':
+                return snapshotAt(store, (await engine.activityRendered(params.runId, body)).run);
+              case 'close_voice':
+              case 'audio_gate_closed':
+                await store.getRun(params.runId);
+                return voice.command(params.runId, body);
+            }
+          }),
+        }
+      : {};
+
   return {
+    ...engineRoutes,
+    ...voiceRoutes,
+    ...voiceCommandRoute,
     bootstrap: handle('bootstrap', async () => ({
       nonce: options.nonce,
       voice: isVoiceConfigured ? 'configured_unverified' : 'missing_key',
@@ -469,10 +499,9 @@ export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'engine' 
       database: 'Neo4j',
       dataset: options.dataset,
     })),
-    createRun: handle('createRun', async ({ body }) => snapshotAt(store, await engine.createRun(body))),
+    createRun: handle('createRun', async ({ body }) => snapshotAt(store, await ports.createRun(body))),
     getRun: handle('getRun', async ({ params }) => snapshotAt(store, await store.getRun(params.runId))),
     runEvents: handle('runEvents', async ({ params, query }) => store.events(params.runId, query.after)),
-    runCommand: handle('runCommand', async ({ params, body }) => snapshotAt(store, await engine.command(params.runId, body))),
     getLesson: handle('getLesson', async ({ params }) => {
       await store.getRun(params.runId);
       return lessons.readLesson(params.runId);
@@ -480,25 +509,6 @@ export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'engine' 
     saveLesson: handle('saveLesson', async ({ params, body }) => {
       await store.getRun(params.runId);
       return lessons.saveTranscript(params.runId, body.text);
-    }),
-    createVoiceSession: handle('createVoiceSession', async ({ params, body, signal }) => {
-      await store.getRun(params.runId);
-      return voice.createSession(params.runId, body, signal);
-    }),
-    voiceSnapshot: handle('voiceSnapshot', async ({ params }) => {
-      await store.getRun(params.runId);
-      return voice.snapshot(params.runId);
-    }),
-    voiceCommand: handle('voiceCommand', async ({ params, body }) => {
-      switch (body.type) {
-        case 'typed_correction':
-        case 'activity_rendered':
-          return snapshotAt(store, await engine.voiceCommand(params.runId, body));
-        case 'close_voice':
-        case 'audio_gate_closed':
-          await store.getRun(params.runId);
-          return voice.command(params.runId, body);
-      }
     }),
     // A real tap is transport evidence only: it is recorded once per notification and never starts
     // or grades the activity.
@@ -570,6 +580,7 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
   const address = server.address();
   if (address === null || typeof address !== 'object') throw new Error('The server is not listening on a TCP port');
 
+  const { runtime } = ports;
   let isStopping = false;
   const loops: Stoppable[] = [];
   const admit = () => {
@@ -577,12 +588,10 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
   };
 
   const recover = async () => {
-    const { cleanupRunIds } = await ports.engine.recoverInterrupted();
-    // Cleanup is idempotent and retried on every boot, because a crash can land between the stop
-    // commit and the cleanup. It never restarts model work.
-    for (const runId of cleanupRunIds) {
-      await ports.runtime.interruptRun(runId);
-      await ports.voice.closeRun(runId);
+    if (ports.engine) {
+      // Never restarts model work: a cut-off step ends in ERROR and stopped runs are cleaned up again.
+      const { interrupted, cleaned } = await ports.engine.recoverInterrupted();
+      if (interrupted.length + cleaned.length > 0) console.log(`Restart recovery: ${interrupted.length} interrupted, ${cleaned.length} stopped runs cleaned up`);
     }
     loops.push(await ports.startInbox());
     loops.push(await ports.startOutbox());
@@ -616,14 +625,14 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
       const sequence = async () => {
         await ready.catch(() => undefined);
         await step('stop the inbox watcher and the outbox', () => Promise.all(loops.map((loop) => loop.stop())));
-        await step('interrupt active turns', () => ports.runtime.interruptActiveTurns());
+        if (runtime) await step('interrupt active turns', () => runtime.interruptActiveTurns());
+        // An answer is sent only after its commit, so waiting for open responses waits for their writes.
         await step('finish requests in progress', responsesDone);
-        await step('settle pending writes', () => ports.engine.settle());
         if (options.closeFrontend) await step('close the dev server', options.closeFrontend);
         server.closeIdleConnections();
         await step('close the HTTP server', () => closed);
         await step('close the database driver', () => ports.store.close());
-        await step('close the Codex children', () => ports.runtime.close());
+        if (runtime) await step('close the Codex children', () => runtime.close());
       };
       let timer: NodeJS.Timeout | undefined;
       const deadline = new Promise<true>((resolve) => (timer = setTimeout(() => resolve(true), options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS)));
@@ -647,22 +656,61 @@ export async function bootServer(ports: ServerPorts, options: BootOptions): Prom
   return { port: address.port, ready, shutdown, stopped };
 }
 
+// Notifications go only to an explicitly configured Simulator. Without one the outbox stays off and
+// pending rows wait, instead of guessing a device that may belong to another worker.
+async function startConfiguredOutbox(config: Config, store: Store): Promise<Stoppable> {
+  if (config.simulatorUdid === undefined) {
+    console.log('Notifications are off: set SIMULATOR_UDID to the iPad Simulator that should receive them.');
+    return { stop: async () => {} };
+  }
+  const notify = parseNotifyConfig({ deviceUdid: config.simulatorUdid });
+  return startOutboxLoop({ store, runSimctl: defaultSimctlRunner, config: notify, onOutcome: (outcome) => console.log(`Outbox: ${JSON.stringify(outcome)}`) });
+}
+
+// The Codex runtime is not wired into this server yet, so a detected lesson reaches INGESTING and the
+// inbox reports its turn as failed; nothing pretends a turn ran.
+const startIngestionTurn = async (runId: string): Promise<void> => {
+  throw new Error(`No Codex runtime is connected, so run ${runId} cannot start its ingestion turn`);
+};
+
 async function main() {
   const config = loadConfig();
   const isDev = process.argv.includes('--dev');
+  const { uri, user, password } = config.neo4j;
+  if (password === undefined) throw new Error('NEO4J_PASSWORD is not set; run npm run setup:env to reuse the machine DB credential');
+  const store = await Store.connect({ uri, user, password });
+  const corpus = loadSeed();
+  const rootDir = repoRoot;
+  const lesson = await loadPreparedLesson({ rootDir });
+  if (lesson.problem) console.log(lesson.problem);
   // Vite runs only in development; recording serves the built files with no dev server.
   const vite = isDev ? await (await import('vite')).createServer({ configFile: join(repoRoot, 'vite.config.ts') }) : undefined;
   await vite?.listen();
-  const server = createAppServer({ config, nonce: randomBytes(24).toString('hex'), frontend: isDev ? { kind: 'dev' } : { kind: 'static', distDir: join(repoRoot, 'dist') } });
-  await listen(server, config.port);
+
+  const running = await bootServer(
+    {
+      store,
+      createRun: (input) => store.createRun({ runId: createRunId(), ...input }, corpus),
+      lessons: {
+        readLesson: (runId) => readLesson(runId, { rootDir, prepared: lesson.prepared }),
+        saveTranscript: (runId, text) => saveTranscript(runId, text, { rootDir }),
+      },
+      startInbox: () => watchInbox({ rootDir, store, startIngestionTurn, now: Date.now, onOutcome: (outcome) => console.log(`Inbox: ${JSON.stringify(outcome)}`) }),
+      startOutbox: () => startConfiguredOutbox(config, store),
+    },
+    {
+      config,
+      nonce: randomBytes(24).toString('hex'),
+      frontend: isDev ? { kind: 'dev' } : { kind: 'static', distDir: join(repoRoot, 'dist') },
+      dataset: `synthetic seed v${corpus.manifest.version}, ${corpus.manifest.cases} cases`,
+      ...(vite ? { closeFrontend: () => vite.close() } : {}),
+    },
+  );
+  await running.ready;
   console.log(`llime is ready at ${config.appOrigin}/${isDev ? ` (Vite dev server on ${HOST}:${config.vitePort})` : ''}`);
-  const stop = () => {
-    server.close();
-    server.closeAllConnections();
-    void vite?.close();
-  };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  const report = await running.stopped;
+  console.log(`Stopped in ${report.elapsedMs} ms${report.forced ? '; the shutdown deadline passed before every resource closed' : ''}${report.failures.length ? `; failed to ${report.failures.join(', ')}` : ''}`);
+  process.exit(report.forced || report.failures.length > 0 ? 1 : 0);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
