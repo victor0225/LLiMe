@@ -122,8 +122,9 @@ export type AskedQuestion = { text: string; meaning: QuestionMeaning };
 
 // Carries the earlier rounds into the newest one: earlier explanations, hypotheses and questions become
 // `prior_` records linked forward by NEXT, so a later round supersedes but never erases them. The search
-// is narrowed to the newest round, so copied history never changes what is matched.
-export function appendClarification(current: LearningCase, prior: LearningCase, question: AskedQuestion): LearningCase {
+// is narrowed to the newest round, so copied history never changes what is matched. A correction answers
+// no new question, so it passes null and only the NEXT link is added.
+export function appendClarification(current: LearningCase, prior: LearningCase, question: AskedQuestion | null): LearningCase {
   const priorPrefix = `${prior.id}:`;
   const remap = (id: string): string => {
     const suffix = id.startsWith(priorPrefix) ? id.slice(priorPrefix.length) : id;
@@ -133,19 +134,21 @@ export function appendClarification(current: LearningCase, prior: LearningCase, 
   const questionSource = `${current.id}:question_source`;
   const questionNode = `${current.id}:question`;
   const clarificationEdge = (type: GraphEdge['type'], from: string, to: string): GraphEdge => ({ id: `${current.id}:clarification_${type}`, from, to, type, stage: 'context' });
+  const asked = question
+    ? {
+        sources: [{ id: questionSource, text: question.text }],
+        nodes: [{ id: questionNode, type: 'Question' as const, meaning: question.meaning, stage: 'context' as const, sourceIds: [questionSource] }],
+        edges: [clarificationEdge('ASKED', `${current.id}:attempt`, questionNode), clarificationEdge('ANSWERED_BY', questionNode, `${current.id}:explanation`)],
+      }
+    : { sources: [], nodes: [], edges: [] };
   return validateCase({
     ...current,
-    sources: [...current.sources, ...prior.sources.map((s) => ({ ...s, id: remap(s.id) })), { id: questionSource, text: question.text }],
-    nodes: [
-      ...current.nodes,
-      ...prior.nodes.filter((n) => !isShared(n.id)).map((n) => ({ ...n, id: remap(n.id), sourceIds: n.sourceIds.map(remap) })),
-      { id: questionNode, type: 'Question', meaning: question.meaning, stage: 'context', sourceIds: [questionSource] },
-    ],
+    sources: [...current.sources, ...prior.sources.map((s) => ({ ...s, id: remap(s.id) })), ...asked.sources],
+    nodes: [...current.nodes, ...prior.nodes.filter((n) => !isShared(n.id)).map((n) => ({ ...n, id: remap(n.id), sourceIds: n.sourceIds.map(remap) })), ...asked.nodes],
     edges: [
       ...current.edges,
       ...prior.edges.filter((e) => e.type !== 'TARGETS' && e.type !== 'OBSERVED').map((e) => ({ ...e, id: remap(e.id), from: remap(e.from), to: remap(e.to) })),
-      clarificationEdge('ASKED', `${current.id}:attempt`, questionNode),
-      clarificationEdge('ANSWERED_BY', questionNode, `${current.id}:explanation`),
+      ...asked.edges,
       clarificationEdge('NEXT', remap(`${priorPrefix}explanation`), `${current.id}:explanation`),
     ],
     retrievalContext: { nodeIds: current.nodes.map((n) => n.id), edgeIds: current.edges.map((e) => e.id) },
