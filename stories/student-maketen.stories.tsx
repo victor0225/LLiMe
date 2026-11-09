@@ -7,8 +7,9 @@ import { FILM_SEED } from '../src/problems';
 import { routePath } from '../src/routes';
 import { countHelpers } from '../src/ui/activity-catalog';
 import { type ActivityFixture, makeTenIndependent, makeTenSupport, numberLineIndependent, numberLineSupport } from '../src/ui/activity-fixtures';
-import { ActivityView, type NumberLineSlot, type NumberLineSlotProps } from '../web/activity/ActivityView';
+import { ActivityView, type NumberLineSlot } from '../web/activity/ActivityView';
 import { createEventStore, useRunEvents } from '../web/lib/event-store';
+import { Practice, sendPracticeAttempt } from '../web/student/Practice';
 
 // Stories mount the real host, workspace and event store with the derived fixtures. A story server
 // stands in for the app server; the voice commands it receives and the submitted attempts are written
@@ -70,28 +71,9 @@ const DELIVERIES: { label: string; activity: Activity }[] = [
   { label: 'Independent activity', activity: independent },
 ];
 
-// Stand-in for the number-line workspace until that component is bound: it shows the props the host
-// passes so the slot contract is visible. It records nothing and submits nothing.
-function NumberLineProbe({ start, addend, startMarker, showJumpCount, hints }: NumberLineSlotProps): ReactNode {
-  return (
-    <dl className="story-number-line" aria-label="Number line slot (stand-in)">
-      <dt>start</dt>
-      <dd data-prop="start">{start}</dd>
-      <dt>addend</dt>
-      <dd data-prop="addend">{addend}</dd>
-      <dt>startMarker</dt>
-      <dd data-prop="startMarker">{startMarker ?? 'none'}</dd>
-      <dt>showJumpCount</dt>
-      <dd data-prop="showJumpCount">{String(showJumpCount)}</dd>
-      <dt>hints</dt>
-      <dd data-prop="hints">{hints}</dd>
-    </dl>
-  );
-}
-
-// A number-line component that throws while rendering, to show that a failed render keeps the last
+// A number-line screen that throws while rendering, to show that a failed render keeps the last
 // mounted activity and sends no receipt.
-const BrokenNumberLine: NumberLineSlot = () => {
+const brokenNumberLine: NumberLineSlot = () => {
   throw new Error('Story number line failed to render');
 };
 
@@ -165,13 +147,14 @@ function createStoryServer(initial: Activity | null, onVoiceCommand: (body: unkn
 
 type HarnessProps = {
   initial: Activity | null;
+  // Defaults to the number-line practice screen, as the student app mounts it.
   numberLine?: NumberLineSlot;
   deliveries?: { label: string; activity: Activity }[];
   // Stories have no voice session, so an independent start is allowed unless a story waits on purpose.
   independentStart?: 'waiting' | 'ready';
 };
 
-function Harness({ initial, numberLine = NumberLineProbe, deliveries = [], independentStart = 'ready' }: HarnessProps): ReactNode {
+function Harness({ initial, numberLine, deliveries = [], independentStart = 'ready' }: HarnessProps): ReactNode {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [server] = useState(() => createStoryServer(initial, (body) => setLog((entries) => [...entries, { kind: 'activity_rendered', detail: body }])));
   const { run } = useRunEvents(server.store);
@@ -187,7 +170,7 @@ function Harness({ initial, numberLine = NumberLineProbe, deliveries = [], indep
           activity={run.activity}
           store={server.store}
           voiceSessionId={null}
-          numberLine={numberLine}
+          numberLine={numberLine ?? ((shown) => <Practice activity={shown} phase={run.phase} voiceOff={false} submit={sendPracticeAttempt(server.store, shown)} />)}
           independentStart={independentStart}
           onSubmit={(target, attempt) => setLog((entries) => [...entries, { kind: 'submit', detail: { target, attempt } }])}
         />
@@ -234,7 +217,7 @@ export const SupportPear: Story = { args: { initial: storyActivity(makeTenSuppor
 export const SupportDot: Story = { args: { initial: storyActivity(makeTenSupport, 'make_ten_blocks', { spec: withAppearance(makeTenSupport.spec, 'dot') }) } };
 export const Independent: Story = { args: { initial: independent } };
 export const IndependentWaiting: Story = { args: { initial: independent, independentStart: 'waiting' } };
-export const HostReplacements: Story = { args: { initial: support, numberLine: BrokenNumberLine, deliveries: DELIVERIES } };
+export const HostReplacements: Story = { args: { initial: support, numberLine: brokenNumberLine, deliveries: DELIVERIES } };
 export const HostNumberLine: Story = { args: { initial: storyActivity(numberLineSupport, 'anchor_start_number_line') } };
 export const HostNumberLineIndependent: Story = { args: { initial: storyActivity(numberLineIndependent, 'independent_number_line') } };
 export const HostInvalidFirst: Story = { args: { initial: DELIVERIES[0]?.activity ?? null } };

@@ -253,21 +253,21 @@ export function MakeTenWorkspace({ spec, hints, draftKey, onSubmit }: MakeTenWor
       ) : null}
       <div className="mt-board">
         <section className="mt-zone mt-box" aria-labelledby={ids.box}>
-          <h3 id={ids.box} className="mt-zone-label">
+          <h2 id={ids.box} className="mt-zone-label">
             {MAKE_TEN_COPY.box}
-          </h3>
+          </h2>
           <ul className="mt-frame">{Array.from({ length: TEN_FRAME_SLOTS }, (_, slot) => frameSlot(slot))}</ul>
         </section>
         <section className="mt-zone mt-tray" aria-labelledby={ids.tray}>
-          <h3 id={ids.tray} className="mt-zone-label">
+          <h2 id={ids.tray} className="mt-zone-label">
             {MAKE_TEN_COPY.tray}
-          </h3>
+          </h2>
           <ul className="mt-pile">{layout.tray.map(movable)}</ul>
         </section>
         <section className="mt-zone mt-left-over" aria-labelledby={ids.leftOver}>
-          <h3 id={ids.leftOver} className="mt-zone-label">
+          <h2 id={ids.leftOver} className="mt-zone-label">
             {MAKE_TEN_COPY.leftOver}
-          </h3>
+          </h2>
           <ul className="mt-pile">{layout.leftOver.map(movable)}</ul>
         </section>
       </div>
