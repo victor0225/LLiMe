@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@json-render/core": "0.22.0",
+    "@json-render/react": "0.22.0",
     "neo4j-driver": "6.3.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
