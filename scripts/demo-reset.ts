@@ -1,4 +1,5 @@
 // npm run demo:reset -- --case main|contrast [--seed N]
+// The main case uses the film seed unless --seed is given, so the child sees 8 + 5 then 9 + 4.
 // Creates a fresh run on the running server (pinned corpus, new state; the runtime thread starts on
 // its first turn) and prints the real run ID. Earlier runs are never touched. While the operator's
 // previous run is still active, reset refuses, so a rehearsal never strands a run mid-lesson; stop
@@ -10,6 +11,7 @@ import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import { loadConfig, repoRoot } from '../src/config.js';
 import { IdSchema, PHASE_TRANSITIONS, type RunState, SeedSchema } from '../src/domain.js';
+import { FILM_SEED } from '../src/problems.js';
 import { BootstrapSchema, HTTP_STATUS, ROUTES, routePath, SESSION_HEADER } from '../src/routes.js';
 
 // The last run this script created on this worktree, so the next reset can check it is finished.
@@ -76,7 +78,8 @@ export async function resetRun({ origin, caseName, seed, operatorRunFile = join(
   if (bootstrap.status !== HTTP_STATUS.ok) throw new ResetRefused(`GET ${ROUTES.bootstrap.path} answered ${bootstrap.status}`);
   const { nonce, mode } = BootstrapSchema.parse(bootstrap.body);
   if (mode !== 'live') throw new ResetRefused(`The server at ${origin} is a read-only replay; start the live server to reset`);
-  const input = ROUTES.createRun.request.parse(seed === undefined ? {} : { seed });
+  const runSeed = seed ?? (caseName === 'main' ? FILM_SEED : undefined);
+  const input = ROUTES.createRun.request.parse(runSeed === undefined ? {} : { seed: runSeed });
   const created = await request(origin, routePath('createRun'), { method: 'POST', headers: { 'content-type': 'application/json', [SESSION_HEADER]: nonce }, body: JSON.stringify(input) });
   if (created.status !== ROUTES.createRun.status) throw new ResetRefused(`POST ${ROUTES.createRun.path} answered ${created.status}: ${JSON.stringify(created.body).slice(0, 300)}`);
   const run = ROUTES.createRun.response.parse(created.body);
