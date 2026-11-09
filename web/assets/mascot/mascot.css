@@ -28,3 +28,10 @@
 @keyframes llime-blink{0%,34%,44%,100%{transform:scaleY(1)}39%{transform:scaleY(.12)}}
 @keyframes llime-leaf{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
 @keyframes llime-encourage{0%,100%{transform:translateY(0) scale(1)}35%{transform:translateY(3px) scale(1.02,.98)}65%{transform:translateY(-7px) scale(.99,1.01)}}
+
+/* Character art: square, uncropped, never covering numbers or controls. */
+.student-character { display: block; flex-shrink: 0; max-width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; user-select: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .student-character[data-motion="on"] { animation: student-character-in 420ms ease-out 1; }
+}
+@keyframes student-character-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
