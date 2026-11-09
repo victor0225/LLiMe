@@ -114,13 +114,19 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
   const slot: StudentSlot = { run, events: view.events, connection, saveUnconfirmed, voiceOff, submit };
   return (
     <StudentFrame>
-      <RunScreen slot={slot} isPending={isPending} activity={activity ?? ((current) => <ComposedActivity slot={current} store={store} voice={voice} />)} />
+      {activity ? (
+        <RunScreen slot={slot} isPending={isPending} activity={activity} hasPreMountGate />
+      ) : (
+        <RunScreen slot={slot} isPending={isPending} activity={(current) => <ComposedActivity slot={current} store={store} voice={voice} />} hasPreMountGate={false} />
+      )}
       <ConnectionStatus connection={connection} saveUnconfirmed={saveUnconfirmed} />
     </StudentFrame>
   );
 }
 
-function RunScreen({ slot, isPending, activity }: { slot: StudentSlot; isPending: boolean; activity: StudentAppProps['activity'] }) {
+// `hasPreMountGate`: a screen passed in by a story gets the server-gate Start before it mounts; the
+// composed page uses the generated activity's own Start instead.
+function RunScreen({ slot, isPending, activity, hasPreMountGate }: { slot: StudentSlot; isPending: boolean; activity: StudentAppProps['activity']; hasPreMountGate: boolean }) {
   const { run } = slot;
   const [deferredId, setDeferredId] = useState<string | null>(null);
 
@@ -148,8 +154,7 @@ function RunScreen({ slot, isPending, activity }: { slot: StudentSlot; isPending
       );
     }
     case 'VERIFY':
-      // The generated make-ten check carries its own Start, gated on voice teardown.
-      if (run.activity && MAKE_TEN_TEMPLATES.has(run.activity.templateId)) return <>{activity?.(slot)}</>;
+      if (!hasPreMountGate) return <>{activity?.(slot)}</>;
       return <IndependentGate slot={slot} activity={activity} />;
     default:
       return <>{activity?.(slot)}</>;
@@ -219,17 +224,16 @@ function ConnectionStatus({ connection, saveUnconfirmed }: { connection: Student
 // ---------------------------------------------------------------------------------------------
 // The screen for each phase after the invitation.
 
-// Number-line activities, whether app-owned (initial, retry) or generated (anchored support,
-// independent check); the make-ten templates mount the generated workspace instead.
-const NUMBER_LINE_TEMPLATES: ReadonlySet<TemplateId> = new Set(['initial_number_line', 'anchor_start_number_line', 'manipulation_retry', 'independent_number_line']);
-const MAKE_TEN_TEMPLATES: ReadonlySet<TemplateId> = new Set(['make_ten_blocks', 'independent_make_ten']);
+// Activities with a generated spec mount through the activity host, which validates the spec, sends
+// the render receipt and owns the independent Start. The initial attempt and the plain retry are
+// app-owned number-line screens without a spec.
+const GENERATED_TEMPLATES: ReadonlySet<TemplateId> = new Set(['anchor_start_number_line', 'independent_number_line', 'make_ten_blocks', 'independent_make_ten']);
+const APP_NUMBER_LINE_TEMPLATES: ReadonlySet<TemplateId> = new Set(['initial_number_line', 'manipulation_retry']);
 
 // `view` is null when this server offers no voice; the client still exists to tear audio down.
 type RunVoice = { view: VoiceView | null; client: VoiceClient; controls: VoiceControlsForRun; independentStart: 'waiting' | 'ready' };
 type VoiceControlsForRun = Pick<VoiceClient, 'start' | 'toggleMute' | 'end' | 'interruptPlayback'>;
 
-// Make-ten specs never contain a number line, so this slot is never mounted by them.
-const NO_NUMBER_LINE: NumberLineSlot = () => <p className="p-status" data-tone="error" role="alert">{STUDENT_COPY.activityOpenFailed}</p>;
 
 function ComposedActivity({ slot, store, voice }: { slot: StudentSlot; store: EventStore; voice: RunVoice | null }) {
   const { run } = slot;
@@ -241,7 +245,11 @@ function ComposedActivity({ slot, store, voice }: { slot: StudentSlot; store: Ev
   // During support the tutor may still be talking, so the child keeps Mute and End voice; voice is
   // offered fresh only at the explanation step.
   const voiceRow = shownVoice !== null && run.phase === 'PRACTICE' && shownVoice.phase !== 'idle' && <VoiceStatus voice={shownVoice} controls={controls} offerStart={false} />;
-  if (MAKE_TEN_TEMPLATES.has(activity.templateId)) {
+  const independentStart = voice?.independentStart ?? 'ready';
+  // In the independent check "voice is off" is shown only once teardown finished (or no audio ran).
+  const voiceOff = run.phase === 'VERIFY' ? independentStart === 'ready' : slot.voiceOff;
+  const practice: NumberLineSlot = (shown) => <Practice activity={shown} phase={run.phase} voiceOff={voiceOff} submit={slot.submit} />;
+  if (GENERATED_TEMPLATES.has(activity.templateId)) {
     const commandType = run.phase === 'VERIFY' ? 'verify' : 'practice';
     return (
       <>
@@ -250,18 +258,18 @@ function ComposedActivity({ slot, store, voice }: { slot: StudentSlot; store: Ev
           activity={activity}
           store={store}
           voiceSessionId={shownVoice?.voiceSessionId ?? null}
-          numberLine={NO_NUMBER_LINE}
-          independentStart={voice?.independentStart ?? 'ready'}
+          numberLine={practice}
+          independentStart={independentStart}
           onSubmit={(_target, attempt) => void slot.submit({ type: commandType, attempt })}
         />
       </>
     );
   }
-  if (!NUMBER_LINE_TEMPLATES.has(activity.templateId)) return null;
+  if (!APP_NUMBER_LINE_TEMPLATES.has(activity.templateId)) return null;
   return (
     <>
       {voiceRow}
-      <Practice activity={activity} phase={run.phase} voiceOff={slot.voiceOff} submit={slot.submit} />
+      {practice(activity)}
     </>
   );
 }
