@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { NUMBER_LINE_COPY, STUDENT_COPY, VOICE_STATUS_COPY, problemQuestion } from '@core/copy';
 import { type Activity, type Attempt, COMMAND_PHASES, type CommandType, type RunPhase, type TemplateId } from '@core/domain';
-import { HTTP_STATUS } from '@core/routes';
-import { type EventStore, RunRequestError } from '../lib/event-store';
+import { Mascot } from './Mascot';
 import { EMPTY_DRAFT, NumberLine, type NumberLineDraft, draftPosition } from './NumberLine';
+import type { SubmitResult } from './StudentApp';
 import '../styles/number-line.css';
 
 // The commands that submit a number-line attempt; the run phase decides which one applies.
@@ -11,9 +11,6 @@ const SUBMIT_COMMAND_TYPES = ['attempt', 'practice', 'verify'] as const satisfie
 type SubmitCommandType = (typeof SUBMIT_COMMAND_TYPES)[number];
 
 export type PracticeCommand = { type: SubmitCommandType; attempt: Attempt };
-// `conflict`: the run moved on (409, or the activity changed before the command was sent); the
-// screen never resends. `failed`: the attempt was not saved and the draft is kept.
-export type SubmitResult = 'saved' | 'conflict' | 'failed';
 
 export type PracticeProps = {
   // The accepted number-line activity: initial, anchored support, plain retry or independent check.
@@ -21,11 +18,15 @@ export type PracticeProps = {
   phase: RunPhase;
   // True only after microphone and playback teardown was acknowledged for this run.
   voiceOff: boolean;
+  // StudentApp's slot.submit: it adds the command ID and revision and reports the saved state.
   submit: (command: PracticeCommand) => Promise<SubmitResult>;
 };
 
 // Every number-line activity the child acts on. Other templates have their own screens.
 const NUMBER_LINE_TEMPLATES: ReadonlySet<TemplateId> = new Set(['initial_number_line', 'anchor_start_number_line', 'manipulation_retry', 'independent_number_line']);
+
+// Small enough that the companion never crowds the number line in either orientation.
+const MASCOT_SIZE_PX = 88;
 
 // The line offers no help on request, so the child adds no hints of their own. The server adds the
 // helpers the accepted activity displayed, so a zero here can never hide them.
@@ -54,22 +55,6 @@ function writeUnsentMarker(value: string | null) {
   }
 }
 
-// Sends the attempt through the run's single mutation queue. The command is dropped if, by the time
-// it is sent, the run no longer shows this exact activity revision.
-export function sendPracticeAttempt(store: EventStore, activity: Activity): PracticeProps['submit'] {
-  return async (command) => {
-    try {
-      const snapshot = await store.sendRunCommand('runCommand', (run) =>
-        run.activity?.id === activity.id && run.activity.revision === activity.revision ? { ...command, commandId: crypto.randomUUID(), revision: run.revision } : null,
-      );
-      return snapshot === null ? 'conflict' : 'saved';
-    } catch (error) {
-      if (error instanceof RunRequestError && error.status === HTTP_STATUS.conflict) return 'conflict';
-      return 'failed';
-    }
-  };
-}
-
 export function Practice(props: PracticeProps) {
   // A new or revised activity always starts from an empty draft.
   return <PracticeScreen key={activityKey(props.activity)} {...props} />;
@@ -79,6 +64,8 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
   const titleId = useId();
   const reasonId = useId();
   const [draft, setDraft] = useState<NumberLineDraft>(EMPTY_DRAFT);
+  // After a conflict or a failure the draft stays and the screen never resends by itself; the run
+  // frame says whether the save is still being checked.
   const [request, setRequest] = useState<'idle' | 'pending' | 'saved'>('idle');
   const [showDraftReset, setShowDraftReset] = useState(() => readUnsentMarker() === activityKey(activity));
   const inFlight = useRef(false);
@@ -101,7 +88,8 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
   const showMoveCount = helpers.some((component) => component.type === 'JumpCounter');
   const commandType = SUBMIT_COMMAND_TYPES.find((type) => COMMAND_PHASES[type].includes(phase));
   const position = draftPosition(draft);
-  const canCheck = commandType !== undefined && draft.start !== null && request === 'idle';
+  const isLocked = request !== 'idle';
+  const canCheck = commandType !== undefined && draft.start !== null && !isLocked;
   const question = problemQuestion(problem);
 
   const changeDraft = (next: NumberLineDraft) => {
@@ -122,6 +110,7 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
   return (
     <section className="nl-practice" aria-labelledby={titleId}>
       <div className="nl-guide">
+        <Mascot state="idle" size={MASCOT_SIZE_PX} />
         <h1 id={titleId} className="nl-title">
           {activity.title}
         </h1>
@@ -135,7 +124,7 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
       </div>
       <div className="nl-workspace">
         <p className="nl-equation">{question}</p>
-        <NumberLine draft={draft} onDraftChange={changeDraft} startMarker={startMarker} showMoveCount={showMoveCount} disabled={request !== 'idle'} />
+        <NumberLine draft={draft} onDraftChange={changeDraft} startMarker={startMarker} showMoveCount={showMoveCount} disabled={isLocked} />
         <div className="nl-submit">
           <button
             type="button"

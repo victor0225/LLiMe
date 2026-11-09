@@ -3,9 +3,11 @@
 // fail without touching the activity: its store port has no activity operation to call.
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
+import { repoRoot } from './config.js';
 import { NOTIFICATION_COPY } from './copy.js';
 import { NotificationOutboxSchema, NotificationPayloadSchema } from './domain.js';
 import { EVENT_PAYLOAD_SCHEMAS, type EventPayload } from './events.js';
+import { hasInboxLesson } from './inbox.js';
 
 export const DEFAULT_BUNDLE_ID = 'com.llime.demo';
 
@@ -236,6 +238,7 @@ export const OUTBOX_SCAN_INTERVAL_MS = 1_000;
 export interface OutboxStore extends NotifyStore {
   // Pending row IDs, oldest first.
   listPendingNotifications(): Promise<string[]>;
+  getNotification(notificationId: string): Promise<{ runId: string } | null>;
 }
 
 export type OutboxOutcome =
@@ -246,6 +249,10 @@ export type OutboxOutcome =
 
 export interface OutboxLoopDeps extends NotifyDeps {
   store: OutboxStore;
+  // Whether this server owns a run. Every worktree and test suite on a computer shares one database,
+  // so the loop recovers and sends only rows of its own runs, never another server's or a test's.
+  // By default a server owns the runs whose lesson reached the inbox of the checkout it runs from.
+  ownsRun?: (runId: string) => Promise<boolean>;
   onOutcome?: (outcome: OutboxOutcome) => void;
   // null leaves only explicit kicks, so a test controls every drain.
   scanIntervalMs?: number | null;
@@ -262,7 +269,32 @@ export interface OutboxLoop {
 // run one at a time; across loops the store's atomic claim lets only one of them send a row.
 export async function startOutboxLoop(deps: OutboxLoopDeps): Promise<OutboxLoop> {
   const report = (outcome: OutboxOutcome) => deps.onOutcome?.(outcome);
-  const recovered = await recoverInterruptedNotifications(deps.store);
+  const { store } = deps;
+  const ownsRun = deps.ownsRun ?? ((runId: string) => hasInboxLesson(runId, { rootDir: repoRoot }));
+  // A run's ownership never changes once it has an outbox row, so each run is asked about once.
+  const ownership = new Map<string, boolean>();
+  const ownedOnly = async (notificationIds: string[]): Promise<string[]> => {
+    const owned: string[] = [];
+    for (const notificationId of notificationIds) {
+      const row = await store.getNotification(notificationId);
+      if (row === null) continue;
+      let isOwned = ownership.get(row.runId);
+      if (isOwned === undefined) {
+        isOwned = await ownsRun(row.runId);
+        ownership.set(row.runId, isOwned);
+      }
+      if (isOwned) owned.push(notificationId);
+    }
+    return owned;
+  };
+  const ownRowsStore: NotifyStore = {
+    claimNotification: (id) => store.claimNotification(id),
+    markNotificationSent: (id, event) => store.markNotificationSent(id, event),
+    markNotificationFailed: (id, code) => store.markNotificationFailed(id, code),
+    markNotificationUnknown: (id, code) => store.markNotificationUnknown(id, code),
+    listDispatchingNotifications: async () => ownedOnly(await store.listDispatchingNotifications()),
+  };
+  const recovered = await recoverInterruptedNotifications(ownRowsStore);
   if (recovered.length > 0) report({ kind: 'recovered', notificationIds: recovered });
 
   let isStopped = false;
@@ -272,7 +304,7 @@ export async function startOutboxLoop(deps: OutboxLoopDeps): Promise<OutboxLoop>
   async function drainPending(): Promise<void> {
     let pendingIds: string[];
     try {
-      pendingIds = await deps.store.listPendingNotifications();
+      pendingIds = await ownedOnly(await store.listPendingNotifications());
     } catch (error) {
       report({ kind: 'scan_failed', reason: messageOf(error) });
       return;
