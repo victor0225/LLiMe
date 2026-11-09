@@ -566,6 +566,7 @@ export function InspectorView(props: InspectorViewProps) {
   return (
     <div className="inspector" data-source={source}>
       <header className="insp-header">
+        <span className="insp-brand" aria-hidden="true">llime</span>
         <h1>{INSPECTOR_LABELS.title}</h1>
         <dl className="insp-chips">
           <Chip label="Runtime" value={props.runtimeName ?? INSPECTOR_LABELS.notAssigned} />
@@ -763,7 +764,7 @@ export function InspectorRoute({ onViewEvidence }: { onViewEvidence: (call: Sele
   if (!runId) {
     return (
       <div className="inspector">
-        <header className="insp-header"><h1>{INSPECTOR_LABELS.title}</h1></header>
+        <header className="insp-header"><span className="insp-brand" aria-hidden="true">llime</span><h1>{INSPECTOR_LABELS.title}</h1></header>
         <p className="insp-empty">Open this page with a run: /inspector?runId=…</p>
       </div>
     );
