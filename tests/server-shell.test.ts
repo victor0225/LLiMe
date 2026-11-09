@@ -147,6 +147,19 @@ describe('request guards', () => {
 });
 
 describe('API routes', () => {
+  test('accepts a POST from the app origin or the configured Storybook proxy origin', async () => {
+    const handlers: RouteHandlers = {
+      runCommand: async () => {
+        throw new RouteError({ code: 'WRONG_PHASE', message: 'Reached the handler', retryable: false, revision: 0 });
+      },
+    };
+    await withServer(handlers, async (server) => {
+      for (const origin of [config.appOrigin, config.storybookOrigin]) {
+        assert.equal(errorOf(await post(server, routePath('runCommand', { runId: RUN_ID }), COMMAND, { origin })).message, 'Reached the handler', origin);
+      }
+    });
+  });
+
   test('a route without a bound handler answers with an explicit not-ready error', async () => {
     await withServer({}, async (server) => {
       const reply = await send(server, { path: routePath('getRun', { runId: RUN_ID }) });
@@ -255,6 +268,7 @@ describe('API routes', () => {
       const reply = await send(server, { path: `${routePath('runEvents', { runId: RUN_ID })}?after=0` });
       assert.equal(reply.status, 500);
       assert.doesNotMatch(reply.text, /seq/);
+      assert.match(errorOf(reply).message, /error [0-9a-f-]{36}/);
     });
   });
 });

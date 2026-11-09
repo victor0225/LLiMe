@@ -1,0 +1,151 @@
+/* Import tokens.css first. These are UI primitives, not learning/voice state. */
+.p-button,
+.p-input,
+.p-card,
+.p-speech,
+.p-status { box-sizing: border-box; font-family: var(--p-font); }
+
+.p-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--p-space-1);
+  min-height: var(--p-target-student);
+  min-width: var(--p-target-min);
+  padding: 12px 20px;
+  border: 2px solid var(--p-primary-edge);
+  border-radius: var(--p-radius-control);
+  background: var(--p-primary);
+  color: var(--p-on-primary);
+  box-shadow: 0 2px 0 var(--p-primary-edge);
+  font-size: var(--p-font-body);
+  font-weight: 750;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform var(--p-motion-feedback) var(--p-ease), opacity var(--p-motion-feedback) var(--p-ease);
+}
+.p-button[data-variant="secondary"] {
+  background: var(--p-surface);
+  color: var(--p-text);
+  border-color: var(--p-control-border);
+  box-shadow: 0 2px 0 var(--p-control-border);
+}
+.p-button[data-variant="quiet"] {
+  background: transparent;
+  color: var(--p-text);
+  border-color: transparent;
+  box-shadow: none;
+}
+.p-button:not(:disabled):not([aria-busy="true"]):active {
+  transform: translateY(2px);
+  box-shadow: none;
+}
+.p-button:disabled {
+  background: var(--p-disabled);
+  color: var(--p-muted);
+  border-color: var(--p-border);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+.p-button[aria-busy="true"] { cursor: progress; }
+.p-button:focus-visible,
+.p-input:focus-visible {
+  outline: 3px solid var(--p-focus);
+  outline-offset: 3px;
+}
+.p-button .p-icon { flex: 0 0 24px; }
+
+.p-card {
+  padding: var(--p-space-2);
+  border-radius: var(--p-radius-card);
+  background: var(--p-surface);
+  color: var(--p-text);
+}
+.p-speech {
+  padding: var(--p-space-2);
+  border: 2px solid var(--p-border);
+  border-radius: var(--p-radius-card);
+  background: var(--p-surface);
+  color: var(--p-text);
+  font-size: var(--p-font-body);
+  line-height: var(--p-line-body);
+}
+.p-speech > :first-child,
+.p-card > :first-child { margin-top: 0; }
+.p-speech > :last-child,
+.p-card > :last-child { margin-bottom: 0; }
+.p-label {
+  display: block;
+  margin-bottom: var(--p-space-1);
+  color: var(--p-text);
+  font-family: var(--p-font);
+  font-size: var(--p-font-body);
+  font-weight: 700;
+  line-height: var(--p-line-body);
+}
+.p-input {
+  display: block;
+  width: 100%;
+  min-height: var(--p-target-student);
+  padding: 14px 16px;
+  border: 2px solid var(--p-control-border);
+  border-radius: var(--p-radius-control);
+  background: var(--p-surface);
+  color: var(--p-text);
+  font-size: var(--p-font-body);
+  line-height: var(--p-line-body);
+}
+textarea.p-input { min-height: 140px; resize: vertical; }
+.p-input::placeholder { color: var(--p-muted); opacity: 1; }
+.p-input[aria-invalid="true"] { border-color: var(--p-error); }
+.p-input:disabled { background: var(--p-disabled); color: var(--p-muted); }
+.p-helper {
+  margin: var(--p-space-1) 0 0;
+  color: var(--p-muted);
+  font-family: var(--p-font);
+  font-size: var(--p-font-small);
+  line-height: var(--p-line-body);
+}
+.p-helper[data-tone="error"] { color: var(--p-error); }
+.p-status {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--p-space-1);
+  padding: 14px 16px;
+  border: 1px solid var(--p-control-border);
+  border-radius: var(--p-radius-control);
+  background: var(--p-surface);
+  color: var(--p-text);
+  font-size: var(--p-font-body);
+  line-height: var(--p-line-body);
+}
+.p-status[data-tone="success"] { background: var(--p-success-surface); color: var(--p-success); border-color: var(--p-success); }
+.p-status[data-tone="error"] { background: var(--p-error-surface); color: var(--p-error); border-color: var(--p-error); }
+.p-status .p-icon { flex: 0 0 24px; margin-top: 3px; }
+.p-icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  background-color: currentColor;
+  -webkit-mask: var(--icon-url) center / contain no-repeat;
+  mask: var(--icon-url) center / contain no-repeat;
+  vertical-align: middle;
+}
+.p-icon[data-size="large"] { width: 32px; height: 32px; }
+.p-enter { animation: p-enter var(--p-motion-enter) var(--p-ease) both; }
+@keyframes p-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.p-skeleton { display: block; min-height: 20px; border-radius: var(--p-radius-control); background: var(--p-disabled); }
+@media (prefers-reduced-motion: reduce) {
+  .p-button { transition: none; }
+  .p-button:not(:disabled):not([aria-busy="true"]):active { transform: none; }
+  .p-enter { animation: none; }
+}
+[data-motion="off"] .p-button { transition: none; }
+[data-motion="off"] .p-button:active { transform: none; }
+[data-motion="off"] .p-enter { animation: none; }
+
+/* Inline trusted SVG works in local file previews without mask fetch restrictions. */
+svg.p-icon { background: none; -webkit-mask: none; mask: none; fill: currentColor; flex-shrink: 0; }
