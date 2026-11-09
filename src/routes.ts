@@ -7,6 +7,7 @@ import {
   ErrorBodySchema,
   type ErrorCode,
   ExplanationTextSchema,
+  IdentifierSchema,
   IdSchema,
   RunCreateInputSchema,
 } from './domain.js';
@@ -68,7 +69,12 @@ export const BootstrapSchema = z.strictObject({
   runtime: z.string().min(1),
   database: z.string().min(1),
   dataset: z.string().min(1),
-});
+  // Tells every viewer whether it shows a live run or a read-only replay of an exported capture,
+  // so the Replay label comes from the server that answers, never from a client-side guess. Only
+  // the replay server answers 'replay'; it always names the capture it serves.
+  mode: z.enum(['live', 'replay']).default('live'),
+  captureId: IdentifierSchema.nullable().default(null),
+}).refine((b) => (b.mode === 'replay') === (b.captureId !== null), { message: 'captureId is set exactly in replay mode', path: ['captureId'] });
 export type Bootstrap = z.infer<typeof BootstrapSchema>;
 
 // Query strings arrive as text; only a plain non-negative safe integer is a valid cursor.

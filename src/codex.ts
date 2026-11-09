@@ -462,7 +462,6 @@ type Session = {
   child: ChildProcessLike;
   rpc: Connection;
   exited: Promise<void>;
-  hasExited: boolean;
   threadId: string;
   model: string;
   serviceTier: string;
@@ -526,7 +525,6 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
       onBroken: (error) => session && onSessionBroken(session, error),
     });
     child.once('exit', () => {
-      if (session) session.hasExited = true;
       exitedResolve();
       rpc.breakWith(new Error('App Server exited'));
     });
@@ -613,7 +611,6 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
         child,
         rpc,
         exited,
-        hasExited: false,
         threadId,
         model: config.model,
         serviceTier: tier.id,
@@ -1246,7 +1243,11 @@ export function createRuntimePort(options: { runtime: CodexRuntime; settle: Sett
     async steerTurn(request: TurnRequest): Promise<boolean> {
       return (await runtime.trySteer({ runId: request.runId, phase: request.phase, input: request.input, operationId: request.operationId, cancellationEpoch: request.cancellationEpoch, explanationRevision: explanationRevisionOf(request.input) })) !== null;
     },
-    interruptTurn: (runId: string) => runtime.interrupt(runId),
+    // The engine interrupts only when a run is stopped, and a stopped run never resumes: the child goes too.
+    async interruptTurn(runId: string): Promise<void> {
+      await runtime.interrupt(runId);
+      await runtime.close(runId);
+    },
     closeVoice: options.closeVoice,
   };
 }
@@ -1278,19 +1279,27 @@ export function createIngestionStarter(options: { runtime: CodexRuntime; store: 
     const conceptLinks = await store.getConceptLinks();
     const operationId = `op_${randomUUID()}`;
     const epoch = run.state.cancellationEpoch;
-    const turn = await runtime.startTurn({
-      runId,
-      phase: 'ingestion',
-      operationId,
-      cancellationEpoch: epoch,
-      input: ({ revision, state }) => ({
-        lessonInput: { text: lesson.text, provenance: 'synthetic lesson transcript saved to the run inbox', contentHash: lesson.contentHash },
-        student: state.studentId,
-        conceptLinks,
-        corpusHash: state.corpusHash,
-        revision,
-      }),
-    });
+    let turn: ActiveTurn;
+    try {
+      turn = await runtime.startTurn({
+        runId,
+        phase: 'ingestion',
+        operationId,
+        cancellationEpoch: epoch,
+        input: ({ revision, state }) => ({
+          lessonInput: { text: lesson.text, provenance: 'synthetic lesson transcript saved to the run inbox', contentHash: lesson.contentHash },
+          student: state.studentId,
+          conceptLinks,
+          corpusHash: state.corpusHash,
+          revision,
+        }),
+      });
+    } catch (error) {
+      // No turn exists, so no terminal event will arrive: the run must not stay in INGESTING.
+      const body = error instanceof RuntimeFailure ? error.body : failure('RUNTIME_DISCONNECTED', 'The agent turn could not start', true);
+      await settle(runId, { operationId, phase: 'ingestion', cancellationEpoch: epoch, status: 'failed', code: settlementCode(body.code), message: body.message });
+      throw error;
+    }
     void settleWhenDone(turn, runId, 'ingestion', epoch, settle, report);
   };
 }
