@@ -531,6 +531,58 @@ describe('turns and model', () => {
     assert.equal(s.store.ofType('turn.steered')[0]?.payload.explanationRevision, 7);
   });
 
+  test('a steered turn serves the correction: its later tool calls run and its settlement names the correction, while a call from before the steer stays refused (mocked Codex)', async () => {
+    const s = setup({
+      script: (request, server) => {
+        if (request.method === 'turn/steer') return { turnId: TURN_ID };
+        return FakeAppServer.turnStartsWith(TURN_ID)(request, server);
+      },
+    });
+    const settled: OperationSettlement[] = [];
+    const port = createRuntimePort({ runtime: s.runtime, settle: async (_runId, settlement) => void settled.push(settlement), closeVoice: async () => undefined });
+    const input: ExplanationTurnInput = {
+      explanationRevision: 1,
+      sourceId: 'speech_1',
+      explanation: 'I counted from 8.',
+      inputMode: 'typed',
+      problem: { lhs: 8, rhs: 5 },
+      attempt: { start: 8, moves: [9, 10, 11, 12], answer: 12, hints: 0 },
+      question: null,
+    };
+    s.store.state = runState({ phase: 'PROCESSING' });
+    await port.startTurn({ runId: RUN_ID, operationId: 'op_first', cancellationEpoch: 0, phase: 'explanation', input });
+    await until(() => s.server.count('turn/start') === 1, 'turn/start');
+
+    // The correction is committed (epoch 1) while a call the model made before the steer is still being checked.
+    s.store.state = runState({ phase: 'PROCESSING', cancellationEpoch: 1 });
+    const readRun = s.store.getRun.bind(s.store);
+    const gate: { release?: () => void } = {};
+    s.store.getRun = async (runId) => {
+      s.store.getRun = readRun;
+      await new Promise<void>((resolve) => (gate.release = resolve));
+      return readRun(runId);
+    };
+    const early = s.server.request('item/tool/call', callParams('call_early', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }));
+    await until(() => gate.release !== undefined, 'the early call to read the run');
+    const steered = await port.steerTurn({ runId: RUN_ID, operationId: 'op_fix', cancellationEpoch: 1, phase: 'explanation', input: { ...input, explanationRevision: 2 } });
+    assert.equal(steered, true);
+    assert.equal(s.server.count('turn/start'), 1);
+    gate.release?.();
+    const earlyText = ((await early).result as { contentItems: { text: string }[] }).contentItems[0]?.text ?? '';
+    assert.equal(toolReplyText(earlyText).error?.code, 'CANCELLED');
+
+    // After the steer the same turn's calls run under the correction's epoch and write their events.
+    const after = await s.server.request('item/tool/call', callParams('call_after', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }));
+    assert.equal((after.result as { success: boolean }).success, true);
+    assert.deepEqual(s.calls.map((c) => c.context.cancellationEpoch), [1]);
+    assert.deepEqual(s.store.ofType('tool.completed').map((e) => e.payload.callId), ['call_after']);
+
+    s.server.notify('item/completed', { threadId: THREAD_ID, turnId: TURN_ID, completedAtMs: 1, item: { type: 'agentMessage', id: 'm1', text: finalJson({ phase: 'explanation' }), phase: 'final_answer' } });
+    s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor(TURN_ID, 'completed') });
+    await until(() => settled.length === 1, 'settlement');
+    assert.deepEqual(settled[0], { operationId: 'op_fix', phase: 'explanation', cancellationEpoch: 1, status: 'completed' });
+  });
+
   test('closing a run ends stdin and escalates only if the child does not exit (mocked Codex)', async () => {
     const s = setup();
     await s.runtime.startTurn(ingestion());
