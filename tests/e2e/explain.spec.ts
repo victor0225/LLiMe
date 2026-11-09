@@ -4,8 +4,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 import { z } from 'zod';
 import { repoRoot, loadConfig } from '../../src/config.js';
-import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '../../src/copy.js';
+import { ACTIVITY_COPY, EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '../../src/copy.js';
 import {
+  ActivitySchema,
   CommandSchema,
   EXPLANATION_MAX_CHARS,
   InterpretationMeaningSchema,
@@ -17,7 +18,8 @@ import {
   type SavedAttempt,
 } from '../../src/domain.js';
 import { EventSchema, RunSnapshotSchema, type RunEvent, type RunSnapshot } from '../../src/events.js';
-import { BootstrapSchema, ROUTES, routePath } from '../../src/routes.js';
+import { BootstrapSchema, ROUTES, VoiceCommandSchema, routePath } from '../../src/routes.js';
+import { makeTenIndependent } from '../../src/ui/activity-fixtures.js';
 
 const { storybookOrigin } = loadConfig();
 const IPAD_VIEWPORTS = [
@@ -483,6 +485,37 @@ for (const viewport of IPAD_VIEWPORTS) {
       await page.getByRole('button', { name: EXPLAIN_COPY.done }).click();
       await expect(heading).toHaveText(STUDENT_COPY.doneCollapsed);
       expect(posts).toEqual([]);
+    });
+
+    test('the composed /student page mounts the make-ten independent check with one Start problem, ready at once without voice, and acknowledges the render once (stubbed route)', async ({ page }) => {
+      const activity = ActivitySchema.parse({
+        id: makeTenIndependent.spec.activityId,
+        revision: makeTenIndependent.spec.revision,
+        runId: RUN_ID,
+        kind: 'independent',
+        templateId: 'independent_make_ten',
+        strategy: 'make_ten',
+        problem: independentProblem,
+        ...ACTIVITY_COPY.independent_make_ten(independentProblem),
+        activitySpec: makeTenIndependent.spec,
+        specHash: 'synthetic-spec-hash',
+        helperCount: 0,
+        evidenceIds: [],
+        decisionSummary: '',
+      });
+      const state = { snapshot: runSnapshot({ phase: 'VERIFY', activity, seq: 3 }), events: [] as RunEvent[] };
+      await stubRun(page, state);
+      const receipts: unknown[] = [];
+      await page.route(pathIs(routePath('voiceCommand', { runId: RUN_ID })), (route) => {
+        receipts.push(VoiceCommandSchema.parse(route.request().postDataJSON()));
+        return route.fulfill({ json: state.snapshot });
+      });
+      await page.goto(`/student?runId=${encodeURIComponent(RUN_ID)}`);
+      const start = page.getByRole('button', { name: STUDENT_COPY.startProblem });
+      await expect(start).toHaveCount(1);
+      await expect(start).toBeEnabled();
+      await expect.poll(() => receipts.length).toBe(1);
+      expect(receipts[0]).toMatchObject({ type: 'activity_rendered', activityId: activity.id, activityRevision: activity.revision, voiceSessionId: null });
     });
 
     test('every explain and outcome story renders without errors, overflow or accessibility violations (stubbed route)', async ({ page, request }) => {

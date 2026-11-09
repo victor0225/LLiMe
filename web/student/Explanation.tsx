@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '@core/copy';
 import { EXPLANATION_MAX_CHARS, type Command, type Problem, type RunPhase, type SavedAttempt } from '@core/domain';
 import type { RunEvent, RunSnapshot } from '@core/events';
@@ -438,11 +438,7 @@ export function ExplainFlow({ store, voice, voiceControls, startNewRun }: Explai
     },
     [sendThroughQueue],
   );
-  // A correction replaced the activity: what the tutor was saying about it is stale, so it stops now.
   const isUpdating = run !== null && run.phase === 'PROCESSING' && isCorrectionPending(run, events);
-  useEffect(() => {
-    if (isUpdating) voiceControls.interruptPlayback();
-  }, [isUpdating, voiceControls]);
   if (!run) return null;
   const connection = status === 'reconnecting' ? 'paused' : 'live';
   const canSend = connection === 'live' && !run.stopped;

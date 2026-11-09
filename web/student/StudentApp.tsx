@@ -4,7 +4,8 @@ import { type Activity, type Command, RunCreateInputSchema, type TemplateId } fr
 import type { RunEvent, RunSnapshot } from '@core/events';
 import { BootstrapSchema, HTTP_STATUS, NotificationOpenedInputSchema, ROUTES, routePath, SESSION_HEADER } from '@core/routes';
 import { createEventStore, EVENT_POLL_INTERVAL_MS, type EventStore, RunRequestError, useRunEvents } from '../lib/event-store';
-import { browserVoiceEnv, createVoiceClient, eventStoreVoiceApi, useVoice, type VoiceClient, type VoiceView } from '../voice';
+import { browserVoiceEnv, createCorrectionPlayback, createVoiceClient, eventStoreVoiceApi, useVoice, type VoiceClient, type VoiceView } from '../voice';
+import { ActivityView, type NumberLineSlot } from '../activity/ActivityView';
 import { ExplainFlow, isExplainFlowRun, VoiceStatus } from './Explanation';
 import { DeferredInvitation, Invitation } from './Invitation';
 import { Mascot } from './Mascot';
@@ -94,7 +95,7 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
   const saveUnconfirmed = unansweredRevision !== null && run?.revision === unansweredRevision;
   const connection = view.status === 'live' || view.status === 'loading' ? 'live' : 'paused';
   const voiceOff = useAudioGateClosed(runId, run?.phase === 'VERIFY');
-  const voice = useRunVoice(store, runId, run?.phase === 'VERIFY');
+  const voice = useRunVoice(store, runId, run);
 
   if (openedUnavailable) return <StudentFrame>{unavailable ? unavailable(openedUnavailable) : <ActivityUnavailable />}</StudentFrame>;
   if (!run) {
@@ -147,6 +148,8 @@ function RunScreen({ slot, isPending, activity }: { slot: StudentSlot; isPending
       );
     }
     case 'VERIFY':
+      // The generated make-ten check carries its own Start, gated on voice teardown.
+      if (run.activity && MAKE_TEN_TEMPLATES.has(run.activity.templateId)) return <>{activity?.(slot)}</>;
       return <IndependentGate slot={slot} activity={activity} />;
     default:
       return <>{activity?.(slot)}</>;
@@ -219,20 +222,45 @@ function ConnectionStatus({ connection, saveUnconfirmed }: { connection: Student
 // Number-line activities, whether app-owned (initial, retry) or generated (anchored support,
 // independent check); the make-ten templates mount the generated workspace instead.
 const NUMBER_LINE_TEMPLATES: ReadonlySet<TemplateId> = new Set(['initial_number_line', 'anchor_start_number_line', 'manipulation_retry', 'independent_number_line']);
+const MAKE_TEN_TEMPLATES: ReadonlySet<TemplateId> = new Set(['make_ten_blocks', 'independent_make_ten']);
 
-type RunVoice = { view: VoiceView; client: VoiceClient } | null;
+// `view` is null when this server offers no voice; the client still exists to tear audio down.
+type RunVoice = { view: VoiceView | null; client: VoiceClient; controls: VoiceControlsForRun; independentStart: 'waiting' | 'ready' };
+type VoiceControlsForRun = Pick<VoiceClient, 'start' | 'toggleMute' | 'end' | 'interruptPlayback'>;
 
-function ComposedActivity({ slot, store, voice }: { slot: StudentSlot; store: EventStore; voice: RunVoice }) {
+// Make-ten specs never contain a number line, so this slot is never mounted by them.
+const NO_NUMBER_LINE: NumberLineSlot = () => <p className="p-status" data-tone="error" role="alert">{STUDENT_COPY.activityOpenFailed}</p>;
+
+function ComposedActivity({ slot, store, voice }: { slot: StudentSlot; store: EventStore; voice: RunVoice | null }) {
   const { run } = slot;
-  if (isExplainFlowRun(run)) return <ExplainFlow store={store} voice={voice?.view ?? null} voiceControls={voice?.client ?? SILENT_VOICE} startNewRun={startNewRun} />;
+  const shownVoice = voice?.view ?? null;
+  const controls = voice?.controls ?? SILENT_VOICE;
+  if (isExplainFlowRun(run)) return <ExplainFlow store={store} voice={shownVoice} voiceControls={controls} startNewRun={startNewRun} />;
   const activity = run.activity;
-  if (activity === null || !NUMBER_LINE_TEMPLATES.has(activity.templateId)) return null;
+  if (activity === null) return null;
   // During support the tutor may still be talking, so the child keeps Mute and End voice; voice is
   // offered fresh only at the explanation step.
-  const showVoice = voice !== null && run.phase === 'PRACTICE' && voice.view.phase !== 'idle';
+  const voiceRow = shownVoice !== null && run.phase === 'PRACTICE' && shownVoice.phase !== 'idle' && <VoiceStatus voice={shownVoice} controls={controls} offerStart={false} />;
+  if (MAKE_TEN_TEMPLATES.has(activity.templateId)) {
+    const commandType = run.phase === 'VERIFY' ? 'verify' : 'practice';
+    return (
+      <>
+        {voiceRow}
+        <ActivityView
+          activity={activity}
+          store={store}
+          voiceSessionId={shownVoice?.voiceSessionId ?? null}
+          numberLine={NO_NUMBER_LINE}
+          independentStart={voice?.independentStart ?? 'ready'}
+          onSubmit={(_target, attempt) => void slot.submit({ type: commandType, attempt })}
+        />
+      </>
+    );
+  }
+  if (!NUMBER_LINE_TEMPLATES.has(activity.templateId)) return null;
   return (
     <>
-      {showVoice && <VoiceStatus voice={voice.view} controls={voice.client} offerStart={false} />}
+      {voiceRow}
       <Practice activity={activity} phase={run.phase} voiceOff={slot.voiceOff} submit={slot.submit} />
     </>
   );
@@ -260,8 +288,10 @@ async function startNewRun(): Promise<void> {
   window.location.assign(`${window.location.pathname}?runId=${encodeURIComponent(runId)}`);
 }
 
-// One voice client per run, offered only when this server has voice configured for live input.
-function useRunVoice(store: EventStore, runId: string | null, isIndependent: boolean): RunVoice {
+// One voice client per run, offered only when this server has voice configured for live input. The
+// client always exists so that teardown before the independent check also covers a session that
+// is no longer shown.
+function useRunVoice(store: EventStore, runId: string | null, run: RunSnapshot | null): RunVoice | null {
   const [isOffered, setOffered] = useState(false);
   useEffect(() => {
     let isCurrent = true;
@@ -278,33 +308,71 @@ function useRunVoice(store: EventStore, runId: string | null, isIndependent: boo
   // Leaving the run releases the microphone and closes the session.
   useEffect(() => () => void client.end(), [client]);
   const view = useVoice(client);
-  useIndependentTeardown(client, view, isIndependent);
-  return isOffered && runId !== null ? { view, client } : null;
+  const isIndependent = run?.phase === 'VERIFY';
+  const independentStart = useIndependentTeardown(client, view, isIndependent);
+  const controls = useCorrectionPlayback(client, run);
+  if (runId === null) return null;
+  return { view: isOffered ? view : null, client, controls, independentStart };
+}
+
+// A correction makes what the tutor was saying stale: playback stops at once and resumes only when
+// the replacement for the newest correction is on screen.
+function useCorrectionPlayback(client: VoiceClient, run: RunSnapshot | null): VoiceControlsForRun {
+  const playback = useMemo(() => createCorrectionPlayback(client), [client]);
+  const revision = run?.explanationRevision ?? 0;
+  const latestRevision = useRef(revision);
+  latestRevision.current = revision;
+  const superseded = run !== null && [...run.execution.events].some((event) => event.type === 'operation.cancelled' && event.payload.reason === 'superseded' && event.payload.cancellationEpoch === run.cancellationEpoch);
+  useEffect(() => {
+    if (superseded) playback.correctionStarted(revision);
+  }, [playback, superseded, revision]);
+  const shownActivity = run?.activity && (run.phase === 'PRACTICE' || run.phase === 'CLARIFY') ? `${run.activity.id}:${run.activity.revision}` : null;
+  useEffect(() => {
+    if (shownActivity !== null) playback.replacementRendered(revision);
+  }, [playback, shownActivity, revision]);
+  return useMemo(
+    () => ({
+      start: client.start,
+      toggleMute: client.toggleMute,
+      end: client.end,
+      // A typed correction becomes the next explanation revision.
+      interruptPlayback: () => playback.correctionStarted(latestRevision.current + 1),
+    }),
+    [client, playback],
+  );
 }
 
 // The tutor's handover may still be playing when the independent check arrives. Once its transcript
 // has stopped growing for a moment, or at the latest after the cap, microphone and playback are torn
-// down and the server records it; the check opens only after that record.
+// down and the server records it. The check's Start waits for that record; with no audio it is ready.
 const HANDOVER_SETTLE_MS = 1500;
 const HANDOVER_CAP_MS = 8000;
 
-function useIndependentTeardown(client: VoiceClient, view: VoiceView, isIndependent: boolean) {
+function useIndependentTeardown(client: VoiceClient, view: VoiceView, isIndependent: boolean): 'waiting' | 'ready' {
   const since = useRef<number | null>(null);
+  const [teardown, setTeardown] = useState<'none' | 'running' | 'done' | 'failed'>('none');
   const hasAudio = view.phase === 'starting' || view.phase === 'connecting' || view.phase === 'live' || view.phase === 'ending';
   useEffect(() => {
-    if (!isIndependent) {
-      since.current = null;
-      return;
-    }
-    if (!hasAudio) return;
+    if (isIndependent) return;
+    since.current = null;
+    setTeardown('none');
+  }, [isIndependent]);
+  useEffect(() => {
+    if (!isIndependent || !hasAudio || teardown !== 'none') return;
     since.current ??= Date.now();
     const remaining = HANDOVER_CAP_MS - (Date.now() - since.current);
     const timer = setTimeout(() => {
-      // A failed acknowledgement leaves the check closed; the next transcript change retries.
-      client.teardownForIndependentWork().catch(() => {});
+      setTeardown('running');
+      client.teardownForIndependentWork().then(
+        () => setTeardown('done'),
+        // Without the server's record the check stays closed rather than risking spoken help.
+        () => setTeardown('failed'),
+      );
     }, Math.max(0, Math.min(HANDOVER_SETTLE_MS, remaining)));
     return () => clearTimeout(timer);
-  }, [client, isIndependent, hasAudio, view.captions.output]);
+  }, [client, isIndependent, hasAudio, teardown, view.captions.output]);
+  if (!isIndependent) return 'waiting';
+  return teardown === 'done' || (teardown === 'none' && !hasAudio) ? 'ready' : 'waiting';
 }
 
 // ---------------------------------------------------------------------------------------------
