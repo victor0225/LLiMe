@@ -159,7 +159,7 @@ export interface InboxScannerDeps extends InboxConfig {
 export type InboxOutcome =
   | { kind: 'ingestion_started'; runId: string; contentHash: string }
   | { kind: 'ignored'; fileName: string; reason: 'unknown_run' | 'not_waiting' | 'duplicate' | 'already_started' }
-  | { kind: 'rejected'; fileName: string; reason: 'not_a_file' | 'too_large' | 'empty' | 'invalid_utf8' }
+  | { kind: 'rejected'; fileName: string; reason: 'not_a_file' | 'unreadable' | 'too_large' | 'empty' | 'invalid_utf8' }
   | { kind: 'deferred'; fileName: string; reason: string }
   | { kind: 'turn_failed'; runId: string; contentHash: string; reason: string }
   | { kind: 'scan_failed'; reason: string };
@@ -209,7 +209,7 @@ export function createInboxScanner(deps: InboxScannerDeps): InboxScanner {
     try {
       stats = await lstat(path);
     } catch (error) {
-      if (errnoCode(error) !== 'ENOENT') throw error;
+      if (errnoCode(error) !== 'ENOENT') return [{ kind: 'rejected', fileName, reason: 'unreadable' }];
       observed.delete(fileName);
       decided.delete(fileName);
       return [];
@@ -225,7 +225,14 @@ export function createInboxScanner(deps: InboxScannerDeps): InboxScanner {
     if (!isStable(fileName, fingerprint)) return [];
     if (stats.size > INBOX_FILE_MAX_BYTES) return decide({ kind: 'rejected', fileName, reason: 'too_large' });
 
-    const bytes = await readUnchanged(path, fingerprint);
+    let bytes: Buffer | null;
+    try {
+      bytes = await readUnchanged(path, fingerprint);
+    } catch {
+      // A file this process may not read stays refused until it is saved again (a new inode), and it
+      // never holds up the other files in the scan.
+      return decide({ kind: 'rejected', fileName, reason: 'unreadable' });
+    }
     if (bytes === null) {
       // It changed after the stability checks; start them over.
       observed.delete(fileName);
@@ -333,7 +340,9 @@ async function readUnchanged(path: string, fingerprint: string): Promise<Buffer 
   try {
     file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch (error) {
-    if (errnoCode(error) === 'ENOENT') return null;
+    // Gone, or swapped for a link, since the stability checks: it is not the file they saw.
+    const code = errnoCode(error);
+    if (code === 'ENOENT' || code === 'ELOOP') return null;
     throw error;
   }
   try {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { cp, mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, describe, test } from 'node:test';
@@ -247,6 +247,22 @@ describe('inbox watcher (stubbed store transition and turn)', () => {
       { kind: 'rejected', fileName: `${RUN_B}.txt`, reason: 'empty' },
     ]));
     assert.deepEqual(ingestion.committed, []);
+  });
+
+  test('an unreadable file is reported and does not hold up other runs', async () => {
+    const root = await tempRoot();
+    const { ingestion, turn, settle } = await scannerFor(root, { [RUN_A]: waiting(), [RUN_B]: waiting() });
+    await saveTranscript(RUN_A, 'Nobody may read this.', { rootDir: root });
+    await chmod(inboxPath(root, `${RUN_A}.txt`), 0o000);
+    await saveTranscript(RUN_B, 'Today we made ten.', { rootDir: root });
+
+    const outcomes = await settle();
+    assert.deepEqual(outcomes, [
+      { kind: 'rejected', fileName: `${RUN_A}.txt`, reason: 'unreadable' },
+      { kind: 'ingestion_started', runId: RUN_B, contentHash: sha256('Today we made ten.') },
+    ]);
+    assert.deepEqual(turn.started, [RUN_B]);
+    assert.equal(ingestion.state.get(RUN_A)?.phase, 'WAITING');
   });
 
   test('the same content twice for one run starts one turn', async () => {
