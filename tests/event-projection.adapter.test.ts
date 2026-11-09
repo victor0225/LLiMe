@@ -43,7 +43,7 @@ describe('server adapter', () => {
     try {
       const snapshot = foldViewEvents(RUN, null, adaptRunEvents(messages));
       assert.equal(snapshot.sequence, 2);
-      assert.deepEqual(snapshot.agentEvents.map((e) => e.label), ['one', 'two']);
+      assert.equal(snapshot.raw?.type, 'runtime.message');
       assert.equal(snapshot.searching, false, 'the rejected search start changed nothing');
     } finally {
       console.error = originalError;
