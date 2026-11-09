@@ -1,0 +1,50 @@
+{
+  "provenance": "actual_codex_generation_with_synthetic_context",
+  "threadId": "01a1b5f2-4c9d-7e70-9ea2-7db99da36ea6",
+  "context": {
+    "activityId": "activity-support",
+    "revision": 1,
+    "phase": "support",
+    "problemRef": "addition-8-5",
+    "start": 8,
+    "addend": 5,
+    "evidenceIds": [
+      "case-start-count"
+    ]
+  },
+  "spec": {
+    "catalogVersion": "primer-math-v1",
+    "activityId": "activity-support",
+    "revision": 1,
+    "phase": "support",
+    "problemRef": "addition-8-5",
+    "evidenceIds": [
+      "case-start-count"
+    ],
+    "components": [
+      {
+        "id": "number-line",
+        "type": "NumberLine",
+        "props": {
+          "start": 8,
+          "addend": 5
+        }
+      },
+      {
+        "id": "start-marker",
+        "type": "StartMarker",
+        "props": {
+          "targetId": "number-line",
+          "value": 8
+        }
+      },
+      {
+        "id": "jump-counter",
+        "type": "JumpCounter",
+        "props": {
+          "targetId": "number-line"
+        }
+      }
+    ]
+  }
+}
