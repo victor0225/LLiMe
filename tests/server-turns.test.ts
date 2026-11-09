@@ -23,7 +23,7 @@ function lateEndingRuntime() {
       calls.push('interrupt acknowledged');
       setTimeout(() => {
         calls.push('turn ended');
-        endTurn({ threadId: 'thread-1', turnId: 'turn-1', operationId: 'op-1', status: 'interrupted', final: null, error: { code: 'CANCELLED', message: 'The server is stopping', retryable: false } });
+        endTurn({ threadId: 'thread-1', turnId: 'turn-1', operationId: 'op-1', cancellationEpoch: 0, status: 'interrupted', final: null, error: { code: 'CANCELLED', message: 'The server is stopping', retryable: false } });
       }, 20);
     },
     close: async () => {},
