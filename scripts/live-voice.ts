@@ -4,7 +4,7 @@
 // WebSocket to the same session. The probe confirms the connection, closes the session,
 // waits for the final close event and prints a sanitized JSON log. It never prints the
 // key, SDP, transcripts or the full session ID. Exit code 0 only when every check passed.
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -26,6 +26,7 @@ const CONNECT_TIMEOUT_MS = 15_000
 const CLOSE_TIMEOUT_MS = 15_000
 // Last resort if a bounded wait above misbehaves; every normal path finishes well before this.
 const WATCHDOG_MS = 120_000
+const PROFILE_RELEASE_TIMEOUT_MS = 10_000
 const MAX_BODY_BYTES = 64 * 1024
 const SAFE_TOKEN = /^[\w.:-]{1,120}$/
 const SESSION_ID = /^[\w-]{1,200}$/
@@ -364,6 +365,14 @@ function stopChrome(chrome: ChildProcess | undefined): Promise<void> {
   })
 }
 
+// Chrome's helper processes outlive the browser process for a moment and keep writing to the
+// profile, so the profile is deleted only once no process references it any more.
+async function releaseProfile(profile: string): Promise<void> {
+  const isInUse = () => spawnSync('pgrep', ['-f', profile]).status === 0
+  if (!(await waitFor(() => !isInUse(), PROFILE_RELEASE_TIMEOUT_MS, false))) spawnSync('pkill', ['-KILL', '-f', profile])
+  rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+}
+
 function summary(): Record<string, unknown> {
   const passed =
     state.createStatus === 201 &&
@@ -438,8 +447,7 @@ async function main(): Promise<boolean> {
       await stopChrome(chrome)
       server.closeAllConnections()
       await new Promise((resolve) => server.close(resolve))
-      // Chrome helper processes can still be flushing the profile for a moment after exit.
-      rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
+      await releaseProfile(profile)
     } catch (error) {
       state.cleanupError = error instanceof Error ? error.message : String(error)
     }
