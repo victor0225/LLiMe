@@ -1,6 +1,9 @@
 import { useLayoutEffect, useRef } from 'react';
 import mascotMarkup from '../assets/mascot/mascot.svg?raw';
 import '../assets/mascot/mascot.css';
+import welcomeUrl from '../assets/characters/llime-welcome.png?no-inline';
+import listeningUrl from '../assets/characters/llime-listening.png?no-inline';
+import encouragementUrl from '../assets/characters/llime-encouragement.png?no-inline';
 
 // Poses of the llime companion. A pose is presentation only and never stands for learning state.
 export type MascotState = 'idle' | 'welcome' | 'listening' | 'thinking' | 'encouragement';
@@ -15,9 +18,40 @@ export type MascotProps = {
 
 const DEFAULT_SIZE_PX = 170;
 
-// The SVG is inlined so its parts can animate; an <img> would hide them from the stylesheet. It is
-// decorative: the tutor copy next to it carries the meaning.
+// Full character art for the moments that have a painted pose: welcome on the invitation, listening
+// while the child explains, encouragement on the outcome. The artwork carries transparent margins, so
+// it is shown square and uncropped.
+const CHARACTER_ART: Partial<Record<MascotState, string>> = {
+  welcome: welcomeUrl,
+  listening: listeningUrl,
+  encouragement: encouragementUrl,
+};
+
+// Decorative either way: the tutor copy next to it carries the meaning.
 export function Mascot({ state, size = DEFAULT_SIZE_PX, motion = true }: MascotProps) {
+  const art = CHARACTER_ART[state];
+  if (art) return <CharacterArt src={art} state={state} size={size} motion={motion} />;
+  return <VectorMascot state={state} size={size} motion={motion} />;
+}
+
+function CharacterArt({ src, state, size, motion }: { src: string; state: MascotState; size: number; motion: boolean }) {
+  return (
+    <img
+      className="student-mascot student-character"
+      src={src}
+      alt=""
+      aria-hidden="true"
+      width={size}
+      height={size}
+      data-state={state}
+      data-motion={motion ? 'on' : 'off'}
+      draggable={false}
+    />
+  );
+}
+
+// The SVG is inlined so its parts can animate; an <img> would hide them from the stylesheet.
+function VectorMascot({ state, size, motion }: { state: MascotState; size: number; motion: boolean }) {
   const host = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const svg = host.current?.querySelector('svg');

@@ -19,7 +19,7 @@ export function Invitation({ invitation, isBusy, isDisabled, onAccept, onLater }
   const headingId = useId();
   return (
     <section className="student-card student-invitation" aria-labelledby={headingId}>
-      <Mascot state="welcome" />
+      <Mascot state="welcome" size={220} />
       <div className="student-invitation-copy">
         <h1 id={headingId}>{invitation.title}</h1>
         <p className="student-tutor">{invitation.body}</p>

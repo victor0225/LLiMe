@@ -75,3 +75,22 @@
   .student-actions { flex-direction: column; }
   .student-primary { width: 100%; }
 }
+
+.student-invitation .student-character { margin: calc(-1 * var(--p-space-2)) 0; }
+
+/* Micro icons as masks, so they take the label colour. Decorative: every button keeps its text. */
+.student-invitation .p-button[data-variant="secondary"]::before,
+.nl-check::before {
+  content: "";
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background: currentColor;
+  mask: var(--student-icon) center / contain no-repeat;
+}
+.student-invitation .p-button[data-variant="secondary"] { --student-icon: url('../assets/micro/later.svg'); }
+.nl-check { --student-icon: url('../assets/micro/check.svg'); }
+
+@media (max-width: 900px) {
+  .student-invitation .student-character { width: 180px; margin: 0; }
+}
