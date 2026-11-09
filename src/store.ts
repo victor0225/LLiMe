@@ -15,6 +15,8 @@ import {
   NEO4J_LABELS,
   NotificationOutboxSchema,
   RunStateSchema,
+  VoiceOperationSchema,
+  VoiceOperationStatusSchema,
   type Activity,
   type Concept,
   type ConceptLink,
@@ -25,6 +27,7 @@ import {
   type Outcome,
   type RunState,
   type Strategy,
+  type VoiceOperation,
 } from './domain.js';
 import { EventSchema, type EventPayload, type EventType, type RunEvent, type RunEventOf } from './events.js';
 
@@ -124,6 +127,10 @@ export type SeedCounts = {
 
 export type NamespaceCounts = { run: number; events: number; commands: number; activities: number; voiceOperations: number; outbox: number; liveCases: number; total: number };
 
+// A voice operation that reached one of these is final; its record never changes again.
+const SETTLED_VOICE_STATUSES: readonly VoiceOperation['status'][] = ['completed', 'cancelled', 'failed'];
+const VOICE_RETURN = 'RETURN v.runId AS runId, v.liveSessionId AS liveSessionId, v.delegationId AS delegationId, v.id AS operationId, v.explanationRevision AS explanationRevision, v.cancellationEpoch AS cancellationEpoch, v.threadId AS threadId, v.turnId AS turnId, v.status AS status';
+
 const RUN_SCOPED_LABELS = ['Event', 'Command', 'Activity', 'VoiceOperation', 'NotificationOutbox'] as const;
 
 const str = (value: unknown) => z.string().parse(value);
@@ -132,6 +139,10 @@ const num = (value: unknown) => z.number().parse(value);
 function parseEvent(raw: unknown): RunEvent {
   return EventSchema.parse(JSON.parse(str(raw)));
 }
+
+// Identity of a voice operation without its status, which legitimately changes.
+const correlationKey = (o: VoiceOperation) =>
+  compactSha256([o.runId, o.liveSessionId, o.delegationId, o.operationId, o.explanationRevision, o.cancellationEpoch, o.threadId, o.turnId]);
 
 const caseHash = (c: LearningCase) => compactSha256(c);
 
@@ -612,6 +623,73 @@ export class Store {
     return this.read(async (tx) => {
       const result = await tx.run("MATCH (n:NotificationOutbox {status: 'dispatching'}) RETURN n.id AS id ORDER BY n.createdAt, n.id");
       return result.records.map((r) => str(r.get('id')));
+    });
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Voice operations: one record per voice or agent operation, keyed by its operation ID. Status
+  // changes are records, not run transitions: they never move the run revision.
+
+  private voiceRow(record: { get(key: string): unknown }): VoiceOperation {
+    const keys = ['runId', 'liveSessionId', 'delegationId', 'operationId', 'explanationRevision', 'cancellationEpoch', 'threadId', 'turnId', 'status'];
+    return VoiceOperationSchema.parse(Object.fromEntries(keys.map((key) => [key, record.get(key)])));
+  }
+
+  // Idempotent on the operation ID: a repeat returns the stored row, whatever status it has reached.
+  // The same ID with different correlation is a conflict.
+  async insertVoiceOperation(input: VoiceOperation): Promise<VoiceOperation> {
+    const op = VoiceOperationSchema.parse(input);
+    return this.write(async (tx) => {
+      const run = await tx.run('MATCH (r:Run {id: $id}) RETURN r.id AS id', { id: op.runId });
+      if (run.records.length === 0) throw runNotFound(op.runId);
+      const merged = await tx.run(
+        `MERGE (v:VoiceOperation {id: $operationId})
+         ON CREATE SET v.runId = $runId, v.liveSessionId = $liveSessionId, v.delegationId = $delegationId, v.explanationRevision = $explanationRevision,
+                       v.cancellationEpoch = $cancellationEpoch, v.threadId = $threadId, v.turnId = $turnId, v.status = $status
+         ${VOICE_RETURN}`,
+        op,
+      );
+      const record = merged.records[0];
+      if (!record) throw new Error('Voice operation merge returned no row');
+      const stored = this.voiceRow(record);
+      if (correlationKey(op) !== correlationKey(stored)) {
+        throw new DomainError('CONFLICT', `Operation ${op.operationId} already exists with different correlation`);
+      }
+      return stored;
+    });
+  }
+
+  async getVoiceOperation(operationId: string): Promise<VoiceOperation | null> {
+    return this.read(async (tx) => {
+      const result = await tx.run(`MATCH (v:VoiceOperation {id: $operationId}) ${VOICE_RETURN}`, { operationId });
+      const record = result.records[0];
+      return record ? this.voiceRow(record) : null;
+    });
+  }
+
+  // Moves an operation only from the status the caller saw, and never out of a settled one, so two
+  // racing callers cannot both win.
+  async updateVoiceOperationStatus(operationId: string, status: VoiceOperation['status'], expected: VoiceOperation['status']): Promise<VoiceOperation> {
+    const next = VoiceOperationStatusSchema.parse(status);
+    const from = VoiceOperationStatusSchema.parse(expected);
+    return this.write(async (tx) => {
+      const changed = await tx.run(
+        `MATCH (v:VoiceOperation {id: $operationId}) WHERE v.status = $from AND NOT v.status IN $settled SET v.status = $next ${VOICE_RETURN}`,
+        { operationId, from, next, settled: SETTLED_VOICE_STATUSES },
+      );
+      const record = changed.records[0];
+      if (record) return this.voiceRow(record);
+      const exists = await tx.run('MATCH (v:VoiceOperation {id: $operationId}) RETURN v.status AS status', { operationId });
+      const current = exists.records[0];
+      if (!current) throw new DomainError('NOT_FOUND', `Unknown voice operation ${operationId}`);
+      throw new DomainError('CONFLICT', `Operation ${operationId} is ${str(current.get('status'))}, not ${from}`);
+    });
+  }
+
+  async listVoiceOperations(runId: string): Promise<VoiceOperation[]> {
+    return this.read(async (tx) => {
+      const result = await tx.run(`MATCH (v:VoiceOperation {runId: $runId}) ${VOICE_RETURN} ORDER BY v.id`, { runId });
+      return result.records.map((r) => this.voiceRow(r));
     });
   }
 
