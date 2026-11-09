@@ -26,8 +26,10 @@ export type RouteHandler<N extends RouteName> = (request: RouteRequest<N>) => Pr
 export type RouteHandlers = { [N in RouteName]?: RouteHandler<N> };
 
 // Thrown by a handler to answer with a shared error code; the code decides the HTTP status.
+// INTERNAL is excluded: only the server's own fault path answers 500, so a handler cannot send a
+// fault's text to the browser under that code.
 export class RouteError extends Error {
-  constructor(readonly body: ErrorBody & { code: HttpErrorCode }) {
+  constructor(readonly body: ErrorBody & { code: Exclude<HttpErrorCode, 'INTERNAL'> }) {
     super(body.message);
   }
 }
@@ -48,11 +50,11 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.woff2': 'font/woff2',
 };
 
-// Error answers for requests that never reach a route. The shared codes have no dedicated value
-// for a refused host or session, a missing handler or a server bug, so these reuse the closest one.
-const FORBIDDEN = (message: string): ErrorBody => ({ code: 'INVALID_INPUT', message, retryable: false });
-const NOT_READY = (message: string): ErrorBody => ({ code: 'RUNTIME_DISCONNECTED', message, retryable: true });
-const INTERNAL: ErrorBody = { code: 'RUNTIME_DISCONNECTED', message: 'The server failed to answer this request', retryable: false };
+// Error answers for requests that never reach a route.
+const FORBIDDEN = (message: string): ErrorBody => ({ code: 'FORBIDDEN', message, retryable: false });
+const NOT_READY = (message: string): ErrorBody => ({ code: 'NOT_READY', message, retryable: true });
+// A fault answers with an ID that matches its log line; the fault's own text never reaches the browser.
+const INTERNAL = (errorId: string): ErrorBody => ({ code: 'INTERNAL', message: 'The server failed to answer this request', retryable: false, errorId });
 const NOT_FOUND: ErrorBody = { code: 'NOT_FOUND', message: 'Not found', retryable: false };
 
 const isApiPath = (pathname: string) => pathname === '/api' || pathname.startsWith('/api/');
@@ -208,8 +210,9 @@ export function createAppServer({ config, nonce, handlers = {}, frontend }: { co
       return serveFrontend(req, res, url.pathname);
     };
     handle().catch((error: unknown) => {
-      console.error(error);
-      if (!res.headersSent) sendJson(res, HTTP_STATUS.internalError, INTERNAL);
+      const errorId = `err_${randomBytes(8).toString('hex')}`;
+      console.error(`[${errorId}]`, error);
+      if (!res.headersSent) sendJson(res, HTTP_STATUS.internalError, INTERNAL(errorId));
       else res.destroy();
     });
   });
