@@ -1,0 +1,105 @@
+/* Explanation, thinking, clarification and outcome screens, plus the voice row other screens reuse.
+   Scoped under .ex so these rules never restyle another screen. Builds on tokens.css and the shared
+   controls in components.css. */
+
+/* Padding stays inside every width, so a full-width screen never pushes past the viewport. */
+.ex,
+.ex * { box-sizing: border-box; }
+
+/* Additions to the shared controls: a pressed toggle and focus on the number choices. */
+.ex .p-button[aria-pressed="true"] {
+  background: var(--p-disabled);
+  border-color: var(--p-text);
+  box-shadow: inset 0 2px 0 var(--p-control-border);
+}
+.ex-tick:has(input:focus-visible) {
+  outline: 3px solid var(--p-focus);
+  outline-offset: 3px;
+}
+
+/* Screen layout: guidance left of the work on a wide iPad, stacked above it in portrait --------- */
+.ex-screen,
+.ex-outcome {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: var(--p-space-4) var(--p-space-2);
+  color: var(--p-text);
+  font-size: var(--p-font-body);
+  line-height: var(--p-line-body);
+}
+.ex-screen {
+  display: grid;
+  grid-template-areas: "guide" "work" "stop";
+  gap: var(--p-space-3);
+}
+.ex-screen > * { min-width: 0; }
+.ex-guide { grid-area: guide; display: flex; flex-direction: column; align-items: flex-start; gap: var(--p-space-2); }
+.ex-work { grid-area: work; display: flex; flex-direction: column; gap: var(--p-space-2); }
+.ex-stop { grid-area: stop; }
+@media (min-width: 1000px) {
+  .ex-screen {
+    grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.6fr);
+    grid-template-areas: "guide work" "stop work";
+    grid-template-rows: auto 1fr;
+    column-gap: var(--p-space-4);
+    align-items: start;
+  }
+}
+
+.ex-title { margin: 0; font-size: var(--p-font-heading); line-height: var(--p-line-heading); overflow-wrap: anywhere; }
+.ex-body { margin: var(--p-space-1) 0 0; }
+.ex-quiet { margin: 0; color: var(--p-muted); }
+.ex-intro { margin: 0; }
+
+.ex-problem { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--p-space-2); border: 2px solid var(--p-border); }
+.ex-math { margin: 0; font-size: var(--p-font-math); font-weight: 750; line-height: 1.1; }
+.ex-answer { display: flex; align-items: baseline; gap: var(--p-space-1); margin: 0; }
+.ex-answer dt { color: var(--p-muted); }
+.ex-answer dd { margin: 0; font-size: var(--p-font-heading); font-weight: 750; }
+
+/* Voice row ------------------------------------------------------------------------------- */
+.ex-voice { display: flex; flex-wrap: wrap; align-items: center; gap: var(--p-space-1) var(--p-space-2); }
+.ex-voice-status { display: flex; align-items: center; gap: var(--p-space-1); min-height: var(--p-target-min); margin: 0; font-weight: 700; }
+.ex-voice-status:empty { display: none; }
+.ex-voice-mark { width: 14px; height: 14px; border: 2px solid var(--p-text); border-radius: 50%; }
+.ex-voice[data-session="live"][data-microphone="on"] .ex-voice-mark { background: var(--p-text); }
+.ex-voice-controls { display: flex; flex-wrap: wrap; gap: var(--p-space-1); }
+
+/* Captions wrap inside the column; long words break instead of widening the page. */
+.ex-captions { display: flex; flex-direction: column; gap: var(--p-space-1); }
+.ex-caption { margin: 0; padding: var(--p-space-2); border-radius: var(--p-radius-card); background: var(--p-surface); }
+.ex-caption figcaption { color: var(--p-muted); font-size: var(--p-font-small); font-weight: 700; }
+.ex-caption p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.ex-typed { display: flex; flex-direction: column; align-items: flex-start; gap: var(--p-space-1); }
+.ex-typed .p-input { margin-bottom: 0; }
+.ex-preview { width: 100%; padding: var(--p-space-2); border: 2px dashed var(--p-control-border); border-radius: var(--p-radius-card); background: var(--p-surface); }
+.ex-preview-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* clarify_first_number: native radios so arrow keys move within the group. */
+.ex-first-number { margin: 0; padding: 0; border: 0; min-width: 0; }
+.ex-ticks { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--p-target-student), 1fr)); gap: var(--p-space-1); }
+.ex-tick {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: var(--p-target-student);
+  border: 2px solid var(--p-control-border);
+  border-radius: var(--p-radius-control);
+  background: var(--p-surface);
+  font-size: var(--p-font-body);
+  font-weight: 700;
+  cursor: pointer;
+}
+.ex-tick input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.ex-tick:has(input:checked) { background: var(--p-primary); border-color: var(--p-primary-edge); color: var(--p-on-primary); }
+
+/* Outcome ------------------------------------------------------------------------------------ */
+.ex-outcome { display: flex; flex-direction: column; align-items: center; gap: var(--p-space-3); text-align: center; }
+.ex-outcome-card { width: 100%; max-width: 720px; padding: var(--p-space-4) var(--p-space-3); border: 2px solid var(--p-border); }
+.ex-outcome[data-tone="success"] .ex-outcome-card { border-color: var(--p-success); }
+.ex-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--p-space-2); }
+.ex-correction-closed { display: flex; flex-direction: column; align-items: flex-start; gap: var(--p-space-1); }
+.ex-connection { max-width: 1160px; margin: var(--p-space-2) auto 0; }
+.ex-retry { display: flex; flex-direction: column; gap: var(--p-space-2); }
