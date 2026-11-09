@@ -374,6 +374,15 @@ describe('run engine (stub runtime)', () => {
     await rejectedWithoutEffect(engine, runId, { type: 'explain', text: 'I counted eight.' });
   });
 
+  test('a failed make-ten support is terminal even with an intervention left, because no counting trace remains to explain (stub runtime)', async () => {
+    const engine = createEngine({ store, runtime: stubRuntime().runtime });
+    const runId = await invitedRun();
+    await toPractice(engine, runId);
+    const { run } = await send(engine, runId, { type: 'practice', attempt: makeTen((await problemsOf(runId)).initial, 12) });
+    assert.deepEqual([run.state.phase, run.state.continuationAllowed, run.state.interventionCount], ['NEEDS_SUPPORT', false, 1]);
+    await rejectedWithoutEffect(engine, runId, { type: 'explain', text: 'I put three in the box.' });
+  });
+
   test('a practice pass with hints enters VERIFY with hints kept; the independent activity has no helpers (stub runtime)', async () => {
     const engine = createEngine({ store, runtime: stubRuntime().runtime });
     const runId = await invitedRun();
