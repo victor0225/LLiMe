@@ -47,13 +47,16 @@ export const ERROR_HTTP_STATUS = {
   PAYLOAD_TOO_LARGE: HTTP_STATUS.payloadTooLarge,
   VALIDATION_FAILED: HTTP_STATUS.unprocessable,
   RUNTIME_DISCONNECTED: HTTP_STATUS.unavailable,
+  FORBIDDEN: HTTP_STATUS.forbidden,
+  INTERNAL: HTTP_STATUS.internalError,
+  NOT_READY: HTTP_STATUS.unavailable,
 } as const satisfies Partial<Record<ErrorCode, number>>;
 export type HttpErrorCode = keyof typeof ERROR_HTTP_STATUS;
 
 export const HttpErrorSchema = ErrorBodySchema.refine(
   (e) => !(e.code in ERROR_HTTP_STATUS && ERROR_HTTP_STATUS[e.code as HttpErrorCode] === HTTP_STATUS.conflict) || e.revision !== undefined,
   { message: 'A 409 error carries the current run revision', path: ['revision'] },
-);
+).refine((e) => e.code !== 'INTERNAL' || e.errorId !== undefined, { message: 'A 500 error carries a safe error ID', path: ['errorId'] });
 
 // ---------------------------------------------------------------------------------------------
 // Request and response bodies.
