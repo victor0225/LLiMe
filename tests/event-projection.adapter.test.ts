@@ -20,12 +20,13 @@ describe('server adapter', () => {
     // One event of every type, in an order with known offsets: input at 1000 ms, others after it.
     const events = EVENT_TYPES.map((type, index) => raw(index + 1, type, type === 'runtime.input' ? 1000 : 1000 + (index + 1) * 250, {}));
     const adapted = adaptRunEvents(events);
-    assert.deepEqual(adapted.map((e) => e.type), events.filter((e) => EVENT_DISPOSITION[e.type] === 'project').map((e) => e.type));
+    const sources = events.filter((e) => EVENT_DISPOSITION[e.type] !== 'drop');
+    assert.deepEqual(adapted.map((e) => e.type), sources.map((e) => (EVENT_DISPOSITION[e.type] === 'project' ? e.type : EVENT_DISPOSITION[e.type])));
     assert.deepEqual(adapted.map((e) => e.sequence), adapted.map((_, i) => i), 'sequence is renumbered consecutively from 0');
     const input = adapted.find((e) => e.type === 'runtime.input');
     assert.equal(input?.elapsedMs, 0);
     for (const e of adapted) {
-      const source = events.find((s) => s.type === e.type);
+      const source = sources[e.sequence];
       assert.ok(source);
       if (e.sequence > (input?.sequence ?? Infinity)) assert.equal(e.elapsedMs, Date.parse(source.at) - (START + 1000), e.type);
     }
