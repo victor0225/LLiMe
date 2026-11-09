@@ -35,6 +35,30 @@ final class ContractDriftTests: XCTestCase {
         XCTAssertTrue(routes.contains("bootstrap: { method: 'GET', path: '\(BackendRoute.bootstrapPath)'"))
     }
 
+    func test_the_shell_tokens_match_the_web_token_sheet() throws {
+        let sheet = try source("web/styles/tokens.css")
+        let colors: [(String, UInt32)] = [
+            ("--p-background", ShellTokens.background),
+            ("--p-text", ShellTokens.text),
+            ("--p-muted", ShellTokens.muted),
+            ("--p-primary", ShellTokens.primary),
+            ("--p-on-primary", ShellTokens.onPrimary),
+        ]
+        for (name, value) in colors {
+            XCTAssertTrue(sheet.contains("\(name): #\(String(format: "%06x", value));"), name)
+        }
+        let sizes: [(String, Double)] = [
+            ("--p-font-body", ShellTokens.bodySize),
+            ("--p-font-heading", ShellTokens.headingSize),
+            ("--p-space-2", ShellTokens.spacing),
+            ("--p-radius-control", ShellTokens.radius),
+            ("--p-target-student", ShellTokens.studentTarget),
+        ]
+        for (name, value) in sizes {
+            XCTAssertTrue(sheet.contains("\(name): \(Int(value))px;"), name)
+        }
+    }
+
     // MARK: Helpers
 
     private func source(_ path: String) throws -> String {
