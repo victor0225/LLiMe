@@ -30,6 +30,7 @@ import {
   type RunState,
   type Strategy,
   type VoiceOperation,
+  validateCase,
 } from './domain.js';
 import { EventSchema, type EventPayload, type EventType, type RunEvent, type RunEventOf } from './events.js';
 
@@ -91,7 +92,15 @@ export type TransitionContext = {
   now: string;
   // Reads saved events of one type inside the same transaction, in seq order.
   eventsOfType<T extends EventType>(type: T): Promise<RunEventOf<T>[]>;
+  // Whether the client already confirmed that this activity revision mounted.
+  isActivityRendered(activityId: string, revision: number): Promise<boolean>;
 };
+
+// A voice or agent operation record written inside a transition. `status` moves an existing row only
+// from one of `expected`; `onMismatch: 'skip'` leaves a row that already settled elsewhere untouched.
+export type VoiceOperationChange =
+  | { kind: 'insert'; operation: VoiceOperation }
+  | { kind: 'status'; operationId: string; status: VoiceOperation['status']; expected: readonly VoiceOperation['status'][]; onMismatch: 'skip' | 'reject' };
 
 export type Mutation<R> = {
   state: RunState;
@@ -99,6 +108,9 @@ export type Mutation<R> = {
   cases?: LearningCase[];
   activities?: Activity[];
   outbox?: NotificationOutbox[];
+  voiceOperations?: VoiceOperationChange[];
+  // Activity revisions whose render receipt this transition records.
+  renderedActivities?: { activityId: string; revision: number }[];
   // The receipt stored for replay. A function receives the events as written, so a result can name their seq.
   result: R | ((written: RunEvent[]) => R);
 };
@@ -114,6 +126,8 @@ export type TransitionRequest<R> = {
 };
 
 export type RunRecord = { id: string; revision: number; seq: number; state: RunState };
+// Parses a stored command receipt that holds a whole run record.
+export const RunRecordSchema: z.ZodType<RunRecord> = z.strictObject({ id: z.string(), revision: z.number().int().min(0), seq: z.number().int().min(0), state: RunStateSchema });
 
 export type StudentCase = { id: string; concept: Concept; strategy: Strategy; outcome: Outcome; createdAt: string; nodeIds: string[] };
 
@@ -134,6 +148,9 @@ const SETTLED_VOICE_STATUSES: readonly VoiceOperation['status'][] = ['completed'
 const VOICE_RETURN = 'RETURN v.runId AS runId, v.liveSessionId AS liveSessionId, v.delegationId AS delegationId, v.id AS operationId, v.explanationRevision AS explanationRevision, v.cancellationEpoch AS cancellationEpoch, v.threadId AS threadId, v.turnId AS turnId, v.status AS status';
 
 const RUN_SCOPED_LABELS = ['Event', 'Command', 'Activity', 'VoiceOperation', 'NotificationOutbox'] as const;
+
+// Phases in which a step may have been cut off by a restart.
+const RECOVERABLE_PHASES: readonly RunState['phase'][] = ['INGESTING', 'PROCESSING', 'VERIFY'];
 
 const str = (value: unknown) => z.string().parse(value);
 const num = (value: unknown) => z.number().parse(value);
@@ -287,15 +304,17 @@ export class Store {
     return true;
   }
 
+  // Counts the seed only: live cases written by runs (provenance live_demo) are left out, so a run in
+  // progress never changes what the seed reports.
   async seedCounts(): Promise<SeedCounts> {
     return this.read(async (tx) => {
       const count = async (query: string) => num((await tx.run(query)).records[0]?.get('n'));
       return {
-        cases: await count('MATCH (n:Case) RETURN count(n) AS n'),
-        memoryNodes: await count('MATCH (n:MemoryNode) RETURN count(n) AS n'),
+        cases: await count(`MATCH (n:Case {provenance: 'synthetic'}) RETURN count(n) AS n`),
+        memoryNodes: await count(`MATCH (:Case {provenance: 'synthetic'})-[:CONTAINS]->(n:MemoryNode) RETURN count(n) AS n`),
         students: await count('MATCH (n:Student) RETURN count(n) AS n'),
         concepts: await count('MATCH (n:Concept) RETURN count(n) AS n'),
-        caseEdges: await count('MATCH (:MemoryNode)-[r]->(:MemoryNode) RETURN count(r) AS n'),
+        caseEdges: await count(`MATCH (:Case {provenance: 'synthetic'})-[:CONTAINS]->(:MemoryNode)-[r]->(:MemoryNode) RETURN count(r) AS n`),
         conceptLinks: await count('MATCH (:Concept)-[r:CONCEPT_LINK]->(:Concept) RETURN count(r) AS n'),
         subconceptEdges: await count('MATCH (:Concept)-[r:SUBCONCEPT_OF]->(:Concept) RETURN count(r) AS n'),
       };
@@ -450,6 +469,10 @@ export class Store {
           const found = await tx.run('MATCH (e:Event {runId: $runId, type: $type}) RETURN e.payload AS payload ORDER BY e.seq', { runId, type });
           return found.records.map((r) => parseEvent(r.get('payload'))).filter((e): e is RunEventOf<typeof type> => e.type === type);
         },
+        isActivityRendered: async (activityId, revision) => {
+          const found = await tx.run('MATCH (a:Activity {id: $id}) RETURN a.renderedAt IS NOT NULL AS rendered', { id: activityKey(runId, activityId, revision) });
+          return found.records[0]?.get('rendered') === true;
+        },
       });
 
       const newState = RunStateSchema.parse(mutation.state);
@@ -457,6 +480,8 @@ export class Store {
       for (const c of cases) await this.writeCase(tx, c, c.provenance === 'live_demo' ? runId : null);
       for (const activity of mutation.activities ?? []) await this.writeActivity(tx, activity);
       for (const outbox of mutation.outbox ?? []) await this.writeOutbox(tx, NotificationOutboxSchema.parse(outbox));
+      for (const change of mutation.voiceOperations ?? []) await this.writeVoiceOperationChange(tx, runId, change);
+      for (const rendered of mutation.renderedActivities ?? []) await this.markActivityRendered(tx, runId, rendered, at);
 
       const committed: NewEvent = { type: 'state.committed', payload: { phase: newState.phase, revision: revision + 1, caseIds: cases.map((c) => c.id) } };
       const written = await this.writeEvents(tx, runId, seq, [...mutation.events, committed], at);
@@ -701,6 +726,97 @@ export class Store {
     return this.read(async (tx) => {
       const result = await tx.run(`MATCH (v:VoiceOperation {runId: $runId}) ${VOICE_RETURN} ORDER BY v.id`, { runId });
       return result.records.map((r) => this.voiceRow(r));
+    });
+  }
+
+  private async writeVoiceOperationChange(tx: ManagedTransaction, runId: string, change: VoiceOperationChange): Promise<void> {
+    if (change.kind === 'insert') {
+      const op = VoiceOperationSchema.parse(change.operation);
+      if (op.runId !== runId) throw new DomainError('VALIDATION_FAILED', `Operation ${op.operationId} belongs to run ${op.runId}, not ${runId}`);
+      const merged = await tx.run(
+        `MERGE (v:VoiceOperation {id: $operationId})
+         ON CREATE SET v.runId = $runId, v.liveSessionId = $liveSessionId, v.delegationId = $delegationId, v.explanationRevision = $explanationRevision,
+                       v.cancellationEpoch = $cancellationEpoch, v.threadId = $threadId, v.turnId = $turnId, v.status = $status
+         ${VOICE_RETURN}`,
+        op,
+      );
+      const record = merged.records[0];
+      if (!record) throw new Error('Voice operation merge returned no row');
+      if (correlationKey(op) !== correlationKey(this.voiceRow(record))) throw new DomainError('CONFLICT', `Operation ${op.operationId} already exists with different correlation`);
+      return;
+    }
+    const next = VoiceOperationStatusSchema.parse(change.status);
+    const changed = await tx.run(
+      'MATCH (v:VoiceOperation {id: $operationId, runId: $runId}) WHERE v.status IN $expected AND NOT v.status IN $settled SET v.status = $next RETURN v.id AS id',
+      { operationId: change.operationId, runId, expected: [...change.expected], settled: SETTLED_VOICE_STATUSES, next },
+    );
+    if (changed.records.length > 0 || change.onMismatch === 'skip') return;
+    throw new DomainError('CONFLICT', `Operation ${change.operationId} is not in ${change.expected.join(' or ')}`);
+  }
+
+  private async markActivityRendered(tx: ManagedTransaction, runId: string, rendered: { activityId: string; revision: number }, at: string): Promise<void> {
+    const marked = await tx.run('MATCH (a:Activity {id: $id}) WHERE a.renderedAt IS NULL SET a.renderedAt = $at RETURN a.id AS id', { id: activityKey(runId, rendered.activityId, rendered.revision), at });
+    if (marked.records.length === 0) throw new DomainError('CONFLICT', `Activity ${rendered.activityId} revision ${rendered.revision} is unknown or already rendered`);
+  }
+
+  // The run's pinned corpus as full cases, in ID order. The pin is fixed at run creation, so a live case
+  // committed later can never enter it.
+  async getPinnedCases(runId: string): Promise<LearningCase[]> {
+    return this.read(async (tx) => {
+      const pinned = await tx.run('MATCH (r:Run {id: $id}) RETURN r.corpusCaseIds AS ids', { id: runId });
+      const row = pinned.records[0];
+      if (!row) throw runNotFound(runId);
+      const result = await tx.run('MATCH (c:Case) WHERE c.id IN $ids RETURN c.payload AS payload ORDER BY c.id', { ids: z.array(z.string()).parse(row.get('ids')) });
+      return result.records.map((r) => validateCase(JSON.parse(str(r.get('payload')))));
+    });
+  }
+
+  // Runs a restart may need to reconcile: mid-step phases and stopped runs. Phase lives inside the state
+  // JSON, so the filter runs here. A shared development database holds other processes' runs, so a caller
+  // may limit the scan to its own run-ID prefix.
+  async listRecoverableRuns(runIdPrefix: string | null = null): Promise<RunRecord[]> {
+    const runs = await this.read(async (tx) => {
+      const result = await tx.run('MATCH (r:Run) WHERE $prefix IS NULL OR r.id STARTS WITH $prefix RETURN r.id AS id, r.state AS state, r.revision AS revision, r.seq AS seq ORDER BY r.id', { prefix: runIdPrefix });
+      return result.records.map((r) => ({ id: str(r.get('id')), revision: num(r.get('revision')), seq: num(r.get('seq')), state: RunStateSchema.parse(JSON.parse(str(r.get('state')))) }));
+    });
+    return runs.filter((r) => r.state.stopped || RECOVERABLE_PHASES.includes(r.state.phase));
+  }
+
+  // -------------------------------------------------------------------------------------------
+  // Audio gate: a record, not a transition. An independent check counts only when the microphone and
+  // playback were torn down for that activity, or when the run never opened a voice session.
+
+  async recordVoiceSessionOpened(runId: string, voiceSessionId: string): Promise<void> {
+    await this.write(async (tx) => {
+      const result = await tx.run(
+        'MATCH (r:Run {id: $id}) SET r.voiceSessionIds = CASE WHEN $session IN coalesce(r.voiceSessionIds, []) THEN r.voiceSessionIds ELSE coalesce(r.voiceSessionIds, []) + $session END RETURN r.id AS id',
+        { id: runId, session: voiceSessionId },
+      );
+      if (result.records.length === 0) throw runNotFound(runId);
+    });
+  }
+
+  async recordAudioGateClosed(runId: string, activityId: string, activityRevision: number, voiceSessionId: string | null): Promise<void> {
+    await this.write(async (tx) => {
+      const result = await tx.run('MATCH (a:Activity {id: $id}) SET a.audioGateClosedAt = coalesce(a.audioGateClosedAt, $at), a.audioGateSessionId = $session RETURN a.id AS id', {
+        id: activityKey(runId, activityId, activityRevision),
+        at: this.now().toISOString(),
+        session: voiceSessionId,
+      });
+      if (result.records.length === 0) throw new DomainError('NOT_FOUND', `Unknown activity ${activityId} revision ${activityRevision}`);
+    });
+  }
+
+  async audioGateClosed(runId: string, activityId: string, activityRevision: number): Promise<boolean> {
+    return this.read(async (tx) => {
+      const result = await tx.run(
+        `MATCH (r:Run {id: $runId}) OPTIONAL MATCH (a:Activity {id: $id})
+         RETURN size(coalesce(r.voiceSessionIds, [])) = 0 AS noVoice, a.audioGateClosedAt IS NOT NULL AS closed`,
+        { runId, id: activityKey(runId, activityId, activityRevision) },
+      );
+      const row = result.records[0];
+      if (!row) throw runNotFound(runId);
+      return row.get('noVoice') === true || row.get('closed') === true;
     });
   }
 

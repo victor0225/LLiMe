@@ -12,8 +12,8 @@ import { ROUTES, routePath } from '../src/routes.js';
 import { bootServer, type RunningServer, type ServerPorts } from '../src/server.js';
 import { createRunId, Store } from '../src/store.js';
 
-// Real local Neo4j; the routes read persisted runs and events. Modules this suite does not exercise
-// are bound to stand-ins that fail loudly if a route reaches them.
+// Real local Neo4j; the routes read persisted runs and events. The engine, voice and Codex modules
+// are not bound, and the routes this suite does not exercise fail loudly if reached.
 const config = parseConfig({ PORT: '4980', VITE_PORT: '4981', STORYBOOK_PORT: '4982' });
 const created: string[] = [];
 let store: Store;
@@ -27,16 +27,8 @@ const unexpected = (name: string) => async (): Promise<never> => {
 function portsFor(runStore: ServerPorts['store']): ServerPorts {
   return {
     store: runStore,
-    engine: {
-      createRun: unexpected('engine.createRun'),
-      command: unexpected('engine.command'),
-      voiceCommand: unexpected('engine.voiceCommand'),
-      recoverInterrupted: async () => ({ cleanupRunIds: [] }),
-      settle: async () => {},
-    },
+    createRun: unexpected('createRun'),
     lessons: { readLesson: unexpected('lessons.readLesson'), saveTranscript: unexpected('lessons.saveTranscript') },
-    voice: { createSession: unexpected('voice.createSession'), snapshot: unexpected('voice.snapshot'), command: unexpected('voice.command'), closeRun: async () => {} },
-    runtime: { interruptRun: async () => {}, interruptActiveTurns: async () => {}, close: async () => {} },
     startInbox: async () => ({ stop: async () => {} }),
     startOutbox: async () => ({ stop: async () => {} }),
   };
