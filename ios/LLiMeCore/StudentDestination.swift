@@ -5,6 +5,15 @@ enum BackendRoute {
     /// Answers 200 once the backend can serve a session; the shell opens nothing before that.
     static let bootstrapPath = "/api/bootstrap"
     static let studentPath = "/student"
+
+    static func bootstrapURL(on origin: URL) -> URL? {
+        var components = URLComponents()
+        components.scheme = origin.scheme
+        components.host = origin.host
+        components.port = origin.port
+        components.path = bootstrapPath
+        return components.url
+    }
 }
 
 extension NotificationTap {

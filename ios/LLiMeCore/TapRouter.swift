@@ -15,7 +15,7 @@ struct TapRouter {
     private(set) var pending: NotificationTap?
     /// Every tap seen this launch, by notificationId. A session sees a handful, so it is not trimmed.
     private var seen: [String: NotificationTap] = [:]
-    private var isWebViewMounted = false
+    private(set) var isWebViewMounted = false
     private var isBackendReachable = false
 
     /// The tap to open now, or nil while waiting for a tap, the web view or a fresh backend probe.
