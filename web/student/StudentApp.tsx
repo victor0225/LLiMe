@@ -68,10 +68,7 @@ function StudentFrame({ children, isBusy = false }: { children: ReactNode; isBus
 function RunUnavailable() {
   return (
     <StudentFrame>
-      <section className="student-card student-message">
-        <Mascot state="idle" size={120} />
-        <h1 className="student-tutor">{STUDENT_COPY.runUnavailable}</h1>
-      </section>
+      <RunUnavailableCard />
     </StudentFrame>
   );
 }
@@ -85,9 +82,11 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
     return () => store.stop();
   }, [store]);
 
-  const { submit, isPending, saveUnconfirmed } = useRunSubmit(store);
+  const { submit, isPending, unansweredRevision } = useRunSubmit(store);
   const openedUnavailable = useNotificationOpened(store, runId);
   const run = view.run;
+  // Once the run moves past the revision the unanswered command targeted, its outcome is known.
+  const saveUnconfirmed = unansweredRevision !== null && run?.revision === unansweredRevision;
   const connection = view.status === 'live' || view.status === 'loading' ? 'live' : 'paused';
   const voiceOff = useAudioGateClosed(runId, run?.phase === 'VERIFY');
 
@@ -192,6 +191,7 @@ function IndependentGate({ slot, activity }: { slot: StudentSlot; activity: Stud
 function RunUnavailableCard() {
   return (
     <section className="student-card student-message">
+      <Mascot state="idle" size={120} />
       <h1 className="student-tutor">{STUDENT_COPY.runUnavailable}</h1>
     </section>
   );
@@ -212,7 +212,7 @@ function ConnectionStatus({ connection, saveUnconfirmed }: { connection: Student
 
 function useRunSubmit(store: EventStore) {
   const [isPending, setPending] = useState(false);
-  const [saveUnconfirmed, setSaveUnconfirmed] = useState(false);
+  const [unansweredRevision, setUnansweredRevision] = useState<number | null>(null);
   // A command that got no answer. Sending it again unchanged lets the server return its receipt
   // instead of applying a second, different command.
   const unanswered = useRef<{ input: string; command: Command } | null>(null);
@@ -230,16 +230,16 @@ function useRunSubmit(store: EventStore) {
           return attempt.sent;
         });
         unanswered.current = null;
-        setSaveUnconfirmed(false);
+        setUnansweredRevision(null);
         return 'saved';
       } catch (error) {
         if (error instanceof RunRequestError) {
           unanswered.current = null;
-          setSaveUnconfirmed(false);
+          setUnansweredRevision(null);
           return error.status === HTTP_STATUS.conflict ? 'conflict' : 'failed';
         }
         unanswered.current = attempt.sent ? { input: inputKey, command: attempt.sent } : null;
-        setSaveUnconfirmed(attempt.sent !== null);
+        setUnansweredRevision(attempt.sent?.revision ?? null);
         return 'failed';
       } finally {
         setPending(false);
@@ -247,7 +247,7 @@ function useRunSubmit(store: EventStore) {
     },
     [store],
   );
-  return { submit, isPending, saveUnconfirmed };
+  return { submit, isPending, unansweredRevision };
 }
 
 const NOTIFICATION_PARAMS = ['activityId', 'activityRevision', 'notificationId'] as const;
