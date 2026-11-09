@@ -82,6 +82,8 @@ export type TransitionContext = {
   state: RunState;
   revision: number;
   seq: number;
+  // The transition's timestamp: its events and records all carry this one instant.
+  now: string;
   // Reads saved events of one type inside the same transaction, in seq order.
   eventsOfType<T extends EventType>(type: T): Promise<RunEventOf<T>[]>;
 };
@@ -425,10 +427,12 @@ export class Store {
       if (revision !== expectedRevision) throw new DomainError('STALE_REVISION', `The run is at revision ${revision}, not ${expectedRevision}`, { revision });
       const seq = num(row.get('seq'));
       const state = RunStateSchema.parse(JSON.parse(str(row.get('state'))));
+      const at = this.now().toISOString();
       const mutation = await request.apply({
         state,
         revision,
         seq,
+        now: at,
         eventsOfType: async (type) => {
           const found = await tx.run('MATCH (e:Event {runId: $runId, type: $type}) RETURN e.payload AS payload ORDER BY e.seq', { runId, type });
           return found.records.map((r) => parseEvent(r.get('payload'))).filter((e): e is RunEventOf<typeof type> => e.type === type);
@@ -442,7 +446,7 @@ export class Store {
       for (const outbox of mutation.outbox ?? []) await this.writeOutbox(tx, NotificationOutboxSchema.parse(outbox));
 
       const committed: NewEvent = { type: 'state.committed', payload: { phase: newState.phase, revision: revision + 1, caseIds: cases.map((c) => c.id) } };
-      const written = await this.writeEvents(tx, runId, seq, [...mutation.events, committed]);
+      const written = await this.writeEvents(tx, runId, seq, [...mutation.events, committed], at);
       const result = typeof mutation.result === 'function' ? (mutation.result as (events: RunEvent[]) => R)(written) : mutation.result;
       await tx.run('MATCH (r:Run {id: $id}) SET r.state = $state, r.revision = $revision, r.seq = $seq', {
         id: runId,
@@ -455,8 +459,7 @@ export class Store {
     });
   }
 
-  private async writeEvents(tx: ManagedTransaction, runId: string, lastSeq: number, events: readonly NewEvent[]): Promise<RunEvent[]> {
-    const at = this.now().toISOString();
+  private async writeEvents(tx: ManagedTransaction, runId: string, lastSeq: number, events: readonly NewEvent[], at = this.now().toISOString()): Promise<RunEvent[]> {
     // Parsing the envelope here means an event with a payload outside its schema cannot be saved.
     const written = events.map((event, i) => EventSchema.parse({ runId, seq: lastSeq + i + 1, type: event.type, payload: event.payload, at }));
     for (const event of written) {
