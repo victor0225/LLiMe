@@ -90,6 +90,11 @@ describe('configuration', () => {
     assert.deepEqual([defaults.port, defaults.vitePort, defaults.storybookPort], [4317, 5173, 6006]);
   });
 
+  test('reads the notification Simulator UDID, and treats an empty one as unset', () => {
+    assert.equal(parseConfig({ SIMULATOR_UDID: '7C1F0B6E-2A3D-4E5F-8A9B-0C1D2E3F4A5B' }).simulatorUdid, '7C1F0B6E-2A3D-4E5F-8A9B-0C1D2E3F4A5B');
+    assert.equal(parseConfig({ SIMULATOR_UDID: '' }).simulatorUdid, undefined);
+  });
+
   test('treats an empty secret as missing, never as an empty password', () => {
     assert.equal(parseConfig({ NEO4J_PASSWORD: '', OPENAI_API_KEY: '' }).neo4j.password, undefined);
   });

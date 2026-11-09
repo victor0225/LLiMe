@@ -10,7 +10,7 @@ import { INVITATION_COPY } from '../src/copy.js';
 import { HOST, parseConfig } from '../src/config.js';
 import { type Activity, type Command, type ErrorCode, MATCHING_VERSION, type NotificationOutbox, type RunState, RunStateSchema } from '../src/domain.js';
 import { EventSchema, type EventType, type RunEvent, RunSnapshotSchema } from '../src/events.js';
-import { HttpErrorSchema, LESSON_TEXT_MAX_BYTES, MAX_JSON_BODY_BYTES, routePath, SESSION_HEADER, VoiceSnapshotSchema, type VoiceSnapshot } from '../src/routes.js';
+import { BootstrapSchema, HttpErrorSchema, LessonStatusSchema, LESSON_TEXT_MAX_BYTES, ROUTES, MAX_JSON_BODY_BYTES, routePath, SESSION_HEADER, VoiceSnapshotSchema, type VoiceSnapshot } from '../src/routes.js';
 import { bootServer, type BootOptions, type RunRecord, type RunningServer, type ServerPorts, SHUTDOWN_DEADLINE_MS } from '../src/server.js';
 
 // The configured port drives the Host and Origin checks; each test server listens on a free port and
@@ -315,7 +315,8 @@ const post = (server: RunningServer, path: string, body: unknown, headers: Recor
 const json = (reply: Reply): unknown => JSON.parse(reply.text);
 const errorOf = (reply: Reply) => HttpErrorSchema.parse(json(reply));
 const eventsAfter = (server: RunningServer, runId: string, after: string) => send(server, { path: `${routePath('runEvents', { runId })}?after=${after}` });
-const seqsOf = (reply: Reply) => (json(reply) as RunEvent[]).map((e) => e.seq);
+const eventsOf = (reply: Reply) => ROUTES.runEvents.response.parse(json(reply));
+const seqsOf = (reply: Reply) => eventsOf(reply).map((e) => e.seq);
 const accept = (n: number, revision: number): Command => ({ type: 'accept', commandId: uuid(n), revision });
 
 before(() => {
@@ -412,7 +413,7 @@ describe('status codes', () => {
         assert.equal((await post(server, path, accept(7, 2))).status, 200, 'a request without an Origin header, such as an operator script, needs only the nonce');
         const inUrl = await send(server, { method: 'POST', path: `${path}?${SESSION_HEADER}=${NONCE}`, body: JSON.stringify(accept(8, 3)), headers: { origin: config.appOrigin } });
         assert.equal(inUrl.status, 403);
-        assert.equal(json(await send(server, { path: routePath('bootstrap') })) instanceof Object, true);
+        assert.equal(BootstrapSchema.parse(json(await send(server, { path: routePath('bootstrap') }))).nonce, NONCE);
       });
     } finally {
       Object.assign(console, originals);
@@ -466,7 +467,7 @@ describe('polling', () => {
       world.store.commit(RUN, runState({ phase: 'INGESTING' }));
       const resumed = await eventsAfter(server, RUN, '5');
       assert.deepEqual(seqsOf(resumed), [6, 7]);
-      assert.deepEqual([...(json(first) as RunEvent[]), ...(json(resumed) as RunEvent[])], json(await eventsAfter(server, RUN, '0')));
+      assert.deepEqual([...eventsOf(first), ...eventsOf(resumed)], eventsOf(await eventsAfter(server, RUN, '0')));
       assert.deepEqual(json(await eventsAfter(server, RUN, '99')), []);
     });
   });
@@ -518,7 +519,7 @@ describe('lesson', () => {
   test('GET lesson returns the inbox status, and both lesson routes are 404 for an unknown run (stub inbox)', async () => {
     await withServer(async (server, world) => {
       const status = await send(server, { path: routePath('getLesson', { runId: RUN }) });
-      assert.deepEqual([status.status, (json(status) as { saved: boolean }).saved], [200, false]);
+      assert.deepEqual([status.status, LessonStatusSchema.parse(json(status)).saved], [200, false]);
       assert.equal((await send(server, { path: routePath('getLesson', { runId: 'missing' }) })).status, 404);
       assert.equal((await post(server, routePath('saveLesson', { runId: 'missing' }), { text: 'x' })).status, 404);
       assert.equal(world.calls.filter((c) => c.includes('missing')).length, 0, 'an unknown run never reaches the inbox');
@@ -549,7 +550,7 @@ describe('voice routes', () => {
   test('voice session creation and the voice snapshot are answered by voice, and are 404 for an unknown run (stub voice)', async () => {
     await withServer(async (server) => {
       const created = await post(server, routePath('createVoiceSession', { runId: RUN }), { commandId: uuid(24), expectedRevision: 0, sdpOffer: 'v=0 offer' });
-      assert.deepEqual([created.status, (json(created) as { voiceSessionId: string }).voiceSessionId], [201, 'live-1']);
+      assert.deepEqual([created.status, ROUTES.createVoiceSession.response.parse(json(created)).voiceSessionId], [201, 'live-1']);
       assert.equal(VoiceSnapshotSchema.parse(json(await send(server, { path: routePath('voiceSnapshot', { runId: RUN }) }))).status, 'live');
       assert.equal((await send(server, { path: routePath('voiceSnapshot', { runId: 'missing' }) })).status, 404);
     });
