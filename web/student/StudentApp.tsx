@@ -94,7 +94,7 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
   // Once the run moves past the revision the unanswered command targeted, its outcome is known.
   const saveUnconfirmed = unansweredRevision !== null && run?.revision === unansweredRevision;
   const connection = view.status === 'live' || view.status === 'loading' ? 'live' : 'paused';
-  const voiceOff = useAudioGateClosed(runId, run?.phase === 'VERIFY');
+  const voiceOff = useAudioGateClosed(store, runId, run?.phase === 'VERIFY');
   const voice = useRunVoice(store, runId, run);
 
   if (openedUnavailable) return <StudentFrame>{unavailable ? unavailable(openedUnavailable) : <ActivityUnavailable />}</StudentFrame>;
@@ -303,15 +303,16 @@ function useRunVoice(store: EventStore, runId: string | null, run: RunSnapshot |
   const [isOffered, setOffered] = useState(false);
   useEffect(() => {
     let isCurrent = true;
-    fetch(routePath('bootstrap'), { headers: { accept: 'application/json' } })
-      .then(async (response) => BootstrapSchema.safeParse(response.ok ? await response.json() : null))
+    store
+      .readJson(routePath('bootstrap'))
+      .then((body) => BootstrapSchema.safeParse(body))
       .then((bootstrap) => isCurrent && setOffered(bootstrap.success && bootstrap.data.voice === 'configured_unverified' && bootstrap.data.inputMode === 'live'))
-      // Unreachable: typing stays available and voice is simply not offered.
+      // Unreachable or refused: typing stays available and voice is simply not offered.
       .catch(() => isCurrent && setOffered(false));
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [store]);
   const client = useMemo(() => createVoiceClient({ env: browserVoiceEnv(), api: eventStoreVoiceApi(store, runId ?? '') }), [store, runId]);
   // Leaving the run releases the microphone and closes the session.
   useEffect(() => () => void client.end(), [client]);
@@ -459,7 +460,7 @@ function useNotificationOpened(store: EventStore, runId: string | null): Unavail
   return reason;
 }
 
-function useAudioGateClosed(runId: string | null, isActive: boolean): boolean {
+function useAudioGateClosed(store: EventStore, runId: string | null, isActive: boolean): boolean {
   const [isClosed, setClosed] = useState(false);
   useEffect(() => {
     if (!runId || !isActive) return;
@@ -467,9 +468,9 @@ function useAudioGateClosed(runId: string | null, isActive: boolean): boolean {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const check = async () => {
       try {
-        const response = await fetch(routePath('voiceSnapshot', { runId }), { headers: { accept: 'application/json' }, cache: 'no-store' });
-        const voice = response.ok ? ROUTES.voiceSnapshot.response.safeParse(await response.json()) : null;
-        if (voice?.success && voice.data.audioGate === 'closed') return isCurrent && setClosed(true);
+        // The server answers every API read with cache-control: no-store.
+        const voice = ROUTES.voiceSnapshot.response.safeParse(await store.readJson(routePath('voiceSnapshot', { runId })));
+        if (voice.success && voice.data.audioGate === 'closed') return isCurrent && setClosed(true);
       } catch {
         // Unreachable: the gate stays closed and the next check retries.
       }
@@ -480,7 +481,7 @@ function useAudioGateClosed(runId: string | null, isActive: boolean): boolean {
       isCurrent = false;
       clearTimeout(timer);
     };
-  }, [runId, isActive]);
+  }, [store, runId, isActive]);
   return isActive && isClosed;
 }
 

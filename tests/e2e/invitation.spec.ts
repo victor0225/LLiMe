@@ -117,6 +117,17 @@ async function capture(page: Page, testInfo: TestInfo, name: string) {
   await page.screenshot({ path: testInfo.outputPath(`${name}.png`) });
 }
 
+test('a fixture story mounting the student screen makes no /api request', async ({ page }) => {
+  const api: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.startsWith('/api/')) api.push(request.url());
+  });
+  await page.goto(`${loadConfig().storybookOrigin}/iframe.html?id=student-invitation--linked-concept&viewMode=story`);
+  // The invitation shows only after the store's first snapshot, so every mount-time read has been issued.
+  await expect(page.getByText(INVITATION_COPY.bodyLinkedConcept, { exact: true })).toBeVisible();
+  expect(api).toEqual([]);
+});
+
 for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PORTRAIT]] as const) {
   test.describe(`student invitation, iPad ${orientation}`, () => {
     test.use({ viewport });
