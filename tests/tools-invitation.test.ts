@@ -175,7 +175,9 @@ describe('invitation publish: commit', () => {
     assert.deepEqual(run.state.selectedProblems, { initial: { lhs: 8, rhs: 5 }, independent: { lhs: 9, rhs: 4 } });
     assert.deepEqual(run.state.lessonProblems, [{ lhs: 7, rhs: 4 }, { lhs: 7, rhs: 6 }, { lhs: 6, rhs: 5 }]);
 
-    const events = (await store.events(runId)).filter((e) => e.seq > 2);
+    // Everything after the memory read's own tool.completed event belongs to the publish transaction.
+    const all = await store.events(runId);
+    const events = all.slice(all.findIndex((e) => e.type === 'tool.completed') + 1);
     assert.deepEqual(events.map((e) => e.type), ['memory.retrieved', 'activity.published', 'notification.queued', 'state.committed']);
     assert.equal(events.find((e) => e.type === 'activity.published')?.seq, eventSeq);
     const retrieved = events[0];

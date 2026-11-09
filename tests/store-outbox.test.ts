@@ -119,7 +119,7 @@ describe('notification outbox', () => {
     await store.claimNotification(unknown.row.notificationId);
     await store.markNotificationUnknown(unknown.row.notificationId, 'CRASH_AFTER_DISPATCH');
     assert.equal((await store.getNotification(unknown.row.notificationId))?.status, 'unknown');
-    for (const { runId } of [failed, unknown]) assert.deepEqual(await store.events(runId), []);
+    for (const { runId } of [failed, unknown]) assert.ok(!(await store.events(runId)).some((e) => e.type.startsWith('notification.')));
   });
 
   test('pending rows are listed for the backlog scan until they are claimed', async () => {

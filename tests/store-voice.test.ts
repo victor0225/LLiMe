@@ -6,6 +6,7 @@ import { createRunId, DomainError, Store } from '../src/store.js';
 
 const TASK_ID = 'd-task_c9edd4ffd032';
 const created: string[] = [];
+const isDomain = (code: string) => (error: unknown) => error instanceof DomainError && error.code === code;
 let store: Store;
 let seed: LoadedSeed;
 
@@ -17,7 +18,12 @@ before(async () => {
 
 after(async () => {
   for (const runId of created) {
-    await store.resetRun(runId);
+    try {
+      await store.resetRun(runId);
+    } catch (error) {
+      // A test that already reset its run leaves nothing to remove.
+      if (!isDomain('NOT_FOUND')(error)) throw error;
+    }
     assert.equal((await store.countNamespace(runId)).total, 0);
   }
   await store.close();
@@ -42,8 +48,6 @@ const operation = (runId: string, suffix: string, overrides: Partial<VoiceOperat
   status: 'started',
   ...overrides,
 });
-
-const isDomain = (code: string) => (error: unknown) => error instanceof DomainError && error.code === code;
 
 describe('voice operations', () => {
   test('insert stores the row and a repeat returns the stored one', async () => {
