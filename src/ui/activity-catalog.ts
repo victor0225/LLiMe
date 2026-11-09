@@ -13,13 +13,10 @@ import {
   NumberLinePropsSchema,
   StartMarkerPropsSchema,
 } from '../domain.js';
+import { SUM_MAX, SUM_MIN } from '../problems.js';
 
-// A number line shows 0..20, so a problem must end inside it.
+// The number line is drawn from 0 to 20, so a problem must end inside it.
 const NUMBER_LINE_MAX_SUM = 20;
-// A make-ten problem must cross ten (otherwise nothing is left over) and stay within the 18 a
-// ten-frame plus a tray of nine can show.
-const MAKE_TEN_MIN_SUM = 11;
-const MAKE_TEN_MAX_SUM = 18;
 
 const schema = defineSchema(
   (s) => ({
@@ -130,7 +127,7 @@ export function validateActivity(value: unknown, context: ActivityContext): Acti
   }
 
   const { first, second, highlightEmptySlots, showEquation } = workspace.props;
-  if (first !== context.start || second !== context.addend || first + second < MAKE_TEN_MIN_SUM || first + second > MAKE_TEN_MAX_SUM) return fail('Problem mismatch');
+  if (first !== context.start || second !== context.addend || first + second < SUM_MIN || first + second > SUM_MAX) return fail('Problem mismatch');
   // Marker and counter belong to the number line; a ten-frame carries its helpers as booleans.
   if (spec.components.length !== 1) return fail('Invalid scaffold target');
   if (spec.phase === 'independent' && (highlightEmptySlots || showEquation)) return fail('Independent task cannot contain scaffolds');
