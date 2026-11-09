@@ -1,16 +1,35 @@
 // The local HTTP server: the API routes from the shared route table behind the request guards, and
 // the web app (built files, or the Vite dev server behind a proxy during development).
-import { randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, request as forward, type Server, type ServerResponse } from 'node:http';
 import { connect } from 'node:net';
 import { extname, join, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { z } from 'zod';
+import neo4j, { Neo4jError } from 'neo4j-driver';
+import { z } from 'zod';
 import { type Config, HOST, loadConfig, repoRoot } from './config.js';
-import { type ErrorBody, IdSchema } from './domain.js';
-import { ERROR_HTTP_STATUS, HTTP_STATUS, type HttpErrorCode, HttpErrorSchema, MAX_JSON_BODY_BYTES, ROUTES, type RouteName, SESSION_HEADER } from './routes.js';
+import { type Command, type ErrorBody, type ErrorCode, ErrorCodeSchema, IdSchema, type NotificationOutbox, type RunCreateInput, type RunState } from './domain.js';
+import type { EventPayload, RunEvent } from './events.js';
+import {
+  ERROR_HTTP_STATUS,
+  HTTP_STATUS,
+  type HttpErrorCode,
+  HttpErrorSchema,
+  LESSON_TEXT_MAX_BYTES,
+  type LessonStatus,
+  MAX_JSON_BODY_BYTES,
+  ROUTES,
+  type RouteName,
+  SDP_MAX_BYTES,
+  SESSION_HEADER,
+  utf8ByteLength,
+  type VoiceCommand,
+  type VoiceSessionInputSchema,
+  type VoiceSessionOutputSchema,
+  type VoiceSnapshot,
+} from './routes.js';
 
 type Routes = typeof ROUTES;
 type ParamNames<P extends string> = P extends `${string}:${infer Name}/${infer Rest}` ? Name | ParamNames<`/${Rest}`> : P extends `${string}:${infer Name}` ? Name : never;
@@ -20,14 +39,18 @@ export type RouteRequest<N extends RouteName> = {
   params: Record<ParamNames<Routes[N]['path']>, string>;
   query: Parsed<Routes[N]['query']>;
   body: Parsed<Routes[N]['request']>;
+  // Aborted when the client goes away before the answer is sent.
+  signal: AbortSignal;
 };
 export type RouteHandler<N extends RouteName> = (request: RouteRequest<N>) => Promise<z.input<Routes[N]['response']>>;
 // Routes without a handler answer "not ready" until their lane binds one.
 export type RouteHandlers = { [N in RouteName]?: RouteHandler<N> };
 
 // Thrown by a handler to answer with a shared error code; the code decides the HTTP status.
+// INTERNAL is excluded: only the server's own fault path answers 500, so a handler cannot send a
+// fault's text to the browser under that code.
 export class RouteError extends Error {
-  constructor(readonly body: ErrorBody & { code: HttpErrorCode }) {
+  constructor(readonly body: ErrorBody & { code: Exclude<HttpErrorCode, 'INTERNAL'> }) {
     super(body.message);
   }
 }
@@ -48,12 +71,11 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.woff2': 'font/woff2',
 };
 
-// Error answers for requests that never reach a route. The shared codes have no dedicated value
-// for a refused host or session, a missing handler or a server bug, so these reuse the closest one.
-const FORBIDDEN = (message: string): ErrorBody => ({ code: 'INVALID_INPUT', message, retryable: false });
-const NOT_READY = (message: string): ErrorBody => ({ code: 'RUNTIME_DISCONNECTED', message, retryable: true });
-// The ID ties the browser's answer to the server log line without exposing the error itself.
-const INTERNAL = (errorId: string): ErrorBody => ({ code: 'RUNTIME_DISCONNECTED', message: `The server failed to answer this request (error ${errorId})`, retryable: false });
+// Error answers for requests that never reach a route.
+const FORBIDDEN = (message: string): ErrorBody => ({ code: 'FORBIDDEN', message, retryable: false });
+const NOT_READY = (message: string): ErrorBody => ({ code: 'NOT_READY', message, retryable: true });
+// A fault answers with an ID that matches its log line; the fault's own text never reaches the browser.
+const INTERNAL = (errorId: string): ErrorBody => ({ code: 'INTERNAL', message: 'The server failed to answer this request', retryable: false, errorId });
 const NOT_FOUND: ErrorBody = { code: 'NOT_FOUND', message: 'Not found', retryable: false };
 
 const isApiPath = (pathname: string) => pathname === '/api' || pathname.startsWith('/api/');
@@ -138,6 +160,13 @@ function builtFiles(distDir: string): Map<string, { file: string; type: string }
   return files;
 }
 
+// Runtime data, the seed and captures stay private even if a copy ever lands inside the build.
+const PRIVATE_TOP_LEVEL = new Set(['data', 'captures']);
+const isPrivatePath = (pathname: string) => {
+  const segments = pathname.split('/').filter(Boolean);
+  return segments.some((segment) => segment.startsWith('.')) || PRIVATE_TOP_LEVEL.has(segments[0] ?? '');
+};
+
 function serveBuilt(distDir: string) {
   const files = builtFiles(distDir);
   const page = files.get('/index.html');
@@ -145,7 +174,7 @@ function serveBuilt(distDir: string) {
   return async (req: IncomingMessage, res: ServerResponse, pathname: string) => {
     // Paths without a dot are client routes (for example /lesson-notes) rendered by the page.
     const isClientRoute = !pathname.includes('.');
-    const found = isClientRoute ? page : files.get(pathname);
+    const found = isPrivatePath(pathname) ? undefined : isClientRoute ? page : files.get(pathname);
     if (!found) return sendJson(res, HTTP_STATUS.notFound, NOT_FOUND);
     const body = await readFile(found.file);
     res.writeHead(HTTP_STATUS.ok, { 'content-type': found.type, 'content-security-policy': CSP, 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' });
@@ -167,31 +196,65 @@ function proxyToVite(vitePort: number) {
   };
 }
 
+// Text fields with their own byte limit inside a body that already fits the JSON limit. Checked
+// before the schema so an oversized field is a 413, not a structural 400.
+const FIELD_LIMITS: Partial<Record<RouteName, { field: string; maxBytes: number }>> = {
+  saveLesson: { field: 'text', maxBytes: LESSON_TEXT_MAX_BYTES },
+  createVoiceSession: { field: 'sdpOffer', maxBytes: SDP_MAX_BYTES },
+};
+
+function rejectOversizedField(name: RouteName, body: unknown) {
+  const limit = FIELD_LIMITS[name];
+  const value: unknown = limit && typeof body === 'object' && body !== null ? Reflect.get(body, limit.field) : undefined;
+  if (limit && typeof value === 'string' && utf8ByteLength(value) > limit.maxBytes) {
+    throw new RouteError({ code: 'PAYLOAD_TOO_LARGE', message: `${limit.field} is larger than ${limit.maxBytes} bytes`, retryable: false });
+  }
+}
+
+// Compares in constant time so response timing cannot reveal how much of a guess was right.
+function isSessionNonce(header: string | string[] | undefined, nonce: string): boolean {
+  if (typeof header !== 'string') return false;
+  const given = Buffer.from(header);
+  const expected = Buffer.from(nonce);
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+
 export function createAppServer({ config, nonce, handlers = {}, frontend }: { config: Config; nonce: string; handlers?: RouteHandlers; frontend: Frontend }): Server {
-  const allowedHosts = new Set([`${HOST}:${config.port}`, `localhost:${config.port}`]);
-  // Storybook's /api proxy forwards the story page's origin, so stories can send commands too.
-  const allowedOrigins = new Set([config.appOrigin, `http://localhost:${config.port}`, config.storybookOrigin]);
+  // Every client addresses the backend by this one host; a proxy in front of it must rewrite Host.
+  const allowedHosts = new Set([`${HOST}:${config.port}`]);
+  // Mutations may come from the app itself or from the configured local Vite and Storybook pages.
+  const allowedOrigins = new Set([config.appOrigin, `http://${HOST}:${config.vitePort}`, config.storybookOrigin]);
   const serveFrontend = frontend.kind === 'static' ? serveBuilt(frontend.distDir) : proxyToVite(config.vitePort);
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, url: URL) {
     const method = req.method ?? 'GET';
     if (method === 'POST') {
-      // A page on another origin cannot read the nonce, so it cannot mutate local state.
+      // A page on another origin cannot read the nonce, so it cannot mutate local state. A request
+      // without an Origin header (an operator script) still needs the nonce from /api/bootstrap.
       const origin = req.headers.origin;
-      if (req.headers[SESSION_HEADER] !== nonce || (origin !== undefined && !allowedOrigins.has(origin))) return sendJson(res, HTTP_STATUS.forbidden, FORBIDDEN('Invalid session or origin'));
+      if (!isSessionNonce(req.headers[SESSION_HEADER], nonce) || (origin !== undefined && !allowedOrigins.has(origin))) return sendJson(res, HTTP_STATUS.forbidden, FORBIDDEN('Invalid session or origin'));
     }
     const match = matchRoute(method, url.pathname);
     if (!match) return sendJson(res, HTTP_STATUS.notFound, NOT_FOUND);
     // The route table and the handler map share their keys, but TypeScript cannot correlate a
     // runtime key with its handler type; the parsing below enforces each route's own schemas.
-    const handler = handlers[match.name] as ((request: { params: unknown; query: unknown; body: unknown }) => Promise<unknown>) | undefined;
+    const handler = handlers[match.name] as ((request: { params: unknown; query: unknown; body: unknown; signal: AbortSignal }) => Promise<unknown>) | undefined;
     if (!handler) return sendJson(res, HTTP_STATUS.unavailable, NOT_READY(`Not ready: ${method} ${ROUTES[match.name].path} has no handler yet`));
     const route: Routes[RouteName] = ROUTES[match.name];
     try {
       const params = parseParams(match.params);
       const query = route.query ? requireValid(route.query, Object.fromEntries(url.searchParams), 'query') : undefined;
-      const body = route.request ? requireValid(route.request, await readJsonBody(req), 'body') : undefined;
-      const result = route.response.safeParse(await handler({ params, query, body }));
+      let body: unknown;
+      if (route.request) {
+        const raw = await readJsonBody(req);
+        rejectOversizedField(match.name, raw);
+        body = requireValid(route.request, raw, 'body');
+      }
+      const aborted = new AbortController();
+      res.once('close', () => {
+        if (!res.writableFinished) aborted.abort();
+      });
+      const result = route.response.safeParse(await handler({ params, query, body, signal: aborted.signal }));
       if (!result.success) throw new Error(`${match.name} returned a response that breaks its schema: ${result.error.message}`);
       sendJson(res, route.status, result.data);
     } catch (error) {
@@ -210,7 +273,7 @@ export function createAppServer({ config, nonce, handlers = {}, frontend }: { co
       return serveFrontend(req, res, url.pathname);
     };
     handle().catch((error: unknown) => {
-      const errorId = randomUUID();
+      const errorId = `err_${randomBytes(8).toString('hex')}`;
       console.error(`Request failed (error ${errorId}):`, error);
       if (!res.headersSent) sendJson(res, HTTP_STATUS.internalError, INTERNAL(errorId));
       else res.destroy();
@@ -244,6 +307,344 @@ export function listen(server: Server, port: number): Promise<void> {
     );
     server.listen(port, HOST, resolve);
   });
+}
+
+// ---------------------------------------------------------------------------------------------
+// What the routes need from the other modules. The store, engine, inbox, voice and Codex modules
+// satisfy these shapes; tests bind stand-ins.
+
+export type RunRecord = { id: string; revision: number; seq: number; state: RunState };
+type NotificationOpened = { type: 'notification.opened'; payload: EventPayload<'notification.opened'> };
+
+export type RunStorePort = {
+  getRun(runId: string): Promise<RunRecord>;
+  events(runId: string, after?: number): Promise<RunEvent[]>;
+  getNotification(notificationId: string): Promise<NotificationOutbox | null>;
+  appendEvents(runId: string, events: readonly NotificationOpened[]): Promise<RunEvent[]>;
+  close(): Promise<void>;
+};
+
+type EngineVoiceCommand = Extract<VoiceCommand, { type: 'typed_correction' | 'activity_rendered' }>;
+type SessionVoiceCommand = Exclude<VoiceCommand, EngineVoiceCommand>;
+
+export type EnginePort = {
+  createRun(input: RunCreateInput): Promise<RunRecord>;
+  command(runId: string, command: Command): Promise<RunRecord>;
+  // typed_correction and activity_rendered are run transitions, so they go through the engine.
+  voiceCommand(runId: string, command: EngineVoiceCommand): Promise<RunRecord>;
+  // Moves operations a restart cut off to their honest end state; runs listed for cleanup still need
+  // their Codex turn interrupted and their voice session closed.
+  recoverInterrupted(): Promise<{ cleanupRunIds: readonly string[] }>;
+  // Resolves once no background write (a model turn's result) is still being committed.
+  settle(): Promise<void>;
+};
+
+export type LessonPort = {
+  readLesson(runId: string): Promise<LessonStatus>;
+  // Writes the run's inbox file only; the inbox watcher alone starts ingestion.
+  saveTranscript(runId: string, text: string): Promise<{ saved: true; contentHash: string }>;
+};
+
+export type VoicePort = {
+  createSession(runId: string, input: z.infer<typeof VoiceSessionInputSchema>, signal: AbortSignal): Promise<z.input<typeof VoiceSessionOutputSchema>>;
+  snapshot(runId: string): Promise<VoiceSnapshot>;
+  command(runId: string, command: SessionVoiceCommand): Promise<VoiceSnapshot>;
+  closeRun(runId: string): Promise<void>;
+};
+
+export type RuntimePort = {
+  interruptRun(runId: string): Promise<void>;
+  interruptActiveTurns(): Promise<void>;
+  // Closes every Codex child's stdin and waits for it to exit.
+  close(): Promise<void>;
+};
+
+export type Stoppable = { stop(): Promise<void> };
+
+export type ServerPorts = {
+  store: RunStorePort;
+  engine: EnginePort;
+  lessons: LessonPort;
+  voice: VoicePort;
+  runtime: RuntimePort;
+  // Started after recovery, so neither a lesson file nor a pending notification acts on a run that
+  // is still being reconciled.
+  startInbox(): Promise<Stoppable>;
+  startOutbox(): Promise<Stoppable>;
+};
+
+// ---------------------------------------------------------------------------------------------
+// Route handlers.
+
+// Lane errors carry a shared code (and, for conflicts, the run revision); other modules need not
+// share one error class for the HTTP mapping to see that.
+const LaneErrorSchema = z.object({
+  code: ErrorCodeSchema,
+  message: z.string(),
+  retryable: z.boolean().optional(),
+  revision: z.number().int().min(0).optional(),
+});
+
+const isRouteErrorCode = (code: ErrorCode): code is Exclude<HttpErrorCode, 'INTERNAL'> => code !== 'INTERNAL' && Object.hasOwn(ERROR_HTTP_STATUS, code);
+
+const isDatabaseUnreachable = (error: unknown) =>
+  error instanceof Neo4jError && (error.code === neo4j.error.SERVICE_UNAVAILABLE || error.code === neo4j.error.SESSION_EXPIRED);
+
+const runIdOf = (params: object): string | undefined => {
+  const value: unknown = Reflect.get(params, 'runId');
+  return typeof value === 'string' ? value : undefined;
+};
+
+// Turns a lane failure into its HTTP answer. A conflict always names the current revision so the
+// browser can refresh before deciding anything; anything unrecognized stays a server fault (500).
+async function toRouteError(error: unknown, store: RunStorePort, runId: string | undefined): Promise<unknown> {
+  if (error instanceof RouteError) return error;
+  if (isDatabaseUnreachable(error)) return new RouteError({ code: 'NOT_READY', message: 'The database is not reachable', retryable: true });
+  const lane = LaneErrorSchema.safeParse(error);
+  if (!lane.success || !isRouteErrorCode(lane.data.code)) return error;
+  const { code, message, retryable = false } = lane.data;
+  const isConflict = ERROR_HTTP_STATUS[code] === HTTP_STATUS.conflict;
+  const revision = lane.data.revision ?? (isConflict && runId !== undefined ? (await store.getRun(runId)).revision : undefined);
+  return new RouteError({ code, message: message.slice(0, 300), retryable, ...(revision === undefined ? {} : { revision }) });
+}
+
+// The snapshot a record describes: its state plus every event through its seq. Events are never
+// edited and each seq up to the record's was committed with or before it, so filtering a later
+// event read reproduces exactly that history; events appended since stay out.
+async function snapshotAt(store: RunStorePort, record: RunRecord) {
+  const events = (await store.events(record.id, 0)).filter((event) => event.seq <= record.seq);
+  if (events.length !== record.seq || events.some((event, i) => event.seq !== i + 1)) throw new Error(`Run ${record.id} is missing events through seq ${record.seq}`);
+  return { ...record.state, id: record.id, revision: record.revision, seq: record.seq, execution: { throughSeq: record.seq, events } };
+}
+
+// Runs one piece of work per run at a time, in arrival order.
+function perRunQueue() {
+  const tails = new Map<string, Promise<unknown>>();
+  return <T>(runId: string, work: () => Promise<T>): Promise<T> => {
+    const result = (tails.get(runId) ?? Promise.resolve()).then(work, work);
+    const tail = result.catch(() => undefined);
+    tails.set(runId, tail);
+    void tail.then(() => tails.get(runId) === tail && tails.delete(runId));
+    return result;
+  };
+}
+
+const conflict = (message: string, revision: number) => new RouteError({ code: 'CONFLICT', message, retryable: false, revision });
+
+// The activity a notification may open: the run's current activity, or its invitation while it waits.
+function isCurrentActivity(state: RunState, row: NotificationOutbox): boolean {
+  const matches = (activity: RunState['activity']) => activity !== null && activity.id === row.activityId && activity.revision === row.activityRevision;
+  return !state.stopped && (matches(state.activity) || (state.phase === 'INVITED' && matches(state.invitation)));
+}
+
+export type HandlerOptions = {
+  config: Config;
+  nonce: string;
+  dataset: string;
+  // Lets the server refuse new work while it shuts down.
+  admit?: () => void;
+};
+
+export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'engine' | 'lessons' | 'voice'>, options: HandlerOptions): Required<RouteHandlers> {
+  const { store, engine, lessons, voice } = ports;
+  const serialized = perRunQueue();
+  const handle =
+    <N extends RouteName>(_name: N, handler: RouteHandler<N>): RouteHandler<N> =>
+    async (request) => {
+      options.admit?.();
+      try {
+        return await handler(request);
+      } catch (error) {
+        throw await toRouteError(error, store, runIdOf(request.params));
+      }
+    };
+  const isVoiceConfigured = options.config.openaiApiKey !== undefined;
+
+  return {
+    bootstrap: handle('bootstrap', async () => ({
+      nonce: options.nonce,
+      voice: isVoiceConfigured ? 'configured_unverified' : 'missing_key',
+      inputMode: isVoiceConfigured ? 'live' : 'typed',
+      runtime: 'Codex App Server',
+      database: 'Neo4j',
+      dataset: options.dataset,
+    })),
+    createRun: handle('createRun', async ({ body }) => snapshotAt(store, await engine.createRun(body))),
+    getRun: handle('getRun', async ({ params }) => snapshotAt(store, await store.getRun(params.runId))),
+    runEvents: handle('runEvents', async ({ params, query }) => store.events(params.runId, query.after)),
+    runCommand: handle('runCommand', async ({ params, body }) => snapshotAt(store, await engine.command(params.runId, body))),
+    getLesson: handle('getLesson', async ({ params }) => {
+      await store.getRun(params.runId);
+      return lessons.readLesson(params.runId);
+    }),
+    saveLesson: handle('saveLesson', async ({ params, body }) => {
+      await store.getRun(params.runId);
+      return lessons.saveTranscript(params.runId, body.text);
+    }),
+    createVoiceSession: handle('createVoiceSession', async ({ params, body, signal }) => {
+      await store.getRun(params.runId);
+      return voice.createSession(params.runId, body, signal);
+    }),
+    voiceSnapshot: handle('voiceSnapshot', async ({ params }) => {
+      await store.getRun(params.runId);
+      return voice.snapshot(params.runId);
+    }),
+    voiceCommand: handle('voiceCommand', async ({ params, body }) => {
+      switch (body.type) {
+        case 'typed_correction':
+        case 'activity_rendered':
+          return snapshotAt(store, await engine.voiceCommand(params.runId, body));
+        case 'close_voice':
+        case 'audio_gate_closed':
+          await store.getRun(params.runId);
+          return voice.command(params.runId, body);
+      }
+    }),
+    // A real tap is transport evidence only: it is recorded once per notification and never starts
+    // or grades the activity.
+    notificationOpened: handle('notificationOpened', ({ params, body }) =>
+      serialized(params.runId, async () => {
+        const run = await store.getRun(params.runId);
+        const row = await store.getNotification(params.notificationId);
+        if (!row || row.runId !== run.id) throw new RouteError({ code: 'NOT_FOUND', message: `Unknown notification ${params.notificationId} for this run`, retryable: false });
+        if (row.activityId !== body.activityId || row.activityRevision !== body.activityRevision) throw conflict('The tap names a different activity than its notification', run.revision);
+        const events = await store.events(run.id, 0);
+        const isRecorded = events.some((event) => event.type === 'notification.opened' && event.payload.notificationId === row.notificationId);
+        if (isRecorded) return snapshotAt(store, run);
+        if (!isCurrentActivity(run.state, row)) throw conflict('The notification’s activity is no longer current', run.revision);
+        await store.appendEvents(run.id, [{ type: 'notification.opened', payload: { notificationId: row.notificationId, runId: run.id, activityId: row.activityId, activityRevision: row.activityRevision } }]);
+        return snapshotAt(store, await store.getRun(run.id));
+      }),
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Boot and shutdown.
+
+// The graceful-shutdown bound; past it the process stops waiting and reports a forced exit.
+export const SHUTDOWN_DEADLINE_MS = 5000;
+
+export type SignalSource = {
+  once(signal: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+  off(signal: 'SIGINT' | 'SIGTERM', listener: () => void): unknown;
+};
+
+export type BootOptions = {
+  config: Config;
+  nonce: string;
+  frontend: Frontend;
+  dataset: string;
+  // Tests listen on a free port; the configured port still drives the Host and Origin checks.
+  listenPort?: number;
+  signals?: SignalSource;
+  shutdownDeadlineMs?: number;
+  closeFrontend?: () => Promise<void>;
+};
+
+export type ShutdownReport = { forced: boolean; failures: string[]; elapsedMs: number };
+
+export type RunningServer = {
+  port: number;
+  // Resolves once recovery finished and the routes answer; rejects (after shutting down) if recovery failed.
+  ready: Promise<void>;
+  shutdown(): Promise<ShutdownReport>;
+  stopped: Promise<ShutdownReport>;
+};
+
+// Listens first, so a busy port fails at once; every API route answers NOT_READY until restart
+// recovery has run, so no request can act on a run that still looks mid-operation.
+export async function bootServer(ports: ServerPorts, options: BootOptions): Promise<RunningServer> {
+  const handlers: RouteHandlers = {};
+  const server = createAppServer({ config: options.config, nonce: options.nonce, handlers, frontend: options.frontend });
+  const openResponses = new Set<ServerResponse>();
+  let onResponsesDone: (() => void) | null = null;
+  server.on('request', (_req: IncomingMessage, res: ServerResponse) => {
+    openResponses.add(res);
+    res.once('close', () => {
+      openResponses.delete(res);
+      if (openResponses.size === 0) onResponsesDone?.();
+    });
+  });
+  await listen(server, options.listenPort ?? options.config.port);
+  const address = server.address();
+  if (address === null || typeof address !== 'object') throw new Error('The server is not listening on a TCP port');
+
+  let isStopping = false;
+  const loops: Stoppable[] = [];
+  const admit = () => {
+    if (isStopping) throw new RouteError({ code: 'NOT_READY', message: 'The server is shutting down', retryable: true });
+  };
+
+  const recover = async () => {
+    const { cleanupRunIds } = await ports.engine.recoverInterrupted();
+    // Cleanup is idempotent and retried on every boot, because a crash can land between the stop
+    // commit and the cleanup. It never restarts model work.
+    for (const runId of cleanupRunIds) {
+      await ports.runtime.interruptRun(runId);
+      await ports.voice.closeRun(runId);
+    }
+    loops.push(await ports.startInbox());
+    loops.push(await ports.startOutbox());
+    if (!isStopping) Object.assign(handlers, createRouteHandlers(ports, { config: options.config, nonce: options.nonce, dataset: options.dataset, admit }));
+  };
+
+  let resolveStopped: (report: ShutdownReport) => void = () => {};
+  const stopped = new Promise<ShutdownReport>((resolve) => (resolveStopped = resolve));
+  let shutdownRun: Promise<ShutdownReport> | null = null;
+  const signals = options.signals ?? process;
+  const onSignal = () => void shutdown();
+
+  const shutdown = (): Promise<ShutdownReport> => {
+    shutdownRun ??= (async () => {
+      const started = performance.now();
+      isStopping = true;
+      signals.off('SIGINT', onSignal);
+      signals.off('SIGTERM', onSignal);
+      const closed = new Promise<void>((resolve) => server.close(() => resolve()));
+      server.closeIdleConnections();
+      const failures: string[] = [];
+      const step = async (name: string, work: () => Promise<unknown>) => {
+        try {
+          await work();
+        } catch (error) {
+          failures.push(name);
+          console.error(`Shutdown: could not ${name}:`, error);
+        }
+      };
+      const responsesDone = () => (openResponses.size === 0 ? Promise.resolve() : new Promise<void>((resolve) => (onResponsesDone = resolve)));
+      const sequence = async () => {
+        await ready.catch(() => undefined);
+        await step('stop the inbox watcher and the outbox', () => Promise.all(loops.map((loop) => loop.stop())));
+        await step('interrupt active turns', () => ports.runtime.interruptActiveTurns());
+        await step('finish requests in progress', responsesDone);
+        await step('settle pending writes', () => ports.engine.settle());
+        if (options.closeFrontend) await step('close the dev server', options.closeFrontend);
+        server.closeIdleConnections();
+        await step('close the HTTP server', () => closed);
+        await step('close the database driver', () => ports.store.close());
+        await step('close the Codex children', () => ports.runtime.close());
+      };
+      let timer: NodeJS.Timeout | undefined;
+      const deadline = new Promise<true>((resolve) => (timer = setTimeout(() => resolve(true), options.shutdownDeadlineMs ?? SHUTDOWN_DEADLINE_MS)));
+      const forced = await Promise.race([sequence().then(() => false as const), deadline]);
+      clearTimeout(timer);
+      if (forced) server.closeAllConnections();
+      const report = { forced, failures, elapsedMs: Math.round(performance.now() - started) };
+      resolveStopped(report);
+      return report;
+    })();
+    return shutdownRun;
+  };
+
+  const ready = recover();
+  ready.catch(async (error: unknown) => {
+    console.error('Startup recovery failed; shutting down:', error);
+    await shutdown();
+  });
+  signals.once('SIGINT', onSignal);
+  signals.once('SIGTERM', onSignal);
+  return { port: address.port, ready, shutdown, stopped };
 }
 
 async function main() {
