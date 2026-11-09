@@ -295,9 +295,14 @@ export type VerificationTurnInput = {
   expectedRevision: number;
 };
 
+// The run as the runtime reads it when the turn actually starts.
+export type TurnRun = { revision: number; state: RunState };
+
 export type TurnRequest = { runId: string; operationId: string; cancellationEpoch: number } & (
   | { phase: 'explanation'; input: ExplanationTurnInput }
-  | { phase: 'verification'; input: VerificationTurnInput }
+  // Read when the turn starts, not when it was requested: opening a thread commits the runtime choice
+  // first, so a revision taken earlier would already be stale for commit_episode.
+  | { phase: 'verification'; input: (run: TurnRun) => VerificationTurnInput }
 );
 
 export type RuntimePort = {
@@ -507,7 +512,7 @@ export function createEngine({ store, runtime }: EngineDeps) {
       operationId,
       cancellationEpoch: state.cancellationEpoch,
       phase: 'verification',
-      input: { independentAttemptId: saved.id, supportAttemptId: supportAttempt?.id ?? null, activityId: activity.id, expectedRevision: ctx.revision + 1 },
+      input: (run) => ({ independentAttemptId: saved.id, supportAttemptId: supportAttempt?.id ?? null, activityId: activity.id, expectedRevision: run.revision }),
     };
     return {
       state: { ...state, attempts: [...state.attempts, saved] },

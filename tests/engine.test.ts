@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
+import { z } from 'zod';
 import { loadSeed, type LoadedSeed } from '../src/dataset.js';
 import type { ActivityContext, ActivitySpec, Attempt, Interpretation, MakeTenAttempt, Problem, RunPhase, SearchLearningCasesOutput, ToolResult } from '../src/domain.js';
 import { CATALOG_VERSION, TEMPLATE_KIND } from '../src/domain.js';
-import { createEngine, type Engine, RESTART_MESSAGE, type RuntimePort, type TurnRequest } from '../src/engine.js';
+import { createEngine, type Engine, RESTART_MESSAGE, type RuntimePort, type TurnRequest, type VerificationTurnInput } from '../src/engine.js';
 import type { RunEvent } from '../src/events.js';
 import { contextCaseId, speechSourceId } from '../src/graph.js';
 import { FILM_SEED } from '../src/problems.js';
@@ -397,6 +398,26 @@ describe('run engine (stub runtime)', () => {
     assert.deepEqual([independent.kind, independent.templateId, independent.helperCount], ['independent', 'independent_make_ten', 0]);
     assert.deepEqual(independent.problem, (await problemsOf(runId)).independent);
     assert.deepEqual(independent.activitySpec?.components.map((c) => c.props), [{ first: 9, second: 4, appearance: 'apple', highlightEmptySlots: false, showEquation: false }]);
+  });
+
+  test('the verification turn reads its expectedRevision when it starts, so the runtime committing a thread first never makes commit_episode stale (stub runtime)', async () => {
+    const seen: { input?: VerificationTurnInput } = {};
+    const { runtime } = stubRuntime(async (request) => {
+      if (request.phase !== 'verification') return;
+      // Opening a thread commits the runtime choice before the turn reads its input.
+      const run = await store.getRun(request.runId);
+      await store.transition({ runId: request.runId, commandKey: `runtime_choice:${randomUUID()}`, body: {}, expectedRevision: run.revision, resultSchema: z.strictObject({}), apply: (ctx) => ({ state: ctx.state, events: [], result: {} }) });
+      seen.input = request.input(await store.getRun(request.runId));
+    });
+    const engine = createEngine({ store, runtime });
+    const runId = await invitedRun();
+    await toVerify(engine, runId);
+    const { run } = await send(engine, runId, { type: 'verify', attempt: makeTen((await problemsOf(runId)).independent) });
+    const { input } = seen;
+    assert.ok(input);
+    assert.equal(input.expectedRevision, run.revision + 1);
+    const committed = await tool(runId, 'commit_episode', { independentAttemptId: input.independentAttemptId, supportAttemptId: input.supportAttemptId, expectedRevision: input.expectedRevision });
+    assert.ok(committed.ok, JSON.stringify(committed));
   });
 
   test('a correction in PROCESSING or PRACTICE before submit bumps explanationRevision, cancellationEpoch and revision, emits operation.cancelled and state.committed and clears the activity; after submit, in VERIFY, terminal or stopped it is a 409 (stub runtime)', async () => {
