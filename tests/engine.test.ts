@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { z } from 'zod';
-import { findOracleField } from '../src/codex.js';
+import { findOracleField, PROMPT_TEMPLATES } from '../src/codex.js';
 import { loadSeed, type LoadedSeed } from '../src/dataset.js';
 import type { ActivityContext, ActivitySpec, Attempt, Interpretation, MakeTenAttempt, Problem, RunPhase, SearchLearningCasesOutput, ToolResult } from '../src/domain.js';
 import { CATALOG_VERSION, TEMPLATE_KIND } from '../src/domain.js';
@@ -454,6 +454,30 @@ describe('run engine (stub runtime)', () => {
     assert.equal(input.revision, run.revision + 1);
     const committed = await tool(runId, 'commit_episode', { independentAttemptId: input.independentAttemptId, supportAttemptId: input.supportAttemptId, expectedRevision: input.revision });
     assert.ok(committed.ok, JSON.stringify(committed));
+  });
+
+  test('a verification turn whose revision moves before commit_episode commits the outcome on the reported revision (stub runtime)', async () => {
+    const seen: { input?: VerificationTurnInput } = {};
+    const { runtime } = stubRuntime(async (request) => {
+      if (request.phase === 'verification') seen.input = request.input(await store.getRun(request.runId));
+    });
+    const engine = createEngine({ store, runtime });
+    const runId = await invitedRun();
+    await toVerify(engine, runId);
+    await send(engine, runId, { type: 'verify', attempt: makeTen((await problemsOf(runId)).independent) });
+    const { input } = seen;
+    assert.ok(input);
+    // Another command (a voice record) commits while the model works on the turn.
+    await store.transition({ runId, commandKey: `voice_record:${randomUUID()}`, body: {}, expectedRevision: input.revision, resultSchema: z.strictObject({}), apply: (ctx) => ({ state: ctx.state, events: [], result: {} }) });
+    const args = { independentAttemptId: input.independentAttemptId, supportAttemptId: input.supportAttemptId };
+    const stale = await tool(runId, 'commit_episode', { ...args, expectedRevision: input.revision });
+    assert.ok(!stale.ok && stale.error.code === 'STALE_REVISION' && stale.error.revision === input.revision + 1, JSON.stringify(stale));
+    assert.ok(stale.error.message.includes(`call commit_episode again with expectedRevision ${input.revision + 1}`));
+    assert.ok(PROMPT_TEMPLATES.verification.includes('If commit_episode reports a stale revision, call it once more'));
+    const committed = await tool(runId, 'commit_episode', { ...args, expectedRevision: stale.error.revision });
+    assert.ok(committed.ok, JSON.stringify(committed));
+    assert.equal(ofType(await eventsOf(runId), 'outcome.committed').length, 1);
+    assert.equal(await phaseOf(runId), 'COMPLETE');
   });
 
   test('the explanation and verification turn inputs pass the runtime guard against test-expectation keys (stub runtime)', async () => {
