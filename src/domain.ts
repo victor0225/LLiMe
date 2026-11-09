@@ -269,6 +269,10 @@ export type Workspace = z.infer<typeof WorkspaceSchema>;
 export const AppearanceSchema = z.enum(['apple', 'dot', 'pear']);
 export type Appearance = z.infer<typeof AppearanceSchema>;
 
+// The number line is drawn from 0 to 20, so a problem must end inside it.
+export const NUMBER_LINE_MIN = 0;
+export const NUMBER_LINE_MAX = 20;
+
 export const NumberLinePropsSchema = z.strictObject({
   start: z.number().int().min(0).max(19),
   addend: z.number().int().min(1).max(10),
@@ -470,6 +474,12 @@ export const ErrorCodeSchema = z.enum([
   'UNKNOWN_TOOL',
   'CANCELLED',
   'PAYLOAD_TOO_LARGE',
+  // A refused Host, Origin or session nonce.
+  'FORBIDDEN',
+  // A server fault; the body names only an error ID that matches the server log entry.
+  'INTERNAL',
+  // The route's handler or the store is not ready yet; retry after the server finishes starting.
+  'NOT_READY',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
@@ -479,6 +489,9 @@ export const ErrorBodySchema = z.strictObject({
   retryable: z.boolean(),
   // The current run revision, so a client can refresh before retrying a conflicting command.
   revision: z.number().int().min(0).optional(),
+  // Correlates a server fault with its log entry. Letters, digits, '_' and '-' only, so a stack
+  // trace or a file path can never travel to the browser in its place.
+  errorId: z.string().regex(/^[A-Za-z0-9_-]{8,64}$/).optional(),
 });
 export type ErrorBody = z.infer<typeof ErrorBodySchema>;
 

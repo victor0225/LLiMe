@@ -1,0 +1,195 @@
+/* Number-line practice screen. Uses the shared tokens and primitives (tokens.css, components.css). */
+
+.nl-practice {
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--p-space-2);
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: var(--p-space-2);
+  color: var(--p-text);
+  font-family: var(--p-font);
+}
+
+/* Landscape iPad: short guidance on the left, the activity on the right. Portrait stacks them. */
+@media (orientation: landscape) and (min-width: 1000px) {
+  .nl-practice {
+    grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--p-space-3);
+  }
+}
+
+.nl-guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-1);
+}
+.nl-title {
+  margin: 0;
+  font-size: var(--p-font-heading);
+  line-height: var(--p-line-heading);
+}
+.nl-instruction,
+.nl-voice-off {
+  margin: 0;
+  font-size: var(--p-font-body);
+  line-height: var(--p-line-body);
+}
+.nl-voice-off { color: var(--p-muted); }
+.nl-notice { margin: 0; }
+
+.nl-workspace {
+  box-sizing: border-box;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-2);
+  padding: var(--p-space-2);
+  border: 2px solid var(--p-border);
+  border-radius: var(--p-radius-card);
+  background: var(--p-surface);
+}
+.nl-equation {
+  margin: 0;
+  font-size: var(--p-font-math);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -1px;
+  text-align: center;
+}
+
+.nl {
+  display: flex;
+  flex-direction: column;
+  gap: var(--p-space-1);
+}
+
+/* The whole 0 to 20 line. When it is wider than the card it scrolls inside the card, never the page. */
+.nl-rail {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 6px 24px 14px;
+  scroll-padding-inline: 24px;
+  background: linear-gradient(var(--p-control-border), var(--p-control-border)) no-repeat;
+  background-size: 100% 3px;
+  background-position: 0 calc(100% - 14px);
+  background-attachment: local;
+}
+.nl-tick {
+  position: relative;
+  flex: 1 0 48px;
+  min-width: 48px;
+  height: 64px;
+  margin: 0;
+  padding: 0 0 14px;
+  border: 0;
+  border-radius: var(--p-radius-control);
+  background: transparent;
+  color: var(--p-text);
+  font: 700 22px/1 var(--p-font);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+/* The tick mark under each number, resting on the line. */
+.nl-tick::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 3px;
+  height: 14px;
+  transform: translateX(-50%);
+  background: var(--p-control-border);
+}
+.nl-tick[aria-disabled='true'] { cursor: default; }
+.nl-tick:focus-visible {
+  outline: 3px solid var(--p-focus);
+  outline-offset: -3px;
+}
+.nl-tick[data-role='start']:hover,
+.nl-tick[data-role='move']:hover { background: var(--p-background); }
+.nl-tick[data-start]::before {
+  content: '';
+  position: absolute;
+  inset: 4px 4px 18px;
+  border: 2px dashed var(--p-control-border);
+  border-radius: 999px;
+}
+.nl-tick[data-role='current'] { color: var(--p-on-primary); }
+.nl-tick[data-role='current']::before {
+  content: '';
+  position: absolute;
+  inset: 4px 4px 18px;
+  z-index: -1;
+  border: 2px solid var(--p-primary-edge);
+  border-radius: 999px;
+  background: var(--p-primary);
+}
+.nl-tick[data-role='current'] { z-index: 0; isolation: isolate; }
+/* The support marker: a coloured bar on the anchored start, shown in addition to its tutor text. */
+.nl-tick[data-start-marker]::after {
+  width: 24px;
+  height: 8px;
+  bottom: 3px;
+  border-radius: 4px;
+  background: var(--p-accent);
+}
+
+.nl-readout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--p-space-1);
+  min-height: 32px;
+}
+.nl-position,
+.nl-count {
+  margin: 0;
+  font-size: var(--p-font-body);
+  line-height: var(--p-line-body);
+}
+.nl-count {
+  padding: 2px 14px;
+  border: 2px solid var(--p-border);
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.nl-moves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--p-space-1);
+}
+.nl-move,
+.nl-start,
+.nl-check {
+  min-height: 64px;
+  font-size: 22px;
+}
+.nl-arrow[data-direction='back'] { transform: scaleX(-1); }
+.nl-start { align-self: flex-start; }
+.nl-reset {
+  align-self: flex-start;
+  min-height: var(--p-target-min);
+  font-size: var(--p-font-small);
+  text-decoration: underline;
+}
+
+/* Answer submission stays apart from the movement controls. */
+.nl-submit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: var(--p-space-2);
+  border-top: 2px solid var(--p-border);
+}
+.nl-check { width: 100%; }
+.nl-reason { margin: 0; }
+
+@media (max-width: 600px) {
+  .nl-moves { grid-template-columns: 1fr; }
+}

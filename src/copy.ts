@@ -79,6 +79,21 @@ export const STUDENT_COPY = {
   startNewRun: 'Start a new run',
   pause: 'Pause',
   doneCollapsed: 'See you next time.',
+  wordmark: 'llime',
+  // While the first run snapshot is loading; distinct from the waiting screen, which is real state.
+  loading: 'Opening your learning space…',
+  // The link has no run, or the server does not know it.
+  runUnavailable: 'This learning space isn’t available right now.',
+} as const;
+
+// Number-line status text. None of it names the target or how many moves remain.
+export const NUMBER_LINE_COPY = {
+  // Explains why Check is unavailable before the child has picked a starting number.
+  chooseStart: 'Choose where to start.',
+  // The JumpCounter helper: a live count of the child's own moves.
+  moveCount: (n: number) => (n === 1 ? '1 move' : `${n} moves`),
+  position: (n: number) => `Now at ${n}`,
+  lineLabel: 'Number line',
 } as const;
 
 const OBJECT_NAME: { readonly [A in Appearance]: string } = { apple: 'Apple', pear: 'Pear', dot: 'Dot' };
@@ -132,6 +147,47 @@ export const VOICE_CONTROL_COPY = {
   reconnect: 'Reconnect',
 } as const;
 
+// Explanation, thinking and outcome states the tables above leave unnamed. Each line says only what
+// the app knows: assisted work never claims independence, and nothing claims a save the server has
+// not confirmed.
+export const EXPLAIN_COPY = {
+  // The independent check needed help, so it is described as shared work, never as solving alone.
+  assistedTitle: 'We worked through it together',
+  assistedBody: 'Next time, we can try a new one on your own.',
+  // A correction replaced the activity and its replacement is not published yet.
+  activityUpdating: 'Thanks. The activity is being updated.',
+  // After a practice submit, during the independent check or once the run ended, a new explanation
+  // can no longer change this run's evidence.
+  correctionClosed: 'This try is already saved. To explain it again, start a new run.',
+  voiceConnecting: 'Connecting…',
+  voiceReconnecting: 'Reconnecting…',
+  // Voice dropped: recovery is offered, never assumed.
+  voiceDisconnectedTitle: 'Let’s reconnect',
+  voiceDisconnectedBody: 'Your work is still here. Reconnect to keep talking, or type instead.',
+  microphoneDeniedTitle: 'Let’s use words instead',
+  microphoneDeniedBody: 'Microphone access is off. You can type what you were thinking.',
+  stoppedTitle: 'Learning is stopped.',
+  stoppedBody: 'What you already finished stays saved. Start a new run to keep going.',
+  // A second support activity did not work either, so this run offers no further help.
+  askTrustedAdult: 'Ask a trusted adult for help.',
+  sendFailed: 'Couldn’t send. Your words are still here.',
+  stopFailed: 'Couldn’t stop yet. Please try again.',
+  startNewRunFailed: 'Couldn’t start a new run. Please try again.',
+  // A notification opened an activity the run has already moved past.
+  activityAlreadyDone: 'This activity is already done. Your work has not changed.',
+  // Closes the final screen without sending anything.
+  done: 'Done',
+  // Pause leaves the failed run untouched for inspection; it neither cancels nor resumes it.
+  pausedTitle: 'Paused.',
+  pausedBody: 'This run stays as it is.',
+  // Caption speakers: the child's transcribed words and the tutor's, kept apart.
+  captionYou: 'You',
+  captionTutor: 'Tutor',
+  messagePreview: 'Your message',
+  characterCount: (count: number, max: number) => `${count} of ${max} characters`,
+  tooLong: (max: number) => `Use ${max} characters or fewer.`,
+} as const;
+
 // The only content the app sends to the Live session for speaking; Live may paraphrase it lightly.
 export const SPOKEN_COPY = {
   howDidYouGet: STUDENT_COPY.howDidYouGet,
@@ -175,4 +231,6 @@ export const LESSON_NOTES_COPY = {
   fileTooLarge: 'This file is larger than 16 KB.',
   notUtf8: 'This file isn\'t plain UTF-8 text.',
   textTooLarge: 'Shorten the transcript to 16 KB or less.',
+  // The page was opened without a run, or for a run the server does not know.
+  runUnavailable: 'This lesson link has no run. Open Lesson notes for a new run.',
 } as const;
