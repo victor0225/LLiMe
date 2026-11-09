@@ -233,6 +233,31 @@ for (const viewport of IPAD_VIEWPORTS) {
       await expectNoAxeViolations(page);
     });
 
+    test('the real voice client, with getUserMedia denied by the browser, shows the denied state and keeps Type instead (stubbed route)', async ({ page }) => {
+      // Instrumented browser boundary: the permission prompt is refused, as a child or parent might.
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'mediaDevices', {
+          configurable: true,
+          value: { getUserMedia: () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError')) },
+        });
+      });
+      await stubRun(page, { snapshot: runSnapshot({}), events: [] });
+      const voiceRequests: string[] = [];
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname.includes('/voice/')) voiceRequests.push(request.url());
+      });
+      await openStory(page, 'student-explain-flow--from-server-with-voice');
+      await page.getByRole('button', { name: VOICE_CONTROL_COPY.enable }).click();
+      await expect(page.getByRole('status').first()).toHaveText(EXPLAIN_COPY.microphoneDeniedTitle);
+      await expect(page.getByText(EXPLAIN_COPY.microphoneDeniedBody)).toBeVisible();
+      await expect(page.getByRole('button', { name: VOICE_CONTROL_COPY.typeInstead })).toBeVisible();
+      await expect(page.getByRole('button', { name: VOICE_CONTROL_COPY.reconnect })).toHaveCount(0);
+      expect(await visibleText(page)).not.toContain(VOICE_STATUS_COPY.listening);
+      // No session is requested without a microphone.
+      expect(voiceRequests).toEqual([]);
+      await expectNoAxeViolations(page);
+    });
+
     test('a long caption wraps with no page horizontal overflow at 834 px and at 320/390 px, and shows no tool names (UI05)', async ({ page }) => {
       await openStory(page, 'student-explain--long-caption');
       const caption = page.locator('[data-speaker="you"] p');
@@ -294,14 +319,14 @@ for (const viewport of IPAD_VIEWPORTS) {
       await expect(typeInstead).toBeVisible();
 
       await reconnect.click();
-      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['reconnect']);
+      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['start']);
       // The press asks for a reconnect; the row still says the connection is lost until it is back.
       await expect(page.getByRole('status').first()).toHaveText(VOICE_STATUS_COPY.disconnected);
       await expect(page.getByLabel(STUDENT_COPY.explanationLabel)).toHaveCount(0);
 
       await typeInstead.click();
       await expect(page.getByLabel(STUDENT_COPY.explanationLabel)).toBeVisible();
-      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['reconnect']);
+      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['start']);
       const text = await visibleText(page);
       expect(text).not.toContain(VOICE_STATUS_COPY.listening);
       expect(text).not.toContain(STUDENT_COPY.disconnected);

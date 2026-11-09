@@ -1,28 +1,15 @@
-import { useCallback, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '@core/copy';
 import { EXPLANATION_MAX_CHARS, type Activity, type Command, type Problem, type RunPhase, type SavedAttempt } from '@core/domain';
 import type { RunEvent, RunSnapshot } from '@core/events';
 import { useRunEvents, type EventStore } from '../lib/event-store';
+import type { VoiceClient, VoiceView } from '../voice';
 import { ConnectionNotice, Outcome, outcomeView, type StartNewRun } from './Outcome';
 import '../styles/explain.css';
 
-// Stand-in for the voice client's published state until it lands; binding replaces both types with
-// that export. Session, microphone and playback are tracked separately so that "listening" is shown
-// only while a live session actually has an open microphone.
-export type VoiceStateStub = {
-  readonly session: 'off' | 'connecting' | 'live' | 'reconnecting' | 'disconnected' | 'torn_down';
-  readonly microphone: 'on' | 'muted' | 'denied';
-  readonly tutorSpeaking: boolean;
-  // Actual transcripts as observed: the child's words and the tutor's, never merged.
-  readonly inputCaption: string;
-  readonly outputCaption: string;
-};
-export type VoiceControlsStub = {
-  readonly enable: () => void;
-  readonly setMuted: (muted: boolean) => void;
-  readonly end: () => void;
-  readonly reconnect: () => void;
-};
+// The voice controls a student screen may press. A press only asks the voice client to act; the row
+// changes when the client's own state changes.
+export type VoiceControls = Pick<VoiceClient, 'start' | 'toggleMute' | 'end' | 'interruptPlayback'>;
 
 // A learning command as a screen asks for it; the run's command queue adds the latest revision. The
 // caller keeps the command ID across retries of the same action, so a send whose answer was lost is
@@ -54,35 +41,30 @@ export function combineExplanation(selection: string | null, typed: string): str
   return [selection, typed.trim()].filter((part) => part).join('\n');
 }
 
-function voiceStatusLabel(voice: VoiceStateStub): string | null {
-  if (voice.microphone === 'denied') return EXPLAIN_COPY.microphoneDeniedTitle;
-  switch (voice.session) {
-    case 'off':
-      return null;
-    case 'connecting':
-      return EXPLAIN_COPY.voiceConnecting;
-    case 'reconnecting':
-      return EXPLAIN_COPY.voiceReconnecting;
-    case 'disconnected':
-      return VOICE_STATUS_COPY.disconnected;
-    case 'torn_down':
-      return VOICE_STATUS_COPY.off;
-    case 'live':
-      if (voice.microphone === 'muted') return VOICE_STATUS_COPY.muted;
-      return voice.tutorSpeaking ? VOICE_STATUS_COPY.speaking : VOICE_STATUS_COPY.listening;
-  }
+function voiceStatusLabel(voice: VoiceView): string | null {
+  // A refused microphone is not a lost connection, so it is named for what happened.
+  if (voice.failure === 'permission') return EXPLAIN_COPY.microphoneDeniedTitle;
+  if (voice.phase === 'starting' || voice.phase === 'connecting') return EXPLAIN_COPY.voiceConnecting;
+  return voice.status === null ? null : VOICE_STATUS_COPY[voice.status];
 }
 
-export type VoiceStatusProps = { voice: VoiceStateStub; controls: VoiceControlsStub };
+export type VoiceStatusProps = {
+  voice: VoiceView;
+  controls: VoiceControls;
+  // False during independent work: voice reopens only by the child's choice after an assessment.
+  offerStart: boolean;
+};
 
-// The compact voice row every student screen reuses. Its controls only ask the voice client to act;
-// the row changes when the client's state changes, never on the press itself.
-export function VoiceStatus({ voice, controls }: VoiceStatusProps) {
+// The compact voice row every student screen reuses. "Listening" appears only while the session is
+// live with the microphone on, and "Voice is off" only after the client tore the audio down.
+export function VoiceStatus({ voice, controls, offerStart }: VoiceStatusProps) {
   const label = voiceStatusLabel(voice);
-  const isMuted = voice.microphone === 'muted';
-  const canEnd = voice.session === 'live' || voice.session === 'connecting' || voice.session === 'reconnecting';
+  const isLive = voice.phase === 'live';
+  const canStart = offerStart && (voice.phase === 'idle' || voice.phase === 'ended');
+  const canEnd = isLive || voice.phase === 'starting' || voice.phase === 'connecting';
+  const canReconnect = offerStart && voice.phase === 'failed' && voice.failure !== 'permission';
   return (
-    <div className="ex ex-voice" data-session={voice.session} data-microphone={voice.microphone}>
+    <div className="ex ex-voice" data-phase={voice.phase} data-status={voice.status ?? 'none'}>
       <p className="ex-voice-status" role="status">
         {label !== null && (
           <>
@@ -92,23 +74,23 @@ export function VoiceStatus({ voice, controls }: VoiceStatusProps) {
         )}
       </p>
       <div className="ex-voice-controls">
-        {voice.session === 'off' && voice.microphone !== 'denied' && (
-          <button className="p-button" data-variant="secondary" type="button" onClick={controls.enable}>
+        {canStart && (
+          <button className="p-button" data-variant="secondary" type="button" onClick={() => void controls.start()}>
             {VOICE_CONTROL_COPY.enable}
           </button>
         )}
-        {voice.session === 'live' && (
-          <button className="p-button" data-variant="secondary" type="button" aria-pressed={isMuted} onClick={() => controls.setMuted(!isMuted)}>
+        {isLive && (
+          <button className="p-button" data-variant="secondary" type="button" aria-pressed={voice.isMuted} onClick={controls.toggleMute}>
             {VOICE_CONTROL_COPY.mute}
           </button>
         )}
         {canEnd && (
-          <button className="p-button" data-variant="secondary" type="button" onClick={controls.end}>
+          <button className="p-button" data-variant="secondary" type="button" onClick={() => void controls.end()}>
             {VOICE_CONTROL_COPY.end}
           </button>
         )}
-        {voice.session === 'disconnected' && (
-          <button className="p-button" data-variant="secondary" type="button" onClick={controls.reconnect}>
+        {canReconnect && (
+          <button className="p-button" data-variant="secondary" type="button" onClick={() => void controls.start()}>
             {VOICE_CONTROL_COPY.reconnect}
           </button>
         )}
@@ -117,32 +99,28 @@ export function VoiceStatus({ voice, controls }: VoiceStatusProps) {
   );
 }
 
-// Explains a voice problem in words next to the row; typing stays open in both cases.
-function VoiceNotice({ voice }: { voice: VoiceStateStub }) {
-  const notice =
-    voice.microphone === 'denied'
-      ? EXPLAIN_COPY.microphoneDeniedBody
-      : voice.session === 'disconnected'
-        ? EXPLAIN_COPY.voiceDisconnectedBody
-        : null;
-  return notice && <p className="ex-quiet">{notice}</p>;
+// Explains a voice failure in words next to the row; typing stays open either way.
+function VoiceNotice({ voice }: { voice: VoiceView }) {
+  if (voice.phase !== 'failed') return null;
+  return <p className="ex-quiet">{voice.failure === 'permission' ? EXPLAIN_COPY.microphoneDeniedBody : EXPLAIN_COPY.voiceDisconnectedBody}</p>;
 }
 
 // Captions are plain text, not a live region, so a screen reader is not interrupted per fragment.
-function Captions({ voice }: { voice: VoiceStateStub }) {
-  if (!voice.inputCaption && !voice.outputCaption) return null;
+function Captions({ voice }: { voice: VoiceView }) {
+  const { input, output } = voice.captions;
+  if (!input && !output) return null;
   return (
     <div className="ex-captions">
-      {voice.outputCaption && (
+      {output && (
         <figure className="ex-caption" data-speaker="tutor">
           <figcaption>{EXPLAIN_COPY.captionTutor}</figcaption>
-          <p>{voice.outputCaption}</p>
+          <p>{output}</p>
         </figure>
       )}
-      {voice.inputCaption && (
+      {input && (
         <figure className="ex-caption" data-speaker="you">
           <figcaption>{EXPLAIN_COPY.captionYou}</figcaption>
-          <p>{voice.inputCaption}</p>
+          <p>{input}</p>
         </figure>
       )}
     </div>
@@ -315,8 +293,8 @@ export type ExplanationProps = {
   problem: Problem;
   answer: number;
   // Null when this server offers no voice; the typed fallback is then open from the start.
-  voice: VoiceStateStub | null;
-  voiceControls: VoiceControlsStub;
+  voice: VoiceView | null;
+  voiceControls: VoiceControls;
   send: SendLearningCommand;
   // False while the run's connection is paused; nothing new is sent until it is confirmed.
   canSend: boolean;
@@ -339,7 +317,7 @@ export function Explanation({ question, problem, answer, voice, voiceControls, s
         <h1 id={headingId} className="ex-title">
           {question}
         </h1>
-        {voice && <VoiceStatus voice={voice} controls={voiceControls} />}
+        {voice && <VoiceStatus voice={voice} controls={voiceControls} offerStart />}
         {voice && <VoiceNotice voice={voice} />}
         {!isTyping && <TypeInsteadButton onPress={() => setIsTyping(true)} />}
       </div>
@@ -366,8 +344,8 @@ export type ThinkingProps = {
   isUpdating: boolean;
   problem: Problem;
   answer: number;
-  voice: VoiceStateStub | null;
-  voiceControls: VoiceControlsStub;
+  voice: VoiceView | null;
+  voiceControls: VoiceControls;
   send: SendLearningCommand;
   canSend: boolean;
 };
@@ -384,7 +362,7 @@ export function Thinking({ isUpdating, problem, answer, voice, voiceControls, se
           {isUpdating ? EXPLAIN_COPY.activityUpdating : STUDENT_COPY.interpreting}
         </h1>
         <p className="ex-quiet">{VOICE_STATUS_COPY.thinking}</p>
-        {voice && <VoiceStatus voice={voice} controls={voiceControls} />}
+        {voice && <VoiceStatus voice={voice} controls={voiceControls} offerStart />}
         {!isTyping && <TypeInsteadButton onPress={() => setIsTyping(true)} />}
       </div>
       <div className="ex-work">
@@ -445,8 +423,8 @@ export function learningCommandSender(store: EventStore): SendLearningCommand {
 export type ExplainFlowProps = {
   store: EventStore;
   // Null when this server offers no voice.
-  voice: VoiceStateStub | null;
-  voiceControls: VoiceControlsStub;
+  voice: VoiceView | null;
+  voiceControls: VoiceControls;
   startNewRun: StartNewRun;
 };
 
@@ -472,6 +450,11 @@ export function ExplainFlow({ store, voice, voiceControls, startNewRun }: Explai
     },
     [sendThroughQueue],
   );
+  // A correction replaced the activity: what the tutor was saying about it is stale, so it stops now.
+  const isUpdating = run !== null && run.phase === 'PROCESSING' && isCorrectionPending(run, events);
+  useEffect(() => {
+    if (isUpdating) voiceControls.interruptPlayback();
+  }, [isUpdating, voiceControls]);
   if (!run) return null;
   const connection = status === 'reconnecting' ? 'paused' : 'live';
   const canSend = connection === 'live' && !run.stopped;
@@ -500,7 +483,12 @@ export function ExplainFlow({ store, voice, voiceControls, startNewRun }: Explai
       case 'PROCESSING': {
         const attempt = lastAttempt(run);
         if (!problem || !attempt) return null;
-        return <Thinking isUpdating={isCorrectionPending(run, events)} problem={problem} answer={attempt.attempt.answer} {...voiceProps} />;
+        // A typed correction silences the tutor before it is sent.
+        const sendCorrection: SendLearningCommand = (command, commandId) => {
+          voiceControls.interruptPlayback();
+          return send(command, commandId);
+        };
+        return <Thinking isUpdating={isUpdating} problem={problem} answer={attempt.attempt.answer} {...voiceProps} send={sendCorrection} />;
       }
       default:
         return null;

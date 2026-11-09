@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { ACTIVITY_COPY, OUTCOME_COPY, STUDENT_COPY } from '@core/copy';
 import { ActivitySchema, type Problem } from '@core/domain';
 import { createEventStore } from '../web/lib/event-store';
-import { Explanation, RetryIntro, Thinking, learningCommandSender, type VoiceControlsStub, type VoiceStateStub } from '../web/student/Explanation';
+import { Explanation, RetryIntro, Thinking, learningCommandSender, type VoiceControls } from '../web/student/Explanation';
+import type { VoiceView } from '../web/voice';
 import { ConnectionNotice } from '../web/student/Outcome';
 
 // Story fixtures: a synthetic problem and answer, and voice states as the voice client would report
@@ -17,22 +18,33 @@ const STORY_RUN_ID = 'story-run';
 const postStoryCommand = learningCommandSender(createEventStore(STORY_RUN_ID));
 
 // Voice controls only record which control was pressed; the fixture state never changes on a press,
-// exactly as a real client changes state only when the session does.
+// exactly as the real client changes state only when the session does.
 const voiceControlCalls: string[] = [];
 Object.assign(globalThis, { storyVoiceControlCalls: voiceControlCalls });
-const voiceControls: VoiceControlsStub = {
-  enable: () => voiceControlCalls.push('enable'),
-  setMuted: (muted) => voiceControlCalls.push(muted ? 'mute' : 'unmute'),
-  end: () => voiceControlCalls.push('end'),
-  reconnect: () => voiceControlCalls.push('reconnect'),
+const voiceControls: VoiceControls = {
+  start: async () => {
+    voiceControlCalls.push('start');
+  },
+  toggleMute: () => {
+    voiceControlCalls.push('toggle_mute');
+  },
+  end: async () => {
+    voiceControlCalls.push('end');
+  },
+  interruptPlayback: () => {
+    voiceControlCalls.push('interrupt_playback');
+  },
 };
 
-const voice = (state: Partial<VoiceStateStub>): VoiceStateStub => ({
-  session: 'live',
-  microphone: 'on',
-  tutorSpeaking: false,
-  inputCaption: '',
-  outputCaption: '',
+// Voice states as the voice client reports them.
+const voice = (state: Partial<VoiceView>): VoiceView => ({
+  phase: 'live',
+  status: 'listening',
+  isMuted: false,
+  captions: { input: '', output: '' },
+  typedEntries: [],
+  failure: null,
+  voiceSessionId: 'story-voice-session',
   ...state,
 });
 const tutorQuestion = 'How did you get twelve?';
@@ -44,7 +56,7 @@ export function StudentPage({ children }: { children: ReactNode }) {
   return <main style={{ minHeight: '100vh', background: 'var(--p-background)', color: 'var(--p-text)', fontFamily: 'var(--p-font)' }}>{children}</main>;
 }
 
-const explanation = (state: { voice: VoiceStateStub | null; askFirstNumber?: boolean; question?: string; intro?: string | null; canSend?: boolean }) => (
+const explanation = (state: { voice: VoiceView | null; askFirstNumber?: boolean; question?: string; intro?: string | null; canSend?: boolean }) => (
   <Explanation
     question={state.question ?? STUDENT_COPY.howDidYouGet(answer)}
     problem={problem}
@@ -67,17 +79,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const EnableVoice: Story = { render: () => explanation({ voice: voice({ session: 'off' }) }) };
-export const Connecting: Story = { render: () => explanation({ voice: voice({ session: 'connecting' }) }) };
+export const EnableVoice: Story = { render: () => explanation({ voice: voice({ phase: 'idle', status: null, voiceSessionId: null }) }) };
+export const Connecting: Story = { render: () => explanation({ voice: voice({ phase: 'connecting', status: null }) }) };
 export const Listening: Story = {
-  render: () => explanation({ voice: voice({ outputCaption: tutorQuestion, inputCaption: 'I counted eight, nine, ten' }) }),
+  render: () => explanation({ voice: voice({ captions: { output: tutorQuestion, input: 'I counted eight, nine, ten' } }) }),
 };
-export const TutorSpeaking: Story = { render: () => explanation({ voice: voice({ tutorSpeaking: true, outputCaption: tutorQuestion }) }) };
-export const MicOff: Story = { render: () => explanation({ voice: voice({ microphone: 'muted', outputCaption: tutorQuestion }) }) };
-export const LongCaption: Story = { render: () => explanation({ voice: voice({ outputCaption: tutorQuestion, inputCaption: longExplanation }) }) };
-export const Reconnecting: Story = { render: () => explanation({ voice: voice({ session: 'reconnecting', outputCaption: tutorQuestion }) }) };
-export const Disconnected: Story = { render: () => explanation({ voice: voice({ session: 'disconnected' }) }) };
-export const MicrophoneDenied: Story = { render: () => explanation({ voice: voice({ session: 'off', microphone: 'denied' }) }) };
+export const TutorSpeaking: Story = { render: () => explanation({ voice: voice({ status: 'speaking', captions: { output: tutorQuestion, input: '' } }) }) };
+export const MicOff: Story = { render: () => explanation({ voice: voice({ isMuted: true, status: 'muted', captions: { output: tutorQuestion, input: '' } }) }) };
+export const LongCaption: Story = { render: () => explanation({ voice: voice({ captions: { output: tutorQuestion, input: longExplanation } }) }) };
+export const VoiceEnded: Story = { render: () => explanation({ voice: voice({ phase: 'ended', status: 'off', voiceSessionId: null }) }) };
+export const Disconnected: Story = { render: () => explanation({ voice: voice({ phase: 'failed', status: 'disconnected', failure: 'connection', voiceSessionId: null }) }) };
+export const MicrophoneDenied: Story = { render: () => explanation({ voice: voice({ phase: 'failed', status: 'disconnected', failure: 'permission', voiceSessionId: null }) }) };
 export const TypedOnly: Story = { render: () => explanation({ voice: null }) };
 
 export const ThinkingWithVoice: Story = {
