@@ -466,6 +466,9 @@ export function createRouteHandlers(ports: Pick<ServerPorts, 'store' | 'createRu
       runtime: 'Codex App Server',
       database: 'Neo4j',
       dataset: options.dataset,
+      // This server only runs live turns; a replay of a capture is served elsewhere.
+      mode: 'live',
+      captureId: null,
     })),
     createRun: handle('createRun', async ({ body }) => snapshotAt(store, await ports.createRun(body))),
     getRun: handle('getRun', async ({ params }) => snapshotAt(store, await store.getRun(params.runId))),
