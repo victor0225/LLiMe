@@ -1,11 +1,11 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Locator, type Page, test } from '@playwright/test';
-import { HOST, loadConfig } from '../../src/config.js';
+import { loadConfig } from '../../src/config.js';
 import { ACTIVITY_COPY, MAKE_TEN_COPY, STUDENT_COPY } from '../../src/copy.js';
 import { type MakeTenAttempt, MakeTenAttemptSchema } from '../../src/domain.js';
 import { makeTenIndependent, makeTenSupport } from '../../src/ui/activity-fixtures.js';
 
-const STORYBOOK = `http://${HOST}:${loadConfig().storybookPort}`;
+const STORYBOOK = loadConfig().storybookOrigin;
 const LANDSCAPE = { width: 1194, height: 834 };
 const PORTRAIT = { width: 834, height: 1194 };
 const TEN = 10;
@@ -58,9 +58,12 @@ async function answerAndCheck(page: Page, answer: number): Promise<void> {
   await page.getByRole('button', { name: STUDENT_COPY.checkAnswer }).click();
 }
 
+const FOCUS_CHECK_MS = 50;
+const isFocused = (target: Locator) => expect(target).toBeFocused({ timeout: FOCUS_CHECK_MS }).then(() => true, () => false);
+
 async function tabTo(page: Page, target: Locator): Promise<void> {
   for (let presses = 0; presses < 60; presses += 1) {
-    if (await target.evaluate((node) => node.ownerDocument.activeElement === node)) return;
+    if (await isFocused(target)) return;
     await page.keyboard.press('Tab');
   }
   throw new Error('Keyboard focus never reached the control');
@@ -205,7 +208,8 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
       expect(await runSupport('support-pear', 'pear')).toEqual(apple);
       expect(await runSupport('support-dot', 'dot')).toEqual(apple);
 
-      await page.route(/\/apple[^/]*\.svg/, (route) => route.fulfill({ status: 404, body: '' }));
+      // Only the image fails; the module that names its URL still loads.
+      await page.route(/\/apple[^/]*\.svg/, (route) => (route.request().resourceType() === 'image' ? route.fulfill({ status: 404, body: '' }) : route.continue()));
       expect(await runSupport('support', 'dot')).toEqual(apple);
       await expect(page.getByRole('button', { name: MAKE_TEN_COPY.movableObject('dot', 1) })).toBeVisible();
     });

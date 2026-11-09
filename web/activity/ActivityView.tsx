@@ -6,13 +6,15 @@ import type { Spec } from '@json-render/core';
 import { defineRegistry, JSONUIProvider, Renderer } from '@json-render/react';
 import { STUDENT_COPY } from '@core/copy';
 import type { Activity, ActivityComponent, ActivitySpec, AnyAttempt, Attempt } from '@core/domain';
-import type { ActivityRenderedCommand } from '@core/routes';
+import type { RunSnapshot } from '@core/events';
+import { type ActivityRenderedCommand, HTTP_STATUS } from '@core/routes';
 import { activityCatalog, activityContextOf, ActivityValidationError, countHelpers, validateActivity } from '@core/ui/activity-catalog';
+import { type EventStore, RunRequestError } from '../lib/event-store';
 import { MakeTenWorkspace, type MakeTenSpecProps } from '../student/MakeTenWorkspace';
 import '../styles/make-ten.css';
 
-// What the host reports once the current controls mounted; the per-run queue adds the command ID,
-// the voice session and the run revision when it sends `activity_rendered`.
+// The activity whose controls mounted. The receipt adds the command ID, the voice session and the
+// run revision when it is sent.
 export type RenderTarget = Pick<ActivityRenderedCommand, 'activityId' | 'activityRevision' | 'specHash'>;
 // The activity a submitted attempt belongs to, so the queue can drop it if that activity changed.
 export type SubmitTarget = Pick<ActivityRenderedCommand, 'activityId' | 'activityRevision'>;
@@ -34,8 +36,11 @@ export type NumberLineSlot = ComponentType<NumberLineSlotProps>;
 export type ActivityViewProps = {
   // The run's current activity with its accepted spec and stored hash, or null when there is none.
   activity: Activity | null;
+  // The run's event store; render receipts go through its single mutation queue.
+  store: EventStore;
+  // The live voice session to name in the receipt, or null without one.
+  voiceSessionId: string | null;
   numberLine: NumberLineSlot;
-  acknowledgeRender: (target: RenderTarget) => void;
   onSubmit: (target: SubmitTarget, attempt: AnyAttempt) => void;
 };
 
@@ -86,6 +91,26 @@ function receive(state: HostState, activity: Activity | null): HostState {
   const next = accept(activity, state.current);
   if (next === null) return { ...state, seen: activity, failed: true };
   return { seen: activity, current: next, previous: state.current, failed: false };
+}
+
+const isCurrentTarget = (run: RunSnapshot, target: RenderTarget) =>
+  !run.stopped && run.activity !== null && run.activity.id === target.activityId && run.activity.revision === target.activityRevision && run.activity.specHash === target.specHash;
+
+// Queued behind any pending mutation for the run. The body is built only when the request goes out,
+// with the latest run revision, and is dropped if the run has moved on to another activity.
+function sendRenderReceipt(store: EventStore, target: RenderTarget, voiceSessionId: string | null, retryOnConflict = true): void {
+  const receipt = (run: RunSnapshot) =>
+    isCurrentTarget(run, target) ? { type: 'activity_rendered' as const, commandId: crypto.randomUUID(), voiceSessionId, expectedRunRevision: run.revision, ...target } : null;
+  store.sendRunCommand('voiceCommand', receipt).catch((error: unknown) => {
+    // A conflict means this page was behind and the queue has refreshed the run: one retry with a new
+    // command ID either still matches the current activity or is dropped.
+    if (retryOnConflict && error instanceof RunRequestError && error.status === HTTP_STATUS.conflict) {
+      sendRenderReceipt(store, target, voiceSessionId, false);
+      return;
+    }
+    // Without a receipt no activity speech starts; the controls keep working, so this is only reported.
+    console.warn('The activity render receipt was not saved', error);
+  });
 }
 
 const EMPTY_HOST: HostState = { seen: null, current: null, previous: null, failed: false };
@@ -142,7 +167,7 @@ class RenderBoundary extends Component<{ children: ReactNode }, { failed: boolea
   }
 }
 
-export function ActivityView({ activity, numberLine, acknowledgeRender, onSubmit }: ActivityViewProps): ReactNode {
+export function ActivityView({ activity, store, voiceSessionId, numberLine, onSubmit }: ActivityViewProps): ReactNode {
   const [state, setState] = useState<HostState>(() => receive(EMPTY_HOST, activity));
   if (activity !== state.seen) setState(receive(state, activity));
   const titleId = useId();
@@ -161,11 +186,11 @@ export function ActivityView({ activity, numberLine, acknowledgeRender, onSubmit
         // One receipt per activity revision, however often the controls re-render or remount.
         if (acknowledged.current.has(current.key)) return;
         acknowledged.current.add(current.key);
-        acknowledgeRender({ activityId: shown.id, activityRevision: shown.revision, specHash: shown.specHash });
+        sendRenderReceipt(store, { activityId: shown.id, activityRevision: shown.revision, specHash: shown.specHash }, voiceSessionId);
       },
       submit: (attempt) => onSubmit({ activityId: shown.id, activityRevision: shown.revision }, attempt),
     };
-  }, [current, numberLine, acknowledgeRender, onSubmit]);
+  }, [current, numberLine, store, voiceSessionId, onSubmit]);
 
   // Child effects run before this one, so a current activity that never reported mounting failed to
   // render: keep the last activity that did mount, show the recovery line and send no receipt.

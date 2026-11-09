@@ -1,13 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { ACTIVITY_COPY } from '../src/copy';
-import { type Activity, type ActivitySpec, ActivitySchema, type Appearance, TEMPLATE_KIND } from '../src/domain';
+import { type Activity, type ActivitySpec, ActivitySchema, type Appearance, MATCHING_VERSION, TEMPLATE_KIND } from '../src/domain';
+import { type RunEvent, type RunSnapshot, RunSnapshotSchema } from '../src/events';
+import { FILM_SEED } from '../src/problems';
+import { routePath } from '../src/routes';
 import { countHelpers } from '../src/ui/activity-catalog';
 import { type ActivityFixture, makeTenIndependent, makeTenSupport, numberLineIndependent, numberLineSupport } from '../src/ui/activity-fixtures';
 import { ActivityView, type NumberLineSlot, type NumberLineSlotProps } from '../web/activity/ActivityView';
+import { createEventStore, useRunEvents } from '../web/lib/event-store';
 
-// Stories mount the real host and workspace with the derived fixtures. Nothing is sent: the render
-// receipt and submitted attempts are written to the story log below the activity.
+// Stories mount the real host, workspace and event store with the derived fixtures. A story server
+// stands in for the app server; the voice commands it receives and the submitted attempts are written
+// to the story log below the activity.
 
 type GeneratedTemplate = 'make_ten_blocks' | 'independent_make_ten' | 'anchor_start_number_line' | 'independent_number_line';
 
@@ -92,23 +97,96 @@ const BrokenNumberLine: NumberLineSlot = () => {
 
 type LogEntry = { kind: 'activity_rendered' | 'submit'; detail: unknown };
 
+const STORY_RUN_ID = 'story_run';
+const STORY_TIME = '2026-11-09T10:00:00.000Z';
+
+// A stand-in for the app server, answering the event store through its injected fetch. It holds the
+// run's current activity, commits a `state.committed` event when a story delivers a new one (as a
+// publication would), and records every voice command the store's queue posts.
+function createStoryServer(initial: Activity | null, onVoiceCommand: (body: unknown) => void) {
+  let activity = initial;
+  let revision = 1;
+  const events: RunEvent[] = [];
+  const snapshot = (): RunSnapshot =>
+    RunSnapshotSchema.parse({
+      phase: activity?.kind === 'independent' ? 'VERIFY' : 'PRACTICE',
+      stopped: false,
+      studentId: 'story_student',
+      corpusHash: 'story',
+      matchingVersion: MATCHING_VERSION,
+      seed: FILM_SEED,
+      lessonProblems: null,
+      selectedProblems: null,
+      explanationRevision: 0,
+      cancellationEpoch: 0,
+      clarificationRounds: 0,
+      interventionCount: 0,
+      continuationAllowed: false,
+      runtime: null,
+      lesson: null,
+      invitation: null,
+      activity,
+      attempts: [],
+      explanation: null,
+      graph: null,
+      search: null,
+      error: null,
+      createdAt: STORY_TIME,
+      id: STORY_RUN_ID,
+      revision,
+      seq: events.length,
+      execution: { throughSeq: events.length, events: [] },
+    });
+  const commit = () => {
+    revision += 1;
+    events.push({ runId: STORY_RUN_ID, seq: events.length + 1, type: 'state.committed', payload: { phase: snapshot().phase, revision, caseIds: [] }, at: STORY_TIME });
+  };
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+  const fetchDouble: typeof fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+    if (url.pathname === routePath('bootstrap')) return json({ nonce: 'story-nonce', voice: 'missing_key', inputMode: 'typed', runtime: 'story', database: 'story', dataset: 'synthetic' });
+    if (url.pathname === routePath('getRun', { runId: STORY_RUN_ID })) return json(snapshot());
+    if (url.pathname === routePath('runEvents', { runId: STORY_RUN_ID })) return json(events.filter((event) => event.seq > Number(url.searchParams.get('after'))));
+    if (url.pathname === routePath('voiceCommand', { runId: STORY_RUN_ID }) && init?.method === 'POST') {
+      onVoiceCommand(JSON.parse(String(init.body)));
+      commit();
+      return json(snapshot());
+    }
+    return new Response(null, { status: 404 });
+  };
+  return {
+    store: createEventStore(STORY_RUN_ID, { fetch: fetchDouble }),
+    deliver: (next: Activity) => {
+      activity = next;
+      commit();
+    },
+  };
+}
+
 function Harness({ initial, numberLine = NumberLineProbe, deliveries = [] }: { initial: Activity | null; numberLine?: NumberLineSlot; deliveries?: { label: string; activity: Activity }[] }): ReactNode {
-  const [activity, setActivity] = useState<Activity | null>(initial);
   const [log, setLog] = useState<LogEntry[]>([]);
-  const append = (entry: LogEntry) => setLog((entries) => [...entries, entry]);
+  const [server] = useState(() => createStoryServer(initial, (body) => setLog((entries) => [...entries, { kind: 'activity_rendered', detail: body }])));
+  const { run } = useRunEvents(server.store);
+  useEffect(() => {
+    server.store.start();
+    return () => server.store.stop();
+  }, [server]);
   return (
     <main className="story-frame">
-      <h1 className="story-heading">Make ten · story fixture, synthetic, nothing is sent</h1>
-      <ActivityView
-        activity={activity}
-        numberLine={numberLine}
-        acknowledgeRender={(target) => append({ kind: 'activity_rendered', detail: target })}
-        onSubmit={(target, attempt) => append({ kind: 'submit', detail: { target, attempt } })}
-      />
+      <h1 className="story-heading">Make ten · story fixture, synthetic, no app server</h1>
+      {run === null ? null : (
+        <ActivityView
+          activity={run.activity}
+          store={server.store}
+          voiceSessionId={null}
+          numberLine={numberLine}
+          onSubmit={(target, attempt) => setLog((entries) => [...entries, { kind: 'submit', detail: { target, attempt } }])}
+        />
+      )}
       {deliveries.length > 0 ? (
         <section className="story-controls" aria-label="Story controls">
           {deliveries.map(({ label, activity: next }) => (
-            <button key={label} type="button" className="p-button" data-variant="secondary" onClick={() => setActivity(next)}>
+            <button key={label} type="button" className="p-button" data-variant="secondary" onClick={() => server.deliver(next)}>
               Deliver: {label}
             </button>
           ))}
