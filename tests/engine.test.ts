@@ -10,6 +10,7 @@ import { createEngine, type Engine, RESTART_MESSAGE, type RuntimePort, type Turn
 import type { RunEvent } from '../src/events.js';
 import { contextCaseId, speechSourceId } from '../src/graph.js';
 import { FILM_SEED } from '../src/problems.js';
+import { ERROR_HTTP_STATUS, HTTP_STATUS, type HttpErrorCode } from '../src/routes.js';
 import { createRunId, DomainError, type RunRecord, Store } from '../src/store.js';
 import { callTool, getPersonalMemory, publishActivity, type ToolContext } from '../src/tools.js';
 
@@ -178,6 +179,8 @@ async function rejectedWithoutEffect(engine: Engine, runId: string, body: Record
   const error = await rejects(send(engine, runId, body), code);
   const after = await store.getRun(runId);
   assert.deepEqual([after.revision, after.seq], [before.revision, before.seq], `${String(body.type)} in ${before.state.phase} must have no effect`);
+  // Every 409 body carries the current revision.
+  if (ERROR_HTTP_STATUS[error.code as HttpErrorCode] === HTTP_STATUS.conflict) assert.equal(error.revision, before.revision, `${error.code} carries the revision`);
   return error;
 }
 
