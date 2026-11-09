@@ -10,7 +10,9 @@ import { advancePast, type CorpusIndex, createProjection, project, PROJECTED_EVE
 
 // Every run event type is either projected or dropped on purpose. Typing the table over the full event
 // vocabulary makes a newly added event a compile error until someone decides which it is.
-export const EVENT_DISPOSITION: Readonly<Record<EventType, 'project' | 'drop'>> = {
+// 'graph.updated' re-labels an event as that view event: the server commits an explanation's query
+// graph as context.committed, and the scene draws it (and matches the search to it) as graph.updated.
+export const EVENT_DISPOSITION: Readonly<Record<EventType, 'project' | 'drop' | 'graph.updated'>> = {
   'memory.retrieved': 'project',
   'runtime.input': 'project',
   'tool.started': 'project',
@@ -31,7 +33,7 @@ export const EVENT_DISPOSITION: Readonly<Record<EventType, 'project' | 'drop'>> 
   'operation.cancelled': 'drop',
   'runtime.boundary': 'drop',
   'runtime.item': 'drop',
-  'context.committed': 'drop',
+  'context.committed': 'graph.updated',
   'activity.published': 'drop',
   'notification.queued': 'drop',
   'notification.sent': 'drop',
@@ -55,12 +57,13 @@ export function createEventAdapter(): EventAdapter {
   let inputAt: number | null = null;
   return {
     accept: (event) => {
-      if (!isProjected(event.type)) return null;
+      const asGraph = event.type === 'context.committed' ? { type: 'graph.updated' as const, payload: { graph: event.payload.graph } } : null;
+      if (!asGraph && !isProjected(event.type)) return null;
       const at = Date.parse(event.at);
       if (event.type === 'runtime.input') inputAt = at;
       const elapsed = inputAt === null ? {} : { elapsedMs: Math.max(0, at - inputAt) };
       // The union is correlated by `type`; spreading the envelope keeps each payload with its own type.
-      const view = { runId: event.runId, sequence: next++, type: event.type, payload: event.payload, ...elapsed } as ViewEvent;
+      const view = { runId: event.runId, sequence: next++, ...(asGraph ?? { type: event.type, payload: event.payload }), ...elapsed } as ViewEvent;
       return view;
     },
   };

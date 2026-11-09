@@ -17,6 +17,8 @@ import {
   type ViewEvent,
   visibleScores,
 } from '../web/backend/event-projection.js';
+import type { RunEvent } from '../src/events.js';
+import { adaptRunEvents, foldViewEvents } from '../web/backend/server-adapter.js';
 
 const readJson = (relative: string): unknown => JSON.parse(readFileSync(new URL(`../data/${relative}`, import.meta.url), 'utf8'));
 const seed = CaseSchema.array().parse(readJson('seed/cases.json'));
@@ -267,5 +269,31 @@ describe('agent events', () => {
     const after = project(before, view({ type: 'runtime.message', payload: { threadId: 't', turnId: 'u', itemId: 'i', text: 'Recorded once.', partial: false } }));
     assert.equal(after.graph, before.graph);
     assert.equal(after.raw?.type, 'runtime.message');
+  });
+});
+
+describe('a server run through the adapter', () => {
+  test('memory, context.committed, search and outcome project with no rejection: the scene gets the query graph, the search and the outcome', () => {
+    const rawEvent = (seq: number, type: RunEvent['type'], payload: unknown): RunEvent => ({ runId: RUN, seq, type, payload, at: '2026-11-09T10:00:00.000Z' }) as RunEvent;
+    const events = [
+      rawEvent(1, 'memory.retrieved', { conceptIds: ['addition_within_20'], caseIds: [], summaries: [], links: conceptLinks }),
+      rawEvent(2, 'context.committed', { caseId: filmQuery.id, explanationRevision: 1, graph: filmQuery }),
+      rawEvent(3, 'search.started', { matchingVersion: search.matchingVersion, queryId: filmQuery.id, candidateCount: search.candidateCount, queryNodeIds: filmQuery.nodes.filter((n) => n.stage === 'context').map((n) => n.id) }),
+      rawEvent(4, 'search.completed', search),
+      rawEvent(5, 'outcome.committed', outcomePayload()),
+    ];
+    const rejections: unknown[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => void rejections.push(args);
+    try {
+      const snapshot = foldViewEvents(RUN, corpus, adaptRunEvents(events));
+      assert.deepEqual(rejections, []);
+      assert.equal(snapshot.queryId, filmQuery.id);
+      assert.ok(snapshot.graph);
+      assert.deepEqual(snapshot.search, search);
+      assert.equal(snapshot.outcome?.outcome, 'independent');
+    } finally {
+      console.error = originalError;
+    }
   });
 });
