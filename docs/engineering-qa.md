@@ -11,7 +11,7 @@ This page records what was tested, how, and what is still unproven. It is engine
 | Suite | Result |
 | --- | --- |
 | `npm run typecheck` (server and web) | exit 0 |
-| `npm test` (node:test, no model calls) | 785/785 at `05b412c` |
+| `npm test` (node:test, no model calls) | 790/790 at `dddfab9` (freeze commit) |
 | `npm run test:e2e` (Playwright + axe), per surface | explain 28, number line 27, invitation and lesson notes 34, make-ten 26, inspector 30, graph 10: all passing |
 | iPad shell unit tests (`xcodebuild test`) | 30/30 |
 | Server-level voice tests | 141/141 |
@@ -38,6 +38,7 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | L05 | Lesson notes: Start, Stop and Finish save the prepared text unchanged with no audio captured; a loaded file saves as shown; bad files are refused | PASS | |
 | L06 | Invitation eligibility: invalid concept, quote or evidence is rejected; curriculum links resolve; 18 subtraction and 0 addition cases are summarized and 8 returned | UNPROVED (in part) | Six sub-checks passed; the sub-checks that need fault injection did not run |
 | Main run | Full QA run with the film seed (28): lesson, invitation, 8 + 5, typed explanation labelled as typed, make-ten support, hint-free 9 + 4 with no helpers, outcome committed once, COMPLETE; the export's hashes verified and its ranking hash matches the search event | PASS | |
+| Freeze run | A fresh run at the freeze commit `dddfab9` | PASS | COMPLETE; export hashes verified; ranking hash matches the search event |
 | L07 | Problem selection by seed: invalid seeds refused, the selected pair survives refresh and restart, the film seed gives 8 + 5 then 9 + 4 | PASS | |
 
 ## Voice, delegation and execution
@@ -52,12 +53,12 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | V06 | A duplicate delegation or provider event gives one logical analysis | PASS | |
 | V07 | Sideband disconnect or microphone denied gives an explicit degraded state and the typed path | PASS | Microphone denied live; sideband drop in a controlled test |
 | V08 | Stop learning during analysis and practice; late results and resumes are refused | UNPROVED | Live stop during analysis behaved correctly; the practice leg was not run live |
-| V09 | A correction after speech begins stops the obsolete playback | FAIL (open) | Fix merged in `fb4c5af`; recheck pending |
+| V09 | A correction after speech begins stops the obsolete playback | PASS | After the fix in `9eeca8d`: obsolete speech stops about 1 s after a correction, and the corrected commentary is spoken |
 | V10 | Voice is fully off before the independent problem is enabled | PASS | Live, in the app |
 | V11 | Closing or reloading the page closes the session within bounds | PASS | |
 | V12 | Instruction-like text in a transcript is treated as learner data | PASS | After the voice-instruction fix; before it, the voice model answered an injected instruction itself with a hint |
 
-Further voice checks: the second steering check and three controlled checks with a mocked Codex passed, the iPad web-view voice check passed, one check fails (open, fix in progress) and one is unproved.
+Further voice checks all pass on a desktop browser with the real voice service.
 
 ## Graph, ranking and outcomes
 
@@ -88,7 +89,7 @@ Further voice checks: the second steering check and three controlled checks with
 | M02 | The OS notification arrives after the commit with opaque IDs only | PASS | |
 | M03 | Tapping the notification, warm and cold, opens the exact activity and still asks before starting | PASS | |
 | M04 | Stale activity, offline backend or duplicate tap gives an honest unavailable or retry state | PASS | After the fix in `96f36ca`; before it, a tap on a stale invitation was accepted |
-| M05 | Voice inside the iPad web view: permission, audio and teardown | UNPROVED | The Simulator has no audio input, so only the typed fallback was exercised |
+| M05 | Voice inside the iPad web view: permission, audio and teardown | UNPROVED | The iOS Simulator cannot capture speech: WebKit uses mock capture there, and real capture is not available to the Simulator. The film's explanation is typed and labelled as typed; spoken input is proven in a desktop browser |
 | M06 | Rotating the iPad keeps the activity, moves and attempt | UNPROVED (in part) | The first answer draft survives rotation; the other legs did not run |
 | X01 | The search view shows the actual matched branches | PASS | Live: 659 ranked, 51 admitted, 51 shown |
 | X02 | Class-memory scene | UNPROVED | Not built; outside the demo |
@@ -152,7 +153,8 @@ Make-ten workspace checks:
 | A tap on a stale invitation was accepted | `96f36ca` | M04 PASS |
 | `commit_episode` was refused when the run had moved to a newer revision during verification | retry on the reported revision | Unit tests pass; a retry with the real model is UNPROVED |
 | A new voice session did not ask the child how they got their answer | `cd82d82` | PASS: "How did you get 12?" is spoken 0.4 s after the session starts |
-| A correction after speech begins does not stop the obsolete playback (V09) | in progress | FAIL (open) |
+| A correction after speech begins did not stop the obsolete playback | `9eeca8d` | V09 PASS |
+| The learning-memory view did not draw the live context graph, search and outcome tile | `cc5d708`, `dddfab9` | Verified on a live run |
 
 ## Engineering checks outside the film
 
