@@ -244,6 +244,10 @@ describe('sealing a delegation', () => {
     assert.deepEqual(explanation && { text: explanation.text, inputMode: explanation.inputMode, revision: explanation.revision }, { text: 'I started at eight and counted to twelve', inputMode: 'voice', revision: 1 });
     const [operation] = await h.operations();
     assert.deepEqual((await h.ofType('voice.delegated')).map((e) => e.payload), [{ runId: h.runId, liveSessionId: LIVE.liveSessionId, delegationId: 'del_1', operationId: operation?.operationId, explanationRevision: 1, cancellationEpoch: 0, threadId: THREAD_ID, turnId: null, offsetMs: 3000 }]);
+    const [started] = await h.explanations();
+    const [delegated] = await h.ofType('voice.delegated');
+    const between = (await h.ofType('state.committed')).filter((e) => started && delegated && e.seq > Math.min(started.seq, delegated.seq) && e.seq < Math.max(started.seq, delegated.seq));
+    assert.equal(between.length, 0, 'voice.delegated is committed in the explanation transaction');
   });
 
   test('fragments are deduplicated by event ID; a delayed fragment inside the window supersedes that revision; a later utterance waits for its own delegation (mocked GPT-Live, stub runtime)', async () => {
