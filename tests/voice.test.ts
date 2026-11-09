@@ -3,6 +3,7 @@ import { afterEach, describe, mock, test } from 'node:test';
 import { CORRELATION_ID_KEYS, type VoiceOperation } from '../src/domain.js';
 import { SDP_MAX_BYTES, type VoiceCommand } from '../src/routes.js';
 import { RouteError } from '../src/server.js';
+import type { Store } from '../src/store.js';
 import {
   buildVoiceOperation,
   CLOSE_TIMEOUT_MS,
@@ -583,3 +584,6 @@ describe('close and teardown', () => {
 // Type-level guard: the service interface exposes exactly what the later delegation work needs.
 const _surface: (keyof VoiceService)[] = ['createSession', 'snapshot', 'close', 'sendCommentary', 'transcript', 'failureReason', 'recordOperation'];
 void _surface;
+
+// The real store must satisfy the narrow store interface voice depends on.
+export const storeFitsVoice = (store: Store): VoiceStore => store;
