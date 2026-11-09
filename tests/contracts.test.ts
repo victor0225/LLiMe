@@ -113,7 +113,7 @@ function filmCase(id = CONTEXT_ID): LearningCase {
 
 function supportSpec(): ActivitySpec {
   return {
-    catalogVersion: 'primer-math-v1.1',
+    catalogVersion: 'llime-math-v1.1',
     activityId: `${RUN_ID}_support_1`,
     revision: 8,
     phase: 'support',
@@ -567,7 +567,7 @@ describe('tool calls and results', () => {
   });
 });
 
-describe('activity spec primer-math-v1.1', () => {
+describe('activity spec llime-math-v1.1', () => {
   test('accepts the four film fixtures', () => {
     for (const spec of [supportSpec(), independentSpec(), lineSpec(), independentLineSpec()]) accepts(ActivitySpecSchema, spec);
   });
@@ -577,7 +577,7 @@ describe('activity spec primer-math-v1.1', () => {
       accepts(ActivitySpecSchema, { ...spec, components: [{ ...spec.components[0], props: { first: 8, second: 5, appearance, highlightEmptySlots: false, showEquation: false } }] });
     }
   });
-  test('rejects an older catalog version', () => rejects(ActivitySpecSchema, { ...supportSpec(), catalogVersion: 'primer-math-v1' }));
+  test('rejects an older catalog version', () => rejects(ActivitySpecSchema, { ...supportSpec(), catalogVersion: 'llime-math-v1' }));
   test('rejects unknown components, props and root fields', () => {
     rejects(ActivitySpecSchema, { ...supportSpec(), components: [{ id: 'html', type: 'Html', props: {} }] });
     rejects(ActivitySpecSchema, { ...lineSpec(), components: [{ id: 'line', type: 'NumberLine', props: { start: 8, addend: 5, label: 'Count!' } }] });

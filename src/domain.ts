@@ -6,7 +6,7 @@ import { z } from 'zod';
 // Bump on every contract change so every lane can tell which shape it was built against.
 export const CONTRACT_VERSION = '2.1.0';
 export const MATCHING_VERSION = 'typed-path-v1';
-export const CATALOG_VERSION = 'primer-math-v1.1';
+export const CATALOG_VERSION = 'llime-math-v1.1';
 
 // ---------------------------------------------------------------------------------------------
 // Vocabulary. The known values come from the immutable seed data and do not grow during a run.
@@ -261,7 +261,7 @@ export const AssessmentSchema = z.strictObject({
 export type Assessment = z.infer<typeof AssessmentSchema>;
 
 // ---------------------------------------------------------------------------------------------
-// Generated activity spec, catalog primer-math-v1.1. Structure only: it never carries child-facing text.
+// Generated activity spec, catalog llime-math-v1.1. Structure only: it never carries child-facing text.
 
 export const WorkspaceSchema = z.enum(['NumberLine', 'MakeTenWorkspace']);
 export type Workspace = z.infer<typeof WorkspaceSchema>;

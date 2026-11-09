@@ -1,30 +1,30 @@
 /* Original llime vector reconstruction. State is presentation, never learning evidence. */
-.primer-mascot{display:block;width:100%;height:auto;overflow:visible}
-.primer-mascot .mascot-rig,.primer-mascot [data-part]{transform-box:view-box}
-.primer-mascot .mascot-rig{transform-origin:160px 310px}
-.primer-mascot .arm-left{transform-origin:73px 203px}
-.primer-mascot .arm-right{transform-origin:238px 195px}
-.primer-mascot .leaf{transform-origin:144px 103px}
-.primer-mascot .face{transform-origin:162px 190px}
-.primer-mascot .eye-left{transform-origin:127px 180px}
-.primer-mascot .eye-right{transform-origin:194px 176px}
-.primer-mascot[data-state="welcome"] .arm-right{transform:rotate(-78deg)}
-.primer-mascot[data-state="listening"] .mascot-rig{transform:rotate(-5deg)}
-.primer-mascot[data-state="listening"] .arm-right{transform:rotate(-110deg)}
-.primer-mascot .listening-hand-detail{opacity:0}
-.primer-mascot[data-state="listening"] .listening-hand-detail{opacity:1}
-.primer-mascot[data-state="listening"] .face{transform:translate(-3px,1px)}
-.primer-mascot[data-state="thinking"] .leaf{transform:rotate(-10deg)}
-.primer-mascot[data-state="thinking"] .face{transform:translate(0,-3px)}
-.primer-mascot[data-state="encouragement"] .arm-left{transform:rotate(37deg)}
-.primer-mascot[data-state="encouragement"] .arm-right{transform:rotate(-43deg)}
+.llime-mascot{display:block;width:100%;height:auto;overflow:visible}
+.llime-mascot .mascot-rig,.llime-mascot [data-part]{transform-box:view-box}
+.llime-mascot .mascot-rig{transform-origin:160px 310px}
+.llime-mascot .arm-left{transform-origin:73px 203px}
+.llime-mascot .arm-right{transform-origin:238px 195px}
+.llime-mascot .leaf{transform-origin:144px 103px}
+.llime-mascot .face{transform-origin:162px 190px}
+.llime-mascot .eye-left{transform-origin:127px 180px}
+.llime-mascot .eye-right{transform-origin:194px 176px}
+.llime-mascot[data-state="welcome"] .arm-right{transform:rotate(-78deg)}
+.llime-mascot[data-state="listening"] .mascot-rig{transform:rotate(-5deg)}
+.llime-mascot[data-state="listening"] .arm-right{transform:rotate(-110deg)}
+.llime-mascot .listening-hand-detail{opacity:0}
+.llime-mascot[data-state="listening"] .listening-hand-detail{opacity:1}
+.llime-mascot[data-state="listening"] .face{transform:translate(-3px,1px)}
+.llime-mascot[data-state="thinking"] .leaf{transform:rotate(-10deg)}
+.llime-mascot[data-state="thinking"] .face{transform:translate(0,-3px)}
+.llime-mascot[data-state="encouragement"] .arm-left{transform:rotate(37deg)}
+.llime-mascot[data-state="encouragement"] .arm-right{transform:rotate(-43deg)}
 @media(prefers-reduced-motion:no-preference){
- .primer-mascot:not([data-motion="off"])[data-state="welcome"] .arm-right{animation:primer-wave 1.25s ease-in-out 1}
- .primer-mascot:not([data-motion="off"])[data-state="listening"] .eye-left,.primer-mascot:not([data-motion="off"])[data-state="listening"] .eye-right{animation:primer-blink 1.8s ease-in-out 1}
- .primer-mascot:not([data-motion="off"])[data-state="thinking"] .leaf{animation:primer-leaf 1.6s ease-in-out 2}
- .primer-mascot:not([data-motion="off"])[data-state="encouragement"] .mascot-rig{animation:primer-encourage 650ms ease-in-out 1}
+ .llime-mascot:not([data-motion="off"])[data-state="welcome"] .arm-right{animation:llime-wave 1.25s ease-in-out 1}
+ .llime-mascot:not([data-motion="off"])[data-state="listening"] .eye-left,.llime-mascot:not([data-motion="off"])[data-state="listening"] .eye-right{animation:llime-blink 1.8s ease-in-out 1}
+ .llime-mascot:not([data-motion="off"])[data-state="thinking"] .leaf{animation:llime-leaf 1.6s ease-in-out 2}
+ .llime-mascot:not([data-motion="off"])[data-state="encouragement"] .mascot-rig{animation:llime-encourage 650ms ease-in-out 1}
 }
-@keyframes primer-wave{0%,100%{transform:rotate(-78deg)}20%,60%{transform:rotate(-100deg)}40%,80%{transform:rotate(-65deg)}}
-@keyframes primer-blink{0%,34%,44%,100%{transform:scaleY(1)}39%{transform:scaleY(.12)}}
-@keyframes primer-leaf{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
-@keyframes primer-encourage{0%,100%{transform:translateY(0) scale(1)}35%{transform:translateY(3px) scale(1.02,.98)}65%{transform:translateY(-7px) scale(.99,1.01)}}
+@keyframes llime-wave{0%,100%{transform:rotate(-78deg)}20%,60%{transform:rotate(-100deg)}40%,80%{transform:rotate(-65deg)}}
+@keyframes llime-blink{0%,34%,44%,100%{transform:scaleY(1)}39%{transform:scaleY(.12)}}
+@keyframes llime-leaf{0%,100%{transform:rotate(-10deg)}50%{transform:rotate(10deg)}}
+@keyframes llime-encourage{0%,100%{transform:translateY(0) scale(1)}35%{transform:translateY(3px) scale(1.02,.98)}65%{transform:translateY(-7px) scale(.99,1.01)}}
