@@ -1,7 +1,8 @@
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '@core/copy';
 import { EXPLANATION_MAX_CHARS, type Activity, type Command, type Problem, type RunPhase, type SavedAttempt } from '@core/domain';
 import type { RunEvent, RunSnapshot } from '@core/events';
+import { useRunEvents, type EventStore } from '../lib/event-store';
 import { ConnectionNotice, Outcome, outcomeView, type StartNewRun } from './Outcome';
 import '../styles/explain.css';
 
@@ -413,17 +414,20 @@ export function isExplainFlowRun(run: RunSnapshot): boolean {
   return run.stopped || (EXPLAIN_FLOW_PHASES as readonly RunPhase[]).includes(run.phase);
 }
 
+// Sends a learning command through the run's single mutation queue, with a fresh command ID and the
+// revision current when the request actually leaves.
+export function learningCommandSender(store: EventStore): SendLearningCommand {
+  return async (command) => {
+    await store.sendRunCommand('runCommand', (run) => ({ ...command, commandId: crypto.randomUUID(), revision: run.revision }));
+  };
+}
+
 export type ExplainFlowProps = {
-  run: RunSnapshot;
-  // Events polled after the snapshot; the snapshot's own execution events are read as well.
-  events: readonly RunEvent[];
+  store: EventStore;
+  // Null when this server offers no voice.
   voice: VoiceStateStub | null;
   voiceControls: VoiceControlsStub;
-  send: SendLearningCommand;
   startNewRun: StartNewRun;
-  connection: 'live' | 'paused';
-  // A submitted command has no acknowledged result yet.
-  saveUnconfirmed: boolean;
 };
 
 function lastAttempt(run: RunSnapshot, criterion?: SavedAttempt['criterion']): SavedAttempt | null {
@@ -431,7 +435,25 @@ function lastAttempt(run: RunSnapshot, criterion?: SavedAttempt['criterion']): S
 }
 
 // The slot the student app mounts for the phases above.
-export function ExplainFlow({ run, events, voice, voiceControls, send, startNewRun, connection, saveUnconfirmed }: ExplainFlowProps) {
+export function ExplainFlow({ store, voice, voiceControls, startNewRun }: ExplainFlowProps) {
+  const { run, events, status } = useRunEvents(store);
+  // Commands this flow sent that have no answer yet; while the connection is down they are the
+  // work whose save cannot be confirmed.
+  const [unansweredSends, setUnansweredSends] = useState(0);
+  const sendThroughQueue = useMemo(() => learningCommandSender(store), [store]);
+  const send: SendLearningCommand = useCallback(
+    async (command) => {
+      setUnansweredSends((count) => count + 1);
+      try {
+        await sendThroughQueue(command);
+      } finally {
+        setUnansweredSends((count) => count - 1);
+      }
+    },
+    [sendThroughQueue],
+  );
+  if (!run) return null;
+  const connection = status === 'reconnecting' ? 'paused' : 'live';
   const canSend = connection === 'live' && !run.stopped;
   const problem = run.activity?.problem ?? run.selectedProblems?.initial ?? null;
   const voiceProps = { voice, voiceControls, send, canSend };
@@ -467,7 +489,7 @@ export function ExplainFlow({ run, events, voice, voiceControls, send, startNewR
 
   return (
     <>
-      {connection === 'paused' && <ConnectionNotice saveUnconfirmed={saveUnconfirmed} />}
+      {connection === 'paused' && <ConnectionNotice saveUnconfirmed={unansweredSends > 0} />}
       {screen()}
     </>
   );

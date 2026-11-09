@@ -2,6 +2,10 @@
    Scoped under .ex so these rules never restyle another screen. Builds on tokens.css and the shared
    controls in components.css. */
 
+/* Padding stays inside every width, so a full-width screen never pushes past the viewport. */
+.ex,
+.ex * { box-sizing: border-box; }
+
 /* Additions to the shared controls: a pressed toggle and focus on the number choices. */
 .ex .p-button[aria-pressed="true"] {
   background: var(--p-disabled);

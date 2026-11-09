@@ -2,15 +2,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import { ACTIVITY_COPY, OUTCOME_COPY, STUDENT_COPY } from '@core/copy';
 import { ActivitySchema, type Problem } from '@core/domain';
-import { routePath } from '@core/routes';
-import {
-  Explanation,
-  RetryIntro,
-  Thinking,
-  type LearningCommandRequest,
-  type VoiceControlsStub,
-  type VoiceStateStub,
-} from '../web/student/Explanation';
+import { createEventStore } from '../web/lib/event-store';
+import { Explanation, RetryIntro, Thinking, learningCommandSender, type VoiceControlsStub, type VoiceStateStub } from '../web/student/Explanation';
 import { ConnectionNotice } from '../web/student/Outcome';
 
 // Story fixtures: a synthetic problem and answer, and voice states as the voice client would report
@@ -19,16 +12,9 @@ const problem: Problem = { lhs: 8, rhs: 5 };
 const answer = 12;
 const STORY_RUN_ID = 'story-run';
 
-// Stories have no run of their own. Each command is posted the way the app's queue sends it, so
-// browser checks read the exact body at the HTTP boundary.
-async function postStoryCommand(command: LearningCommandRequest): Promise<void> {
-  const response = await fetch(routePath('runCommand', { runId: STORY_RUN_ID }), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...command, commandId: crypto.randomUUID(), revision: 0 }),
-  });
-  if (!response.ok) throw new Error(`The command was not accepted (HTTP ${response.status})`);
-}
+// Commands go through the app's own run queue. Without a server behind Storybook they fail visibly;
+// browser checks answer them at the HTTP boundary.
+const postStoryCommand = learningCommandSender(createEventStore(STORY_RUN_ID));
 
 // Voice controls only record which control was pressed; the fixture state never changes on a press,
 // exactly as a real client changes state only when the session does.
@@ -53,8 +39,9 @@ const tutorQuestion = 'How did you get twelve?';
 const longExplanation =
   'I started with eight and called that one, then nine was two, ten was three, eleven was four, and twelve was five. I think I counted the number I started on, so I said twelve, but maybe I should have moved first and then counted, like nine is one, ten is two, eleven is three, twelve is four, thirteen is five. Supercalifragilisticexpialidociouslylongwordwithoutanyspacesatall.';
 
-function Page({ children }: { children: ReactNode }) {
-  return <main className="story-student-page">{children}</main>;
+// The student page canvas the app provides around these screens.
+export function StudentPage({ children }: { children: ReactNode }) {
+  return <main style={{ minHeight: '100vh', background: 'var(--p-background)', color: 'var(--p-text)', fontFamily: 'var(--p-font)' }}>{children}</main>;
 }
 
 const explanation = (state: { voice: VoiceStateStub | null; askFirstNumber?: boolean; question?: string; intro?: string | null; canSend?: boolean }) => (
@@ -73,7 +60,9 @@ const explanation = (state: { voice: VoiceStateStub | null; askFirstNumber?: boo
 
 const meta = {
   title: 'Student/Explain',
-  decorators: [(Story) => <Page>{Story()}</Page>],
+  // StudentPage is shared with the other explain story files, not a story.
+  excludeStories: ['StudentPage'],
+  decorators: [(Story) => <StudentPage>{Story()}</StudentPage>],
 } satisfies Meta;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -143,9 +132,9 @@ const retryActivity = ActivitySchema.parse({
 // The number-line practice mounts in this slot in the app; the story shows only where it goes.
 export const RetryIntroduction: Story = {
   render: () => (
-    <div className="story-wide">
+    <div style={{ maxWidth: 1160, margin: '0 auto', padding: 'var(--p-space-4) var(--p-space-2)' }}>
       <RetryIntro activity={retryActivity}>
-        <div className="story-practice-slot" aria-hidden="true" />
+        <div style={{ minHeight: 240, border: '2px dashed var(--p-control-border)', borderRadius: 'var(--p-radius-card)' }} aria-hidden="true" />
       </RetryIntro>
     </div>
   ),
