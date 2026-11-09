@@ -1,0 +1,33 @@
+# One Neo4j service per computer, shared by every worktree. The fixed project name keeps a bare
+# `docker compose up` from any worktree on this same service and volume instead of creating a
+# second database that would collide on the same ports.
+name: llime-local
+
+services:
+  graph:
+    image: neo4j:5.26.0-community
+    restart: unless-stopped
+    ports:
+      # Loopback only: the database is never reachable from the network.
+      - "127.0.0.1:17474:7474"
+      - "127.0.0.1:17687:7687"
+    environment:
+      # The password comes from the worktree .env written by setup-env from the machine credential.
+      # Neo4j applies it only when the data volume is first initialized; later changes have no effect.
+      NEO4J_AUTH: "neo4j/${NEO4J_PASSWORD:?NEO4J_PASSWORD is not set; run npm run setup:env to reuse the machine DB credential}"
+      # Small fixed memory budget so the service fits beside the app, Codex and the Simulator on a 16 GB Mac.
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 128m
+    volumes:
+      - graph-data:/data
+    healthcheck:
+      # The HTTP endpoint answers only once the server accepts connections, so `up --wait` means ready.
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+volumes:
+  graph-data:
