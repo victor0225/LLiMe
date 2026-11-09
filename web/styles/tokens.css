@@ -1,0 +1,39 @@
+/* llime tokens. Supplied reference palette; system font, no proprietary font. */
+:root {
+  --p-primary: #a5ed6e;
+  --p-on-primary: #111111;
+  --p-primary-edge: #75b541;
+  --p-background: #ddf4ff;
+  --p-surface: #ffffff;
+  --p-text: #3c3c3c;
+  --p-muted: #595959;
+  --p-accent: #1cb0f6;
+  --p-border: #b5d3df;
+  --p-control-border: #65828e;
+  --p-focus: #075c91;
+  --p-error: #9c2f24;
+  --p-error-surface: #fff0ec;
+  --p-success: #275c22;
+  --p-success-surface: #edf9e6;
+  --p-disabled: #e6edf0;
+  --p-font: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --p-font-body: 20px;
+  --p-font-small: 16px;
+  --p-font-heading: 28px;
+  --p-font-math: 56px;
+  --p-line-body: 1.5;
+  --p-line-heading: 1.2;
+  --p-space-1: 10px;
+  --p-space-2: 20px;
+  --p-space-3: 30px;
+  --p-space-4: 40px;
+  --p-space-6: 60px;
+  --p-space-8: 80px;
+  --p-radius-control: 12px;
+  --p-radius-card: 12px;
+  --p-target-min: 48px;
+  --p-target-student: 56px;
+  --p-motion-feedback: 120ms;
+  --p-motion-enter: 180ms;
+  --p-ease: ease;
+}
