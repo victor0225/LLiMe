@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import type { LessonRecord, RunPhase } from '../src/domain.js';
 import {
   createInboxScanner,
+  hasInboxLesson,
   INBOX_DIR,
   INBOX_FILE_MAX_BYTES,
   INBOX_STABILITY_WINDOW_MS,
@@ -189,6 +190,39 @@ describe('saving a lesson transcript', () => {
 });
 
 describe('inbox watcher (stubbed store transition and turn)', () => {
+  test('a run has an inbox lesson only once its transcript file is saved', async () => {
+    const root = await tempRoot();
+    assert.equal(await hasInboxLesson(RUN_A, { rootDir: root }), false);
+    await saveTranscript(RUN_A, 'Today we made ten.', { rootDir: root });
+    assert.equal(await hasInboxLesson(RUN_A, { rootDir: root }), true);
+    assert.equal(await hasInboxLesson(RUN_B, { rootDir: root }), false);
+    assert.equal(await hasInboxLesson('../escape', { rootDir: root }), false);
+  });
+
+  test('a turn that fails to start is reported after its ingestion start', async () => {
+    const root = await tempRoot();
+    const clock = testClock();
+    const ingestion = stubIngestionStore({ [RUN_A]: waiting() });
+    const reported: InboxOutcome[] = [];
+    const scanner = createInboxScanner({
+      rootDir: root,
+      store: ingestion.store,
+      startIngestionTurn: async () => {
+        throw new Error('runtime unavailable');
+      },
+      now: clock.now,
+      onOutcome: (outcome) => reported.push(outcome),
+    });
+    await saveTranscript(RUN_A, 'Today we made ten.', { rootDir: root });
+    await scanner.scanInbox();
+    clock.advance(INBOX_STABILITY_WINDOW_MS);
+    await scanner.scanInbox();
+    await scanner.idle();
+
+    assert.deepEqual(reported.map((o) => o.kind), ['ingestion_started', 'turn_failed']);
+    assert.equal(ingestion.state.get(RUN_A)?.phase, 'INGESTING');
+  });
+
   test('a file is accepted only after two unchanged checks a full stability window apart', async () => {
     const root = await tempRoot();
     const { scanner, clock, turn } = await scannerFor(root, { [RUN_A]: waiting() });

@@ -71,6 +71,14 @@ export function NumberLine({ draft, onDraftChange, startMarker, showMoveCount, d
   const moveTo = (target: number) => {
     if (canMoveTo(draft, target)) onDraftChange({ ...draft, moves: [...draft.moves, target] });
   };
+  // A move button that cannot go further becomes disabled; focus then moves to the current tick.
+  const step = (direction: -1 | 1) => {
+    if (position === null) return;
+    const target = position + direction;
+    const next: NumberLineDraft = { ...draft, moves: [...draft.moves, target] };
+    if (!canMoveTo(next, target + direction)) focusTabStop.current = true;
+    moveTo(target);
+  };
 
   const pressTick = (value: number) => {
     const role = tickRole(draft, value, startMarker, disabled);
@@ -143,11 +151,11 @@ export function NumberLine({ draft, onDraftChange, startMarker, showMoveCount, d
         {showMoveCount && <p className="nl-count">{NUMBER_LINE_COPY.moveCount(draft.moves.length)}</p>}
       </div>
       <div className="nl-moves">
-        <button type="button" className="p-button nl-move" data-variant="secondary" disabled={disabled || position === null || !canMoveTo(draft, position - 1)} onClick={() => position !== null && moveTo(position - 1)}>
+        <button type="button" className="p-button nl-move" data-variant="secondary" disabled={disabled || position === null || !canMoveTo(draft, position - 1)} onClick={() => step(-1)}>
           <ArrowIcon direction="back" />
           {STUDENT_COPY.moveBack}
         </button>
-        <button type="button" className="p-button nl-move" data-variant="secondary" disabled={disabled || position === null || !canMoveTo(draft, position + 1)} onClick={() => position !== null && moveTo(position + 1)}>
+        <button type="button" className="p-button nl-move" data-variant="secondary" disabled={disabled || position === null || !canMoveTo(draft, position + 1)} onClick={() => step(1)}>
           {STUDENT_COPY.moveForward}
           <ArrowIcon direction="forward" />
         </button>

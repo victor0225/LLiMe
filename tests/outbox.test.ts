@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { type NotificationOutbox, NotificationOutboxSchema } from '../src/domain.js';
 import type { EventPayload } from '../src/events.js';
@@ -33,6 +34,10 @@ function memoryOutbox(rows: NotificationOutbox[]) {
     Object.assign(row, { status, lastErrorCode });
   };
   const store: OutboxStore = {
+    async getNotification(id) {
+      const row = byId.get(id);
+      return row ? { ...row } : null;
+    },
     async listPendingNotifications() {
       return [...byId.values()].filter((row) => row.status === 'pending').map((row) => row.notificationId);
     },
@@ -74,11 +79,43 @@ function stubSimctl(pushExitCodes: number[] = []) {
   return { runSimctl, pushes };
 }
 
+const ownsEveryRun = async () => true;
+
 describe('outbox loop (stubbed simctl)', () => {
+  test('rows of runs this server does not own are never recovered, claimed or sent', async () => {
+    const outbox = memoryOutbox([
+      outboxRow({ notificationId: 'ntf_theirs_waiting', runId: 'run_other_worktree' }),
+      outboxRow({ notificationId: 'ntf_theirs_dispatching', runId: 'run_other_worktree', activityId: 'act_9', status: 'dispatching', attemptCount: 1 }),
+      outboxRow({ notificationId: 'ntf_ours', runId: 'run_ours', activityId: 'act_2' }),
+    ]);
+    const simctl = stubSimctl();
+    const ownsRun = async (runId: string) => runId === 'run_ours';
+
+    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, ownsRun, scanIntervalMs: null });
+    await loop.kick();
+    await loop.stop();
+
+    assert.deepEqual(simctl.pushes, ['ntf_ours']);
+    assert.deepEqual(outbox.row('ntf_theirs_waiting'), outboxRow({ notificationId: 'ntf_theirs_waiting', runId: 'run_other_worktree' }));
+    assert.equal(outbox.row('ntf_theirs_dispatching')?.status, 'dispatching');
+  });
+
+  test('by default a run whose lesson never reached this checkout\'s inbox is not owned', async () => {
+    const outbox = memoryOutbox([outboxRow({ runId: `run_${randomUUID()}` })]);
+    const simctl = stubSimctl();
+
+    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, scanIntervalMs: null });
+    await loop.kick();
+    await loop.stop();
+
+    assert.deepEqual(simctl.pushes, []);
+    assert.equal(outbox.row('ntf_1')?.status, 'pending');
+  });
+
   test('a committed pending row is dispatched once, even with two loops running', async () => {
     const outbox = memoryOutbox([]);
     const simctl = stubSimctl();
-    const loops = await Promise.all([1, 2].map(() => startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, scanIntervalMs: null })));
+    const loops = await Promise.all([1, 2].map(() => startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, ownsRun: ownsEveryRun, scanIntervalMs: null })));
 
     outbox.commit(outboxRow());
     await Promise.all(loops.flatMap((loop) => [loop.kick(), loop.kick()]));
@@ -97,7 +134,7 @@ describe('outbox loop (stubbed simctl)', () => {
     const simctl = stubSimctl();
     const outcomes: OutboxOutcome[] = [];
 
-    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, scanIntervalMs: null, onOutcome: (o) => outcomes.push(o) });
+    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, ownsRun: ownsEveryRun, scanIntervalMs: null, onOutcome: (o) => outcomes.push(o) });
     await loop.kick();
     await loop.kick();
     await loop.stop();
@@ -116,7 +153,7 @@ describe('outbox loop (stubbed simctl)', () => {
     const activityBefore = structuredClone(outbox.run);
     const simctl = stubSimctl([64]);
 
-    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, scanIntervalMs: null });
+    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, ownsRun: ownsEveryRun, scanIntervalMs: null });
     await loop.kick();
     await loop.stop();
 
@@ -137,7 +174,7 @@ describe('outbox loop (stubbed simctl)', () => {
     const simctl = stubSimctl();
     const outcomes: OutboxOutcome[] = [];
 
-    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, scanIntervalMs: null, onOutcome: (o) => outcomes.push(o) });
+    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, ownsRun: ownsEveryRun, scanIntervalMs: null, onOutcome: (o) => outcomes.push(o) });
     await loop.kick();
     await loop.stop();
 
@@ -155,7 +192,7 @@ describe('outbox loop (stubbed simctl)', () => {
   test('a stopped loop dispatches nothing more', async () => {
     const outbox = memoryOutbox([]);
     const simctl = stubSimctl();
-    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, scanIntervalMs: null });
+    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, ownsRun: ownsEveryRun, scanIntervalMs: null });
     await loop.stop();
 
     outbox.commit(outboxRow());

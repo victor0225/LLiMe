@@ -24,11 +24,27 @@ export type VoiceControlsStub = {
   readonly reconnect: () => void;
 };
 
-// A learning command as a screen asks for it; the run's command queue adds commandId and the latest
-// revision. The promise resolves once the server committed it and rejects when it was not accepted.
+// A learning command as a screen asks for it; the run's command queue adds the latest revision. The
+// caller keeps the command ID across retries of the same action, so a send whose answer was lost is
+// reconciled by the server instead of arriving twice. Resolves once the server committed the command
+// and rejects when it was not accepted.
 type WithoutEnvelope<C> = C extends unknown ? Omit<C, 'commandId' | 'revision'> : never;
 export type LearningCommandRequest = WithoutEnvelope<Command>;
-export type SendLearningCommand = (command: LearningCommandRequest) => Promise<void>;
+export type SendLearningCommand = (command: LearningCommandRequest, commandId: string) => Promise<void>;
+
+// The command ID for an action: reused while the same action is retried, fresh once it changes.
+function useRetryCommandId() {
+  const last = useRef<{ key: string; commandId: string } | null>(null);
+  return {
+    forAction: (key: string) => {
+      if (last.current?.key !== key) last.current = { key, commandId: crypto.randomUUID() };
+      return last.current.commandId;
+    },
+    settled: () => {
+      last.current = null;
+    },
+  };
+}
 
 // The clarification offers the same 0-20 ticks as the number line the child used.
 const NUMBER_LINE_TICKS = Array.from({ length: 21 }, (_, tick) => tick);
@@ -163,6 +179,7 @@ function TypedExplanation({ selection, send, canSend, autoFocus }: TypedExplanat
   const [draft, setDraft] = useState('');
   const [state, setState] = useState<'editing' | 'sending' | 'failed'>('editing');
   const inFlight = useRef(false);
+  const commandIds = useRetryCommandId();
   const text = combineExplanation(selection, draft);
   const isTooLong = text.length > EXPLANATION_MAX_CHARS;
   const isSendable = canSend && state !== 'sending' && text.length > 0 && !isTooLong;
@@ -172,7 +189,8 @@ function TypedExplanation({ selection, send, canSend, autoFocus }: TypedExplanat
     inFlight.current = true;
     setState('sending');
     try {
-      await send({ type: 'explain', text });
+      await send({ type: 'explain', text }, commandIds.forAction(text));
+      commandIds.settled();
       setDraft('');
       setState('editing');
     } catch {
@@ -254,12 +272,14 @@ function FirstNumberChoice({ labelledBy, selected, onSelect }: { labelledBy: str
 function StopLearning({ send, canSend }: { send: SendLearningCommand; canSend: boolean }) {
   const [state, setState] = useState<'idle' | 'stopping' | 'failed'>('idle');
   const inFlight = useRef(false);
+  const commandIds = useRetryCommandId();
   const stop = async () => {
     if (inFlight.current) return;
     inFlight.current = true;
     setState('stopping');
     try {
-      await send({ type: 'stop_learning' });
+      await send({ type: 'stop_learning' }, commandIds.forAction('stop_learning'));
+      commandIds.settled();
       setState('idle');
     } catch {
       setState('failed');
@@ -316,7 +336,7 @@ export function Explanation({ question, problem, answer, voice, voiceControls, s
     <section className="ex ex-screen" aria-labelledby={headingId}>
       <div className="ex-guide">
         {intro && <p className="p-speech ex-intro">{intro}</p>}
-        <h1 id={headingId} className="ex-title" aria-live="polite">
+        <h1 id={headingId} className="ex-title">
           {question}
         </h1>
         {voice && <VoiceStatus voice={voice} controls={voiceControls} />}
@@ -408,17 +428,17 @@ function isCorrectionPending(run: RunSnapshot, events: readonly RunEvent[]): boo
 
 // Phases this flow renders, plus any stopped run. Practice, support and the independent check
 // belong to their own screens; a retry wraps practice in RetryIntro.
-export const EXPLAIN_FLOW_PHASES = ['EXPLAIN', 'PROCESSING', 'CLARIFY', 'NEEDS_SUPPORT', 'COMPLETE', 'ERROR'] as const satisfies readonly RunPhase[];
+export const EXPLAIN_FLOW_PHASES: readonly RunPhase[] = ['EXPLAIN', 'PROCESSING', 'CLARIFY', 'NEEDS_SUPPORT', 'COMPLETE', 'ERROR'];
 
 export function isExplainFlowRun(run: RunSnapshot): boolean {
-  return run.stopped || (EXPLAIN_FLOW_PHASES as readonly RunPhase[]).includes(run.phase);
+  return run.stopped || EXPLAIN_FLOW_PHASES.includes(run.phase);
 }
 
-// Sends a learning command through the run's single mutation queue, with a fresh command ID and the
-// revision current when the request actually leaves.
+// Sends a learning command through the run's single mutation queue, with the revision current when
+// the request actually leaves.
 export function learningCommandSender(store: EventStore): SendLearningCommand {
-  return async (command) => {
-    await store.sendRunCommand('runCommand', (run) => ({ ...command, commandId: crypto.randomUUID(), revision: run.revision }));
+  return async (command, commandId) => {
+    await store.sendRunCommand('runCommand', (run) => ({ ...command, commandId, revision: run.revision }));
   };
 }
 
@@ -442,10 +462,10 @@ export function ExplainFlow({ store, voice, voiceControls, startNewRun }: Explai
   const [unansweredSends, setUnansweredSends] = useState(0);
   const sendThroughQueue = useMemo(() => learningCommandSender(store), [store]);
   const send: SendLearningCommand = useCallback(
-    async (command) => {
+    async (command, commandId) => {
       setUnansweredSends((count) => count + 1);
       try {
-        await sendThroughQueue(command);
+        await sendThroughQueue(command, commandId);
       } finally {
         setUnansweredSends((count) => count - 1);
       }
