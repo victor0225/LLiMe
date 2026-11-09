@@ -304,15 +304,17 @@ export class Store {
     return true;
   }
 
+  // Counts the seed only: live cases written by runs (provenance live_demo) are left out, so a run in
+  // progress never changes what the seed reports.
   async seedCounts(): Promise<SeedCounts> {
     return this.read(async (tx) => {
       const count = async (query: string) => num((await tx.run(query)).records[0]?.get('n'));
       return {
-        cases: await count('MATCH (n:Case) RETURN count(n) AS n'),
-        memoryNodes: await count('MATCH (n:MemoryNode) RETURN count(n) AS n'),
+        cases: await count(`MATCH (n:Case {provenance: 'synthetic'}) RETURN count(n) AS n`),
+        memoryNodes: await count(`MATCH (:Case {provenance: 'synthetic'})-[:CONTAINS]->(n:MemoryNode) RETURN count(n) AS n`),
         students: await count('MATCH (n:Student) RETURN count(n) AS n'),
         concepts: await count('MATCH (n:Concept) RETURN count(n) AS n'),
-        caseEdges: await count('MATCH (:MemoryNode)-[r]->(:MemoryNode) RETURN count(r) AS n'),
+        caseEdges: await count(`MATCH (:Case {provenance: 'synthetic'})-[:CONTAINS]->(:MemoryNode)-[r]->(:MemoryNode) RETURN count(r) AS n`),
         conceptLinks: await count('MATCH (:Concept)-[r:CONCEPT_LINK]->(:Concept) RETURN count(r) AS n'),
         subconceptEdges: await count('MATCH (:Concept)-[r:SUBCONCEPT_OF]->(:Concept) RETURN count(r) AS n'),
       };
