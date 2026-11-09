@@ -226,13 +226,13 @@ describe('transitions', () => {
     const runId = await newRun();
     const lesson = { contentHash: 'f'.repeat(64), text: 'Seven plus four.', source: 'local_file' as const, savedAt: '2026-11-09T10:00:00.000Z' };
     const first = await store.beginIngestion(runId, { expectedRevision: 0, lesson });
-    assert.deepEqual(first, { revision: 1, eventSeq: 1 });
+    assert.deepEqual(first, { revision: 1, eventSeq: 1, replayed: false });
     const run = await store.getRun(runId);
     assert.equal(run.state.phase, 'INGESTING');
     assert.equal(run.state.lesson?.text, lesson.text);
     assert.deepEqual((await store.events(runId)).map((e) => e.type), ['lesson.detected', 'state.committed']);
     // A retry with the same content returns the receipt and adds nothing.
-    assert.deepEqual(await store.beginIngestion(runId, { expectedRevision: 0, lesson }), first);
+    assert.deepEqual(await store.beginIngestion(runId, { expectedRevision: 0, lesson }), { ...first, replayed: true });
     assert.equal((await store.events(runId)).length, 2);
     // A different lesson from the wrong phase is refused.
     await assert.rejects(store.beginIngestion(runId, { expectedRevision: 1, lesson: { ...lesson, contentHash: 'e'.repeat(64) } }), (error) => error instanceof DomainError && error.code === 'WRONG_PHASE');

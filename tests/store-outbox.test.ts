@@ -122,6 +122,17 @@ describe('notification outbox', () => {
     for (const { runId } of [failed, unknown]) assert.deepEqual(await store.events(runId), []);
   });
 
+  test('pending rows are listed for the backlog scan until they are claimed', async () => {
+    const waiting = await runWithOutbox('waiting');
+    const taken = await runWithOutbox('taken');
+    await store.claimNotification(taken.row.notificationId);
+    const pending = await store.listPendingNotifications();
+    assert.ok(pending.includes(waiting.row.notificationId));
+    assert.ok(!pending.includes(taken.row.notificationId));
+    await store.claimNotification(waiting.row.notificationId);
+    assert.ok(!(await store.listPendingNotifications()).includes(waiting.row.notificationId));
+  });
+
   test('rows left dispatching are listed for restart recovery', async () => {
     const stuck = await runWithOutbox('stuck');
     const idle = await runWithOutbox('idle');

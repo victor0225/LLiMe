@@ -526,9 +526,9 @@ export class Store {
   // -------------------------------------------------------------------------------------------
   // Lesson ingestion start: WAITING -> INGESTING, recording the saved transcript and lesson.detected.
 
-  async beginIngestion(runId: string, input: { expectedRevision: number; lesson: LessonRecord }): Promise<{ revision: number; eventSeq: number }> {
+  async beginIngestion(runId: string, input: { expectedRevision: number; lesson: LessonRecord }): Promise<{ revision: number; eventSeq: number; replayed: boolean }> {
     const { lesson } = input;
-    const { result } = await this.transition({
+    const { result, replayed } = await this.transition({
       runId,
       commandKey: `begin_ingestion:${lesson.contentHash}`,
       body: lesson,
@@ -543,7 +543,8 @@ export class Store {
         };
       },
     });
-    return result;
+    // A replay means another caller already started this ingestion; only the first caller runs the turn.
+    return { ...result, replayed };
   }
 
   // -------------------------------------------------------------------------------------------
@@ -617,6 +618,14 @@ export class Store {
     await this.write(async (tx) => {
       const result = await tx.run("MATCH (n:NotificationOutbox {id: $id}) WHERE n.status = 'dispatching' SET n.status = $status, n.lastErrorCode = $lastErrorCode RETURN n.id AS id", { id: notificationId, status, lastErrorCode });
       if (result.records.length === 0) throw new DomainError('CONFLICT', `Notification ${notificationId} is not being dispatched`);
+    });
+  }
+
+  // Rows waiting to be sent, oldest first, for the dispatcher's backlog scan.
+  async listPendingNotifications(): Promise<string[]> {
+    return this.read(async (tx) => {
+      const result = await tx.run("MATCH (n:NotificationOutbox {status: 'pending'}) RETURN n.id AS id ORDER BY n.createdAt, n.id");
+      return result.records.map((r) => str(r.get('id')));
     });
   }
 
