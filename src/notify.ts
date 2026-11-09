@@ -271,17 +271,24 @@ export async function startOutboxLoop(deps: OutboxLoopDeps): Promise<OutboxLoop>
   const report = (outcome: OutboxOutcome) => deps.onOutcome?.(outcome);
   const { store } = deps;
   const ownsRun = deps.ownsRun ?? ((runId: string) => hasInboxLesson(runId, { rootDir: repoRoot }));
-  // A run's ownership never changes once it has an outbox row, so each run is asked about once.
+  // A row's run and a run's ownership never change once the row exists, so each is looked up once;
+  // other servers' rows then cost the backstop scan nothing beyond the listing.
+  const runIdOf = new Map<string, string>();
   const ownership = new Map<string, boolean>();
   const ownedOnly = async (notificationIds: string[]): Promise<string[]> => {
     const owned: string[] = [];
     for (const notificationId of notificationIds) {
-      const row = await store.getNotification(notificationId);
-      if (row === null) continue;
-      let isOwned = ownership.get(row.runId);
+      let runId = runIdOf.get(notificationId);
+      if (runId === undefined) {
+        const row = await store.getNotification(notificationId);
+        if (row === null) continue;
+        runId = row.runId;
+        runIdOf.set(notificationId, runId);
+      }
+      let isOwned = ownership.get(runId);
       if (isOwned === undefined) {
-        isOwned = await ownsRun(row.runId);
-        ownership.set(row.runId, isOwned);
+        isOwned = await ownsRun(runId);
+        ownership.set(runId, isOwned);
       }
       if (isOwned) owned.push(notificationId);
     }

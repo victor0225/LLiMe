@@ -1,0 +1,138 @@
+/* Learning memory scene. Deliberately unlike the student app: ink ground, one warm accent that marks only
+   what the decision used. Type sizes inside the SVG are viewBox units; at 1280 x 800 the stage scales to
+   about 0.87, so every label is at least 17 units to stay readable at 14 px or more. */
+.learning-memory {
+  --ground: #141a22;
+  --line: #2c3743;
+  --ink: #e9eef3;
+  --muted: #a9b6c3;
+  --dim: #56636f;
+  --accent: #ff9d45;
+  --accent-dim: #9a6537;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 56px minmax(0, 1fr) 64px;
+  background: var(--ground);
+  color: var(--ink);
+  font: 16px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+.learning-memory ::selection { background: var(--accent); color: var(--ground); }
+
+.lm-header { display: flex; align-items: center; gap: 22px; padding: 0 32px; border-bottom: 1px solid var(--line); }
+.lm-brand { font-size: 19px; font-weight: 700; letter-spacing: 0.14em; }
+.lm-operation { min-width: 0; font-size: 21px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm-source { margin-left: auto; flex: none; font-size: 14px; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 5px 10px; }
+.lm-stage { min-height: 0; display: grid; }
+.lm-svg { width: 100%; height: 100%; }
+.lm-raw { display: flex; align-items: center; gap: 16px; padding: 0 32px; background: #0e1319; border-top: 1px solid var(--line); font: 15px/1.5 ui-monospace, "SF Mono", Menlo, monospace; color: #cfd8e1; overflow: hidden; }
+.lm-raw b { flex: none; color: var(--accent); font-weight: 700; }
+.lm-raw code { min-width: 0; font: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lm-raw:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+
+.lm-h { font-size: 19px; font-weight: 650; fill: var(--ink); }
+.lm-title { font-size: 25px; }
+.lm-kind { font-size: 17px; font-weight: 650; letter-spacing: 0.06em; fill: var(--muted); }
+.lm-kind.accent { fill: var(--accent); }
+.lm-value { font-size: 19px; font-weight: 500; fill: var(--ink); }
+.lm-value.small { font-size: 17px; }
+.lm-value.strong { font-weight: 650; }
+.lm-value.muted { fill: var(--muted); }
+.lm-value.accent-fill { fill: var(--accent); }
+
+/* This learner. Nodes and edges exist only once the graph holds them. */
+.q-node, .q-edge, .suggests-label, .bracket { opacity: 0; transition: opacity 0.35s var(--ease); }
+.q-node.shown, .q-edge.shown, .suggests-label.shown, .bracket.shown { opacity: 1; }
+.q-node circle { fill: var(--ink); stroke: var(--ink); stroke-width: 2.5; transition: fill 0.4s var(--ease), stroke 0.4s var(--ease); }
+.q-node[data-type="Hypothesis"] circle { fill: var(--ground); stroke-dasharray: 4 3; }
+.q-node[data-type="Concept"] circle { r: 6; }
+.q-node.used circle { fill: var(--accent); stroke: var(--accent); }
+.q-node.used[data-type="Hypothesis"] circle { fill: var(--ground); }
+.q-node.shown { animation: lm-arrive 0.5s var(--ease); }
+@keyframes lm-arrive { from { opacity: 0; transform: translateY(6px); } }
+.q-edge { stroke: var(--ink); stroke-width: 3; transition: stroke 0.4s var(--ease), opacity 0.35s var(--ease); }
+.q-edge.suggests { stroke-dasharray: 6 5; }
+.q-edge.used { stroke: var(--accent); }
+.bracket rect { fill: none; stroke: var(--accent); stroke-opacity: 0.4; stroke-dasharray: 6 5; }
+
+/* Result column: dashed until a decision fills it, solid once committed. */
+.r-edge { fill: none; stroke: var(--dim); stroke-width: 2; stroke-dasharray: 5 6; transition: stroke 0.4s var(--ease); }
+.r-edge.proposed { stroke: var(--accent); }
+.r-edge.committed { stroke: var(--accent); stroke-dasharray: none; stroke-width: 2.5; }
+.slot rect { fill: none; stroke: var(--dim); stroke-width: 2; stroke-dasharray: 5 4; transition: fill 0.5s var(--ease), stroke 0.5s var(--ease); }
+.slot-q { font-size: 20px; font-weight: 650; fill: var(--muted); }
+.slot.intervention.filled rect { fill: var(--accent); stroke: var(--accent); stroke-dasharray: none; }
+.slot.outcome.filled rect { fill: var(--ink); stroke: var(--ink); stroke-dasharray: none; }
+.slot-mark { fill: none; stroke: var(--ground); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.slot.outcome.filled[data-outcome="failed"] rect { fill: none; stroke: var(--ink); }
+.slot.outcome.filled[data-outcome="failed"] .slot-mark { stroke: var(--ink); }
+
+/* Storage structure: Student nodes, the shared concept hub, ownership and instance links. */
+.student { fill: var(--dim); }
+.student.me { fill: var(--ink); }
+.hub { fill: var(--ground); stroke: var(--muted); stroke-width: 2.5; }
+.bus { fill: none; stroke: #3d4955; stroke-width: 1.2; }
+.own { stroke: #34404c; stroke-width: 0.8; transition: opacity 0.4s var(--ease); }
+.own.gone { opacity: 0; }
+.had, .own-bus { fill: none; stroke: var(--muted); stroke-width: 1.6; }
+.instance { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 2 5; stroke-linecap: round; }
+
+/* Every learner is a fixed tile. Shape is structure; lit edges are the admitted cases' matched ids only. */
+.tile { fill: #18202a; stroke: none; }
+.glyph { opacity: 0.5; transition: transform 0.9s var(--ease), opacity 0.5s var(--ease); }
+.glyph line { stroke: #3d4955; stroke-width: 1; transition: stroke 0.4s var(--ease); }
+.glyph circle { fill: #3d4955; transition: fill 0.4s var(--ease); }
+.glyph circle.hyp { fill: var(--ground); stroke: #3d4955; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.glyph.scored { opacity: calc(0.32 + 0.68 * var(--sim)); }
+.glyph.lifted { opacity: 1; }
+.glyph.above .ctx line.lit { stroke: var(--accent); stroke-width: 1.4; }
+.glyph.above .ctx circle.lit { fill: var(--accent); }
+.glyph .ctx circle.hyp.lit { fill: var(--ground); stroke: var(--accent); }
+.glyph .res { opacity: 0; transition: opacity 0.5s var(--ease) 0.5s; }
+.glyph.open .res { opacity: 1; }
+.glyph.lifted line { stroke-width: 1.4; }
+.glyph .res line { stroke: var(--ink); stroke-width: 1.4; }
+.glyph .i-mark { fill: var(--accent); }
+.glyph .o-mark circle { fill: var(--ink); }
+.glyph .o-mark[data-outcome="failed"] circle, .glyph .o-mark[data-outcome="assisted"] circle, .glyph .o-mark[data-outcome="not_assessed"] circle { fill: var(--ground); stroke: var(--ink); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.glyph .o-mark path { stroke: var(--ink); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.glyph.lost { opacity: 0.45; }
+.glyph.lost .i-mark { fill: var(--muted); }
+.glyph.mine { opacity: 1; }
+.glyph.mine line { stroke: var(--muted); }
+.glyph.mine circle { fill: var(--muted); }
+.glyph.mine.recalled line { stroke: var(--accent); }
+.glyph.mine.recalled circle { fill: var(--accent); }
+.glyph.fresh { animation: lm-flow-in 0.8s var(--ease); }
+.glyph.fresh line { stroke: var(--ink); }
+.glyph.fresh .ctx circle:not(.hyp) { fill: var(--ink); }
+.won { fill: none; stroke: var(--accent); stroke-opacity: 0.55; stroke-width: 1.5; }
+.flow { fill: none; stroke: var(--accent); stroke-width: 3; stroke-dasharray: 8 6; animation: lm-flow-in 0.8s var(--ease) both; }
+@keyframes lm-flow-in { from { opacity: 0; } }
+
+/* A case the inspector's selected call returned. */
+.glyph.picked { opacity: 1; filter: drop-shadow(0 0 2px var(--accent)); }
+.glyph.picked line { stroke: var(--accent); }
+
+/* Once a group is chosen the rest of the memory recedes without moving. */
+.learning-memory[data-step="6"] .tree, .learning-memory[data-step="6"] .tiles, .learning-memory[data-step="6"] .owns { opacity: 0.45; }
+.learning-memory[data-step="6"] .glyph.scored:not(.lifted):not(.mine) { opacity: 0.22; }
+
+/* Opening view: the concept hierarchy the memory read returned. */
+.concept-link line { stroke: var(--accent); stroke-width: 2.5; }
+.concept-link.similar line { stroke-dasharray: 6 5; }
+.concept-node circle { fill: var(--ground); stroke: var(--ink); stroke-width: 2.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  .learning-memory *, .learning-memory { transition: none !important; animation: none !important; }
+}
+
+/* 3D graph */
+.graph-canvas { position: relative; width: 100%; height: 100%; min-height: 0; }
+.graph-canvas-host { position: absolute; inset: 0; }
+.graph-canvas-host canvas { width: 100%; height: 100%; display: block; }
+.graph-camera-toggle { position: absolute; right: 24px; bottom: 24px; min-height: 44px; padding: 0 18px; border: 1px solid var(--muted); border-radius: 6px; background: var(--ground); color: var(--ink); font: 600 16px system-ui, sans-serif; cursor: pointer; }
+.graph-camera-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.graph-failure { padding: 24px; color: var(--ink); }
