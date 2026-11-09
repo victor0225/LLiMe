@@ -227,6 +227,8 @@ export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, 
 
   const { search, graph, outcome } = snapshot;
   const hasGraph = graph !== null;
+  // Before the child's own graph exists the scene shows what memory returned, not the empty result slots.
+  const recalling = !hasGraph && snapshot.memory !== null;
   const scores = useMemo(() => visibleScores(snapshot), [snapshot]);
   const lifted = useMemo(() => liftedCaseIds(snapshot), [snapshot]);
   const admittedById = useMemo(() => new Map((search?.admitted ?? []).map((a) => [a.caseId, a])), [search]);
@@ -323,7 +325,7 @@ export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, 
             <circle cx={ME.x} cy={ME.y} r={8} className="student me" />
             <text x={ME.x + 18} y={ME.y + 7} className="lm-h">{SCENE_COPY.student}</text>
             {outcome && <text x={row.endX} y={ME.y + 6} className="lm-kind accent">{SCENE_COPY.newSituation}</text>}
-            {concept && <path d={`M${SPINE.x + 292} ${SPINE.attempt - 62} H ${HUB.x - 60} L ${HUB.x - 9} ${HUB.y + 4}`} className="instance" />}
+            {concept && !recalling && <path d={`M${SPINE.x + 292} ${SPINE.attempt - 62} H ${HUB.x - 60} L ${HUB.x - 9} ${HUB.y + 4}`} className="instance" />}
             <g className={`bracket${snapshot.searching || search ? ' shown' : ''}`}>
               <rect x={70} y={SPINE.attempt - 92} width={394} height={SPINE.step * 3 + 150} rx={10} />
               <text x={90} y={SPINE.attempt + SPINE.step * 3 + 86} className="lm-kind accent">{SCENE_COPY.usedToSearch}</text>
@@ -349,6 +351,7 @@ export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, 
               })}
             </g>
             {/* Result column: Attempt, next step, outcome. */}
+            {!recalling && (
             <g className="result">
               <path d={`M${SPINE.x + 9} ${SPINE.attempt - 4} C ${SPINE.x + 20} ${SPINE.attempt - 32}, ${SPINE.x + 40} ${SPINE.attempt - 32}, ${SPINE.x + 80} ${SPINE.attempt - 32} L ${RESULT_X - 20} ${SPINE.attempt - 32} Q ${RESULT_X} ${SPINE.attempt - 32} ${RESULT_X} ${SPINE.attempt - 12} L ${RESULT_X} ${SLOT.intervention - 18}`} className={`r-edge follow${filled && !outcome ? ' proposed' : ''}${outcome ? ' committed' : ''}`} />
               <line x1={RESULT_X} y1={SLOT.intervention + 18} x2={RESULT_X} y2={SLOT.outcome - 18} className={`r-edge evaluate${outcome ? ' committed' : ''}`} />
@@ -382,6 +385,7 @@ export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, 
                 {outcome && <text x={RESULT_X + 30} y={SLOT.outcome + 64} className="lm-kind">{outcome.saved ? SCENE_COPY.addedToMemory : SCENE_COPY.localPreview}</text>}
               </g>
             </g>
+            )}
             {/* Selected cases, grouped as the decision grouped them. */}
             <g className="zone">
               {search && showLifted && <text x={ZONE.x} y={ZONE.y} className="lm-kind accent">{selectedHeading(search.admitted.length, admittedFloor)}</text>}
@@ -399,8 +403,8 @@ export function LearningMemoryScene({ snapshot, reveal, rawEvent, recordedLine, 
           </g>
 
           {/* Concept hierarchy recalled before the child's own graph exists. */}
-          {!hasGraph && snapshot.memory && <ConceptLinks links={snapshot.memory.links} />}
-          {!hasGraph && lessonText && <LessonPanel text={lessonText} />}
+          {recalling && snapshot.memory && <ConceptLinks links={snapshot.memory.links} />}
+          {recalling && lessonText && <LessonPanel text={lessonText} />}
 
           {/* ② Every other learner: fixed tiles, fixed places. */}
           <g className="two">

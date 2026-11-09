@@ -265,4 +265,14 @@ test.describe('Learning memory scene', () => {
     console.log(`3D p95 frame time ${report.p95Ms.toFixed(1)} ms (p50 ${report.p50Ms.toFixed(1)}, p99 ${report.p99Ms.toFixed(1)}, max ${report.maxMs.toFixed(1)}) over ${report.frames} frames; target <= ${report.targetMs} ms`);
     expect(report.frames).toBeGreaterThan(5);
   });
+
+  test('the opening highlights exactly the recalled cases and the three concept links, with no result slots yet', async ({ page }) => {
+    const personal = CaseSchema.array().parse(readJson('seed/cases.json')).filter((c) => c.studentId === query.studentId && c.concept === 'subtraction_within_20' && c.outcome !== 'independent');
+    await open(page, 'backend-learning-memory--opening-memory-recalled');
+    await expect(page.locator('.glyph.mine.recalled')).toHaveCount(personal.length);
+    await expect(page.locator('.concept-link')).toHaveCount(3);
+    await expect(page.locator('.concept-link.similar')).toHaveCount(1);
+    await expect(page.locator('.slot')).toHaveCount(0);
+    await expect(page.locator('.lm-operation')).toHaveText('Recalling what this student has learned before');
+  });
 });
