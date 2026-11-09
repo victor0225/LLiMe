@@ -399,6 +399,10 @@ export type CorrectionPlayback = {
   readonly isInterrupted: boolean;
   // Call the moment a correction is sent or observed (a newer explanation revision in the run).
   correctionStarted(explanationRevision: number): void;
+  // Call with every run snapshot. A correction raises both the explanation revision and the
+  // cancellation epoch, also when no operation was running to cancel (a correction in PRACTICE), so
+  // that rise starts the correction. The first snapshot only sets the baseline.
+  runObserved(run: { explanationRevision: number; cancellationEpoch: number }): void;
   // Call after the server accepted activity_rendered for the activity of `explanationRevision`.
   // Only the replacement for the newest correction reopens the speaker, so the child hears the
   // corrected commentary and never the stale one.
@@ -407,13 +411,20 @@ export type CorrectionPlayback = {
 
 export function createCorrectionPlayback(client: Pick<VoiceClient, 'interruptPlayback' | 'resumePlayback'>): CorrectionPlayback {
   let awaitedRevision: number | null = null;
-  return {
+  let seen: { explanationRevision: number; cancellationEpoch: number } | null = null;
+  const playback: CorrectionPlayback = {
     get isInterrupted() {
       return awaitedRevision !== null;
     },
     correctionStarted(explanationRevision) {
       awaitedRevision = Math.max(awaitedRevision ?? explanationRevision, explanationRevision);
       client.interruptPlayback();
+    },
+    runObserved({ explanationRevision, cancellationEpoch }) {
+      const corrected = seen !== null && explanationRevision > seen.explanationRevision && cancellationEpoch > seen.cancellationEpoch;
+      seen = { explanationRevision: Math.max(seen?.explanationRevision ?? 0, explanationRevision), cancellationEpoch: Math.max(seen?.cancellationEpoch ?? 0, cancellationEpoch) };
+      // A correction this client already interrupted for (its own typed correction) is not repeated.
+      if (corrected && (awaitedRevision === null || explanationRevision > awaitedRevision)) playback.correctionStarted(explanationRevision);
     },
     replacementRendered(explanationRevision) {
       if (awaitedRevision === null || explanationRevision < awaitedRevision) return false;
@@ -422,4 +433,5 @@ export function createCorrectionPlayback(client: Pick<VoiceClient, 'interruptPla
       return true;
     },
   };
+  return playback;
 }
