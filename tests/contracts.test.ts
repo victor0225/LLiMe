@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import type { z } from 'zod';
-import { ACTIVITY_COPY, INVITATION_COPY, NOTIFICATION_COPY, SPOKEN_COPY, STUDENT_COPY } from '../src/copy.js';
+import { ACTIVITY_COPY, INVITATION_COPY, LESSON_NOTES_COPY, NOTIFICATION_COPY, SPOKEN_COPY, STUDENT_COPY } from '../src/copy.js';
 import {
   type Activity,
   ActivitySchema,
@@ -760,6 +760,10 @@ describe('copy', () => {
       const copy = ACTIVITY_COPY[template]({ lhs: 19, rhs: 10 });
       accepts(ActivitySchema, { ...supportActivity(), templateId: template, kind: TEMPLATE_KIND[template], ...copy });
     }
+  });
+  test('the recording clock counts minutes and seconds', () => {
+    assert.equal(LESSON_NOTES_COPY.recordingStatus(65), 'Recording 01:05');
+    assert.equal(LESSON_NOTES_COPY.stoppedStatus(125), 'Stopped · 02:05');
   });
   test('the notification names no learning detail', () => assert.equal(NOTIFICATION_COPY.body, 'A quick challenge from today\'s lesson?'));
 });

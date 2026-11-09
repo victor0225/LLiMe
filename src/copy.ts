@@ -110,19 +110,29 @@ export const SPOKEN_COPY = {
   independentHandover: 'Here\'s a new one. I\'ll stay quiet this time.',
 } as const;
 
-// Teacher-facing class-end screen that saves the lesson transcript.
+// Teacher-facing class-end screen that saves the lesson transcript. The record control only frames
+// the class: no audio is captured or transcribed, and no microphone permission is requested.
+const clock = (seconds: number) => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+
 export const LESSON_NOTES_COPY = {
   title: 'Lesson notes',
   header: 'llime · Lesson notes',
   classLabel: 'Grade 2 math · Addition within 20',
-  loadFile: 'Load .txt file',
-  usePrepared: 'Use prepared transcript',
-  readyPrompt: 'Load today\'s lesson transcript to get started.',
-  readyFooter: 'Review the transcript, then finish the lesson.',
+  startRecording: 'Start recording',
+  stopRecording: 'Stop recording',
+  recordingStopped: 'Recording stopped',
+  readyStatus: 'Ready when class begins',
+  recordingStatus: (seconds: number) => `Recording ${clock(seconds)}`,
+  stoppedStatus: (seconds: number) => `Stopped · ${clock(seconds)}`,
+  readyPanel: 'Start recording when class begins. The transcript appears here afterwards.',
+  recordingPanel: 'The transcript appears here when you stop recording.',
+  readyFooter: 'Finish the lesson after you stop recording.',
   transcriptHeading: 'Transcript',
+  loadFile: 'Load .txt file',
+  preparedSourceLabel: 'prepared transcript',
+  // source is the prepared-transcript label or the loaded file name.
   loadedMeta: (lines: number, kb: string, source: string) => `${lines} lines · ${kb} of 16 KB · ${source}`,
-  preparedSourceLabel: 'prepared synthetic transcript',
-  loadedFooter: 'llime starts when you finish the lesson.',
+  stoppedFooter: 'llime starts when you finish the lesson.',
   finish: 'Finish lesson',
   saving: 'Saving…',
   startedHeading: 'Thanks! I’ve got today’s lesson.',
