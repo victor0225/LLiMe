@@ -129,6 +129,16 @@ export const NOTIFICATION_COPY = {
   body: 'A quick challenge from today\'s lesson?',
 } as const;
 
+// Native iPad shell, shown when the local backend cannot be reached: the page itself cannot load then.
+// Swift cannot import this module, so the shell keeps its own copy of these words and its unit tests
+// (not npm test) fail when the two differ. offlineBody shows only while a tapped notification's
+// activity is held; the shell opens it as soon as the backend answers again, or on Retry.
+export const SHELL_COPY = {
+  offlineTitle: 'Can’t connect right now',
+  offlineBody: 'Your activity will open when the connection is back.',
+  retry: 'Retry',
+} as const;
+
 export const VOICE_STATUS_COPY = {
   listening: 'Listening to you',
   speaking: 'Your tutor is speaking',

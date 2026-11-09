@@ -9,6 +9,7 @@
 /* Begin PBXFileReference section */
 		A10000000000000000000001 /* llime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = llime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000002 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A10000000000000000000012 /* LLiMeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LLiMeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -17,10 +18,27 @@
 			path = LLiMe;
 			sourceTree = "<group>";
 		};
+		A10000000000000000000013 /* LLiMeCore */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LLiMeCore;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000014 /* LLiMeTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LLiMeTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A10000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000016 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -34,6 +52,8 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000003 /* LLiMe */,
+				A10000000000000000000013 /* LLiMeCore */,
+				A10000000000000000000014 /* LLiMeTests */,
 				A10000000000000000000006 /* Config */,
 				A10000000000000000000007 /* Products */,
 			);
@@ -51,6 +71,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000001 /* llime.app */,
+				A10000000000000000000012 /* LLiMeTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -72,11 +93,33 @@
 			);
 			fileSystemSynchronizedGroups = (
 				A10000000000000000000003 /* LLiMe */,
+				A10000000000000000000013 /* LLiMeCore */,
 			);
 			name = LLiMe;
 			productName = LLiMe;
 			productReference = A10000000000000000000001 /* llime.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000015 /* LLiMeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000000000000000000001A /* Build configuration list for PBXNativeTarget "LLiMeTests" */;
+			buildPhases = (
+				A10000000000000000000017 /* Sources */,
+				A10000000000000000000016 /* Frameworks */,
+				A10000000000000000000018 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A10000000000000000000013 /* LLiMeCore */,
+				A10000000000000000000014 /* LLiMeTests */,
+			);
+			name = LLiMeTests;
+			productName = LLiMeTests;
+			productReference = A10000000000000000000012 /* LLiMeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -101,6 +144,7 @@
 			projectRoot = "";
 			targets = (
 				A10000000000000000000008 /* LLiMe */,
+				A10000000000000000000015 /* LLiMeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -113,10 +157,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000018 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A1000000000000000000000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000017 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -193,6 +251,30 @@
 			};
 			name = Release;
 		};
+		A1000000000000000000001B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.llime.demo.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		A1000000000000000000001C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGNING_ALLOWED = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.llime.demo.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -210,6 +292,15 @@
 			buildConfigurations = (
 				A10000000000000000000010 /* Debug */,
 				A10000000000000000000011 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000000000000000000001A /* Build configuration list for PBXNativeTarget "LLiMeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000000000000000000001B /* Debug */,
+				A1000000000000000000001C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
