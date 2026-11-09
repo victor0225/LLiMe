@@ -405,6 +405,18 @@ describe('spoken delivery', () => {
     assert.deepEqual(h.commentary().map((a) => a.text), [SPOKEN_COPY.clarifyFirstNumber]);
   });
 
+  test('a live session that starts while the child explains speaks the explanation question once (mocked GPT-Live)', async () => {
+    const h = await harness();
+    const initial = (await h.state()).attempts.findLast((a) => a.criterion === 'initial');
+    assert.ok(initial);
+    h.delegation.hooks.sessionLive?.({ runId: h.runId, voiceSessionId: LIVE.voiceSessionId });
+    h.delegation.hooks.sessionLive?.({ runId: h.runId, voiceSessionId: LIVE.voiceSessionId });
+    for (let i = 0; i < 100 && h.commentary().length === 0; i += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+    // Give the second hook call time to settle; it replays the same record and speaks nothing more.
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    assert.deepEqual(h.commentary().map((a) => a.text), [SPOKEN_COPY.howDidYouGet(initial.attempt.answer)]);
+  });
+
   test('a voice failure never produces an assessment; stop_learning closes voice after its commit (mocked GPT-Live, stub runtime)', async () => {
     const failed = await harness();
     await failed.hear(fragment('e1', 'I started at eight', 1000, 1600));
