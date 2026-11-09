@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" class="primer-mascot" data-state="idle" data-motion="on" role="img" aria-label="llime learning companion">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 360" class="llime-mascot" data-state="idle" data-motion="on" role="img" aria-label="llime learning companion">
   <g class="mascot-rig" data-part="rig">
     <g class="foot-left" data-part="foot-left"><path d="M111 291 C106 304 102 323 112 329 C121 335 137 331 140 320 L145 294 Z" fill="var(--mascot-foot, #79b43c)"/></g>
     <g class="foot-right" data-part="foot-right"><path d="M180 294 L186 322 C189 333 208 334 215 326 C221 318 211 300 207 290 Z" fill="var(--mascot-foot, #79b43c)"/></g>

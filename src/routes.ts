@@ -19,7 +19,7 @@ export const LESSON_TEXT_MAX_BYTES = 16 * 1024;
 export const SDP_MAX_BYTES = 64 * 1024;
 
 // The browser sends this header on every POST; it guards local mutations from unrelated pages.
-export const SESSION_HEADER = 'x-primer-session';
+export const SESSION_HEADER = 'x-llime-session';
 
 // Size limits count UTF-8 bytes. The server checks them before parsing so an oversized body is a 413.
 export const utf8ByteLength = (text: string) => new TextEncoder().encode(text).length;

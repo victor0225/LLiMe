@@ -84,7 +84,7 @@ function serveRun(page: Page, state: { published: RunEvent[]; created: string[] 
     }
     if (url.pathname === `/api/runs/${RUN_ID}`) return json(snapshot(state.published));
     if (url.pathname === '/api/runs' && route.request().method() === 'POST') {
-      state.created.push(route.request().headers()['x-primer-session'] ?? '');
+      state.created.push(route.request().headers()['x-llime-session'] ?? '');
       return json({ ...snapshot([]), id: 'run_next_02' }, 201);
     }
     return json({ code: 'NOT_FOUND', message: 'unknown', retryable: false }, 404);
