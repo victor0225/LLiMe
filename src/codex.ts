@@ -44,6 +44,9 @@ export const REQUEST_DEADLINE_MS = 15_000; // preflight, thread and turn request
 export const TURN_DEADLINE_MS = 90_000; // one model turn
 export const INTERRUPT_ACK_DEADLINE_MS = 2_000; // terminal event after turn/interrupt
 export const STEER_DEADLINE_MS = 5_000;
+// A turn that already published may still be writing its closing message; a new turn in the same
+// thread waits this long for it before the thread counts as busy.
+export const PREVIOUS_TURN_DEADLINE_MS = 10_000;
 export const READ_TOOL_DEADLINE_MS = 2_000; // memory, search and assessment handlers
 export const WRITE_TOOL_DEADLINE_MS = 5_000; // publish and commit transactions
 export const SHUTDOWN_DEADLINE_MS = 5_000; // graceful exit after stdin closes, before SIGTERM
@@ -735,7 +738,7 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
     // Invalid static input is refused before a child is started.
     if (typeof request.input !== 'function') checkedInstructions(request.phase, request.input);
     const session = await ensureSession(request.runId);
-    if (session.current && !session.current.stale) throw fail('CONFLICT', 'A turn is already running in this thread');
+    await previousTurnFinished(session);
     const run = await store.getRun(request.runId);
     const data = typeof request.input === 'function' ? request.input({ revision: run.revision, state: run.state }) : request.input;
     const { turnText, instructions } = checkedInstructions(request.phase, data);
@@ -766,6 +769,16 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
       if (session.current === turn) session.current = null;
       if (error instanceof RuntimeFailure) throw error;
       throw fail('RUNTIME_DISCONNECTED', sanitize(error instanceof Error ? error.message : String(error), sourceEnv), true);
+    }
+  }
+
+  // The thread runs one turn at a time. A turn the engine no longer steers (it already published) is
+  // given a bounded time to send turn/completed; only a turn that outlives it makes the thread busy.
+  async function previousTurnFinished(session: Session) {
+    const deadline = clock.now() + PREVIOUS_TURN_DEADLINE_MS;
+    for (let previous = session.current; previous && !previous.stale; previous = session.current) {
+      const waited = await withDeadline(previous.done, Math.max(0, deadline - clock.now()), clock);
+      if (waited === TIMED_OUT) throw fail('CONFLICT', `A turn is already running in this thread and did not finish within ${PREVIOUS_TURN_DEADLINE_MS} ms`, true);
     }
   }
 

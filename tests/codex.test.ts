@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { z } from 'zod';
-import { createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
+import { createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, PREVIOUS_TURN_DEADLINE_MS, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
 import type { ExplanationTurnInput, OperationSettlement } from '../src/engine.js';
 import { TOOL_SCHEMAS, ToolNameSchema, type ToolName, type ToolResult } from '../src/domain.js';
 import type { ToolContext } from '../src/tools.js';
@@ -581,6 +581,47 @@ describe('turns and model', () => {
     s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor(TURN_ID, 'completed') });
     await until(() => settled.length === 1, 'settlement');
     assert.deepEqual(settled[0], { operationId: 'op_fix', phase: 'explanation', cancellationEpoch: 1, status: 'completed' });
+  });
+
+  test('a new turn waits for the thread\'s finishing turn instead of failing, and only a real timeout fails (mocked Codex)', async () => {
+    const turnIds = ['turn_1', 'turn_2'];
+    const s = setup({
+      script: (request, server) => {
+        if (request.method === 'turn/start') {
+          const id = turnIds.shift() ?? 'turn_x';
+          queueMicrotask(() => server.notify('turn/started', { threadId: THREAD_ID, turn: turnFor(id, 'inProgress') }));
+          return { turn: turnFor(id, 'inProgress') };
+        }
+        return defaultAnswers()(request, server);
+      },
+    });
+    const first = await s.runtime.startTurn(ingestion());
+    await until(() => s.server.count('turn/start') === 1, 'first turn');
+
+    // The first turn already published; only its closing message and turn/completed are still to come.
+    let started = false;
+    const next = s.runtime.startTurn({ runId: RUN_ID, phase: 'explanation', input: { text: 'my answer' }, operationId: 'op_answer' }).then((turn) => {
+      started = true;
+      return turn;
+    });
+    for (let i = 0; i < 20; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(started, false);
+    assert.equal(s.server.count('turn/start'), 1);
+    s.server.notify('item/completed', { threadId: THREAD_ID, turnId: 'turn_1', completedAtMs: 1, item: { type: 'agentMessage', id: 'm1', text: finalJson(), phase: 'final_answer' } });
+    s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor('turn_1', 'completed') });
+    assert.equal((await first.done).status, 'completed');
+    const second = await next;
+    assert.equal(second.turnId, 'turn_2');
+    assert.equal(second.operationId, 'op_answer');
+    assert.equal(s.server.count('turn/start'), 2);
+    assert.equal(s.store.ofType('operation.failed').length, 0);
+
+    // A turn that never finishes is waited on for a bounded time only.
+    const blocked = s.runtime.startTurn({ runId: RUN_ID, phase: 'explanation', input: { text: 'again' } });
+    for (let i = 0; i < 20; i += 1) await new Promise<void>((resolve) => setImmediate(resolve));
+    s.clock.advance(PREVIOUS_TURN_DEADLINE_MS);
+    await assert.rejects(blocked, (e: unknown) => e instanceof RuntimeFailure && e.body.code === 'CONFLICT');
+    assert.equal(s.server.count('turn/start'), 2);
   });
 
   test('closing a run ends stdin and escalates only if the child does not exit (mocked Codex)', async () => {
