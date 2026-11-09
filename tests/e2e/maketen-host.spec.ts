@@ -30,6 +30,9 @@ async function receipts(page: Page): Promise<unknown[]> {
 
 const mountedActivity = (page: Page) => page.locator('.activity-card');
 const recoveryLine = (page: Page) => page.getByRole('status').filter({ hasText: STUDENT_COPY.activityOpenFailed });
+// Every make-ten object's page position, in DOM order.
+const objectPositions = (page: Page) =>
+  page.evaluate<[number, number][]>("[...document.querySelectorAll('button[data-object-id]')].map((e) => { const r = e.getBoundingClientRect(); return [r.x + scrollX, r.y + scrollY]; })");
 const deliver = (page: Page, label: string) => page.getByRole('button', { name: `Deliver: ${label}` }).click();
 
 async function expectMounted(page: Page, { activityId, revision }: FixtureContext): Promise<void> {
@@ -51,13 +54,21 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
 
       await openStory(page, 'host-replacements');
       await expectMounted(page, makeTenSupport.context);
-      await page.locator('button[data-object-id="t0"]').click();
-      await page.getByRole('button', { name: STUDENT_COPY.putInBox }).click();
+      for (const id of ['t0', 't1']) {
+        await page.locator(`button[data-object-id="${id}"]`).click();
+        await page.getByRole('button', { name: STUDENT_COPY.putInBox }).click();
+      }
+      const before = await objectPositions(page);
 
       for (const label of ['Wrong numbers', 'Stale spec revision', 'Forged evidence', 'Older activity']) {
         await deliver(page, label);
         await expect(recoveryLine(page)).toBeVisible();
         await expectMounted(page, makeTenSupport.context);
+        // The recovery line never moves the box, the tray or any object mid-attempt.
+        for (const [index, [x, y]] of (await objectPositions(page)).entries()) {
+          expect(Math.abs(x - (before[index]?.[0] ?? Number.NaN))).toBeLessThanOrEqual(1);
+          expect(Math.abs(y - (before[index]?.[1] ?? Number.NaN))).toBeLessThanOrEqual(1);
+        }
         // The child's unsent move survives the rejected replacement.
         await expect(page.locator('button[data-object-id="t0"]')).toHaveAttribute('data-zone', 'ten_frame');
         await expectAccessible(page);
