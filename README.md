@@ -1,6 +1,6 @@
 # llime
 
-**Education that remembers each learner and takes initiative.**
+llime (pronounced "lime"): **education that remembers each learner and takes initiative.**
 
 **Watch the 90-second demo:** TODO(video): add the verified video URL.
 
