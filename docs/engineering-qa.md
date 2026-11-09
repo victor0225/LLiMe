@@ -52,7 +52,7 @@ The pure rules have direct unit tests: search scoring and admission (`tests/sear
 | V06 | A duplicate delegation or provider event gives one logical analysis | PASS | |
 | V07 | Sideband disconnect or microphone denied gives an explicit degraded state and the typed path | PASS | Microphone denied live; sideband drop in a controlled test |
 | V08 | Stop learning during analysis and practice; late results and resumes are refused | UNPROVED | Live stop during analysis behaved correctly; the practice leg was not run live |
-| V09 | A correction after speech begins stops the obsolete playback | FAIL (open) | Fix merged in `05b412c`; recheck pending |
+| V09 | A correction after speech begins stops the obsolete playback | FAIL (open) | Fix merged in `fb4c5af`; recheck pending |
 | V10 | Voice is fully off before the independent problem is enabled | PASS | Live, in the app |
 | V11 | Closing or reloading the page closes the session within bounds | PASS | |
 | V12 | Instruction-like text in a transcript is treated as learner data | PASS | After the voice-instruction fix; before it, the voice model answered an injected instruction itself with a hint |

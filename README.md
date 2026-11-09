@@ -6,19 +6,15 @@
 
 ## The problem
 
-Good teaching includes knowing when to step in, and how to make an idea click for one particular learner.
+Great education needs continuing personal attention. Teachers and tutors have limited time between lessons. Learners must often decide when and how to ask for support.
 
-Teachers and tutors have little time to follow every learner between lessons, and one-to-one support is expensive. A tutor that waits for questions only helps learners who already know they need help and what to ask.
+In a 2021 California study, only **19%** of control-group students used free tutoring on request. The study covered middle and high school students, not our first elementary-school users. Access alone did not ensure use ([published 2025](https://doi.org/10.3102/0013189X251331518)).
 
-Choosing a useful explanation also takes more than subject knowledge. It takes context: what this learner has tried, how they approached it, and what happened when similar learners got different kinds of support.
-
-A 2024 meta-analysis of preK–12 tutoring experiments found a pooled effect of **0.288 standard deviations** on learning outcomes ([Nickow, Oreopoulos & Quan, 2024](https://doi.org/10.3102/00028312231208687)). That supports the tutoring programs it studied. It says nothing yet about llime.
-
-llime brings that context into action. It connects today's lesson to a **personal learning memory**, uses an **agent that takes initiative** to offer a next step, and shapes **a personalized explanation and interactive activity** around the learner's own response. An invitation is an offer to try something, not a diagnosis. This is our take on [YC's request for The Primer](https://www.ycombinator.com/rfs/): a tutor that grows with the learner and supplements teachers. Arithmetic is the first testable slice, not the boundary of the product.
+We are building llime, an education agent that uses personal learning memory to offer a next step. This memory records past attempts, explanations, support and results. The learner can accept or decline each invitation. This is our take on [YC's request for The Primer](https://www.ycombinator.com/rfs/).
 
 ## What llime does
 
-The demo makes three mechanisms observable. Memory supplies prior evidence. The agent reads the lesson, calls tools and starts a relevant invitation. Personalization changes the representation and the explanation using what the learner did and said. The result is saved to the learner's history.
+The demo follows four steps.
 
 1. **Connects today's lesson to the child's history.** The demo learner has 18 earlier subtraction cases and no addition cases. Today's lesson is addition. Through the curriculum link between subtraction and addition, llime offers a short challenge on the iPad:
    > Remember taking things away in subtraction? Today, let’s put things together with addition. Want to try?
@@ -49,19 +45,15 @@ The demo makes three mechanisms observable. Memory supplies prior evidence. The 
    ![Make-ten activity for 8 + 5: ten apples in the box, two in the tray and one left over, with the equations 8 + 2 = 10 and 10 + 1 = ?](docs/images/make-ten-support.png)
    <sub>The make-ten support activity mid-move, rendered in a browser test, not taken from a live run.</sub>
 
-## Why it matters
+## Who it is for
 
-- **For the child:** an invitation they can accept or decline, followed by support built from their own attempt and explanation.
-- **For the parent:** a record of whether a fresh problem was solved without hints. One attempt does not establish mastery, and whether this reduces homework rescues still needs testing.
-- **Our design:** personal learning memory decides when the agent acts and how it explains. Guiding questions alone are not new; [Khanmigo](https://khanmigo.ai/) also guides learners without giving answers. Our claim is the integrated, inspectable loop: today's lesson, prior evidence, the learner's explanation and comparable cases lead to a concrete activity and a saved, independently checked outcome. Whether that beats simpler tutors is untested.
+Our first users are students in grades 2–3 who need help with math homework. Parents are the proposed buyers. We have not tested demand or a subscription price.
 
-## Who it's for first
+Our goal is support across lessons, subjects and years. Arithmetic is the first demonstration. Teachers remain part of the learner's education.
 
-Parents of grade 2–3 children who keep needing help with math homework. The child is the user; parents are our first buyer hypothesis, with a subscription still to validate. Teachers can join later, but the family product does not depend on them.
+## Demo status
 
-## What the demo shows, honestly
-
-- **Real execution:** nothing in the flow is scripted or hardcoded. Proven on a clean clone: the lesson save reaches the inbox watcher, a real Codex App Server turn calls the memory tool and publishes the invitation, and a real voice session opens and closes. A complete QA main run with the film seed went from the saved lesson to the hint-free 9 + 4 (no helpers), committed its outcome once and reached COMPLETE; its export's hashes verified. The filmed main run: TODO(run): main-run capture manifest path. Storybook stories and recorded fixtures are never used as evidence. Open failures are listed in [docs/engineering-qa.md](docs/engineering-qa.md).
+- **Real execution:** nothing in the flow is scripted or hardcoded. Proven on a clean clone: the lesson save reaches the inbox watcher, a real Codex App Server turn calls the memory tool and publishes the invitation, and a real voice session opens and closes. A complete QA main run with the film seed went from the saved lesson to the hint-free 9 + 4 (no helpers), committed its outcome once and reached COMPLETE; its export's hashes verified. The filmed main run: TODO(run): main-run capture manifest path. Storybook stories and recorded fixtures are never used as evidence. Open items are listed in [docs/engineering-qa.md](docs/engineering-qa.md): accessibility checks are waived for this release, and a playback fix awaits its recheck.
 - **Scripted:** the film uses problem seed 28, which gives 8 + 5 and then 9 + 4 (other seeds give other pairs). An adult plays the child and makes the planned mistake. The outcome rates in memory were written by us to show the mechanism.
 - **Synthetic:** the lesson transcript and every learner history. Start and Stop recording on the Lesson notes screen stage the prepared transcript; no classroom audio is captured or transcribed. Finish lesson saves the transcript for real, and that saved file is what triggers processing. The memory holds 781 situations from 120 fictional learners.
 - **Simulated:** the iPad runs in the iOS Simulator, and the notification is a simulated push.
@@ -164,6 +156,8 @@ Every tool call is visible in the inspector:
 ![Codex execution inspector showing the input, runtime boundary, get_personal_memory and publish_activity calls with their results, and the published invitation](docs/images/inspector-fixture.png)
 <sub>The inspector with a story fixture, labelled "Fixture" in the view; it is not a recording of a run.</sub>
 
+Memory and guiding questions are not unique to llime. Our design connects lesson context, personal memory, agent initiative and activities in one workflow. We still need to test its advantage over other approaches.
+
 Details: [docs/architecture.md](docs/architecture.md).
 
 ## Run it
@@ -213,10 +207,6 @@ npm run live:voice                          # opens and closes one voice session
 **Stop and clean up:** Ctrl-C stops `dev` or `start`. With the server stopped, `npm run demo:purge -- --run RUN_ID` deletes that one run's data and nothing else. The database keeps running and keeps its volume.
 
 A clean `https` clone ran this sequence, from `npm ci` through `demo:purge` and `npm run build-storybook`, and every step exited 0. It ran on a build Mac that already had the database credential, the running Neo4j service, Docker images and npm caches, so it is not a bare-machine install: `--init-machine`, a cold first start of Neo4j and the Simulator steps were not exercised, and `demo:replay` was not part of it. On npm 11, `npm ci` warns that the esbuild and fsevents install scripts are not allowlisted; build and tests are unaffected.
-
-## Where this goes
-
-Grade 2–3 math is the first loop, not the limit. The same memory should follow a learner across grades, subjects and teachers. It should be updated by new evidence rather than harden into labels, and it should stay under the learner's control.
 
 ## What we still need to learn
 
