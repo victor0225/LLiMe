@@ -20,6 +20,7 @@
     "doctor": "tsx scripts/doctor.ts",
     "dataset": "tsx scripts/dataset.ts",
     "seed": "tsx scripts/seed.ts",
+    "test:runtime": "tsx --test tests/runtime/*.test.ts",
     "live:codex": "tsx scripts/live-codex.ts",
     "live:voice": "tsx scripts/live-voice.ts"
   },

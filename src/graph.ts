@@ -193,7 +193,7 @@ export function addResult(c: LearningCase, { strategies, outcome, evaluation }: 
   const lastIntervention = `${c.id}:${interventionSuffix(strategies.length - 1)}`;
   return validateCase({
     ...c,
-    strategy: strategies[strategies.length - 1] ?? strategies[0],
+    strategy: strategies[strategies.length - 1],
     outcome,
     sources: [...c.sources, { id: evaluationSource, text: evaluation }],
     nodes: [...c.nodes, ...interventions, resultNode('outcome', 'Outcome', outcome)],

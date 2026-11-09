@@ -183,6 +183,9 @@ describe('search_learning_cases', () => {
       assert.equal(result.error.code, 'VALIDATION_FAILED', `${label}: ${result.error.message}`);
       assert.equal(result.contextCommit, null, label);
     }
+    // A retrieval context naming a node the graph does not have is rejected by the case validator.
+    const unknownNode = { nodeIds: [`${contextCaseId(runId, rev)}:missing`], edgeIds: [`${contextCaseId(runId, rev)}:e0`] };
+    failedWith(await tool(runId, 'search_learning_cases', { ...(await searchArgs(runId, [interpretation(runId, rev, 'count_start', 'I counted eight')])), retrievalContext: unknownNode }), 'VALIDATION_FAILED', /Invalid retrieval context/);
     await assertUnchanged(runId, before);
   });
 

@@ -109,8 +109,11 @@
   outline: 3px solid var(--p-focus);
   outline-offset: -3px;
 }
-.nl-tick[data-role='start']:hover,
-.nl-tick[data-role='move']:hover { background: var(--p-background); }
+/* Touch screens keep a hover state after a tap, so the highlight is for real pointers only. */
+@media (hover: hover) {
+  .nl-tick[data-role='start']:hover,
+  .nl-tick[data-role='move']:hover { background: var(--p-background); }
+}
 .nl-tick[data-start]::before {
   content: '';
   position: absolute;
@@ -118,7 +121,11 @@
   border: 2px dashed var(--p-control-border);
   border-radius: 999px;
 }
-.nl-tick[data-role='current'] { color: var(--p-on-primary); }
+.nl-tick[data-role='current'] {
+  z-index: 0;
+  isolation: isolate;
+  color: var(--p-on-primary);
+}
 .nl-tick[data-role='current']::before {
   content: '';
   position: absolute;
@@ -128,7 +135,6 @@
   border-radius: 999px;
   background: var(--p-primary);
 }
-.nl-tick[data-role='current'] { z-index: 0; isolation: isolate; }
 /* The support marker: a coloured bar on the anchored start, shown in addition to its tutor text. */
 .nl-tick[data-start-marker]::after {
   width: 24px;

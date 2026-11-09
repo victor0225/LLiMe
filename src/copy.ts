@@ -81,16 +81,16 @@ export const STUDENT_COPY = {
   doneCollapsed: 'See you next time.',
   wordmark: 'llime',
   // While the first run snapshot is loading; distinct from the waiting screen, which is real state.
-  loading: 'Opening your learning space…',
-  // The link has no run, or the server does not know it.
-  runUnavailable: 'This learning space isn’t available right now.',
+  loading: 'Just a moment…',
+  // The link has no run, or the server does not know it; waiting will not fix it.
+  runUnavailable: 'This link doesn’t open a lesson. Ask a grown-up for help.',
 } as const;
 
 // Number-line status text. None of it names the target or how many moves remain.
 export const NUMBER_LINE_COPY = {
   // Explains why Check is unavailable before the child has picked a starting number.
   chooseStart: 'Choose where to start.',
-  // The JumpCounter helper: a live count of the child's own moves.
+  // Counts only moves the child made, so the support helper never shows how many are still needed.
   moveCount: (n: number) => (n === 1 ? '1 move' : `${n} moves`),
   position: (n: number) => `Now at ${n}`,
   lineLabel: 'Number line',
@@ -200,5 +200,5 @@ export const LESSON_NOTES_COPY = {
   notUtf8: 'This file isn\'t plain UTF-8 text.',
   textTooLarge: 'Shorten the transcript to 16 KB or less.',
   // The page was opened without a run, or for a run the server does not know.
-  runUnavailable: 'This lesson link has no run. Open Lesson notes for a new run.',
+  runUnavailable: 'This link doesn’t match a lesson run. Open the link for today’s class.',
 } as const;

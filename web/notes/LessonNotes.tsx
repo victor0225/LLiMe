@@ -51,6 +51,7 @@ export function LessonNotesScreen({ prepared, save, initialPhase = 'ready', init
     setPhase('recording');
   };
   const finish = async () => {
+    setFileError(null);
     setPhase('saving');
     try {
       await save(text);
