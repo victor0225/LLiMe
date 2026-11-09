@@ -1,0 +1,17 @@
+# Local secrets: provider keys and the reused machine DB credential
+.env
+.env.*
+!.env.example
+
+# Mutable runtime data, logs, captures and coordination notes
+.runtime/
+
+# Dependencies and build output
+node_modules/
+dist/
+storybook-static/
+test-results/
+playwright-report/
+
+# Editor and OS noise
+.DS_Store
