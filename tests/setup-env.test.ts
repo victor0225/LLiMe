@@ -115,7 +115,7 @@ test('setup adds the DB credential to .env with mode 0600, keeps existing lines 
   assert.equal(result.status, 0, result.output);
   const text = readFileSync(s.envFile, 'utf8');
   assert.ok(text.startsWith(`${existing}\n`));
-  assert.deepEqual(parseEnv(text), { PORT: '4101', OPENAI_API_KEY: 'sk-existing', NEO4J_URI: 'bolt://127.0.0.1:17687', NEO4J_USER: 'neo4j', NEO4J_PASSWORD: password });
+  assert.deepEqual({ ...parseEnv(text) }, { PORT: '4101', OPENAI_API_KEY: 'sk-existing', NEO4J_URI: 'bolt://127.0.0.1:17687', NEO4J_USER: 'neo4j', NEO4J_PASSWORD: password });
   assert.equal(mode(s.envFile), '600');
   assert.ok(!result.output.includes(password));
 });
