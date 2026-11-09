@@ -224,3 +224,97 @@ export function runCommand(command: string, args: readonly string[], stdin: stri
 }
 
 export const defaultSimctlRunner: SimctlRunner = (command, args, stdin) => runCommand(command, args, stdin, { timeoutMs: SIMCTL_TIMEOUT_MS });
+
+// ---------------------------------------------------------------------------------------------
+// Outbox loop: drains pending rows through the dispatcher. A row is written in the same transaction as
+// its activity, so a pending row always follows a commit; the loop never sends anything else.
+
+// The backstop scan sends a row whose commit signal was missed, or that was committed just before a
+// restart. One second keeps the notification close behind its commit without loading the store.
+export const OUTBOX_SCAN_INTERVAL_MS = 1_000;
+
+export interface OutboxStore extends NotifyStore {
+  // Pending row IDs, oldest first.
+  listPendingNotifications(): Promise<string[]>;
+}
+
+export type OutboxOutcome =
+  | { kind: 'recovered'; notificationIds: string[] }
+  | { kind: 'dispatched'; notificationId: string; result: DispatchResult }
+  | { kind: 'dispatch_error'; notificationId: string; reason: string }
+  | { kind: 'scan_failed'; reason: string };
+
+export interface OutboxLoopDeps extends NotifyDeps {
+  store: OutboxStore;
+  onOutcome?: (outcome: OutboxOutcome) => void;
+  // null leaves only explicit kicks, so a test controls every drain.
+  scanIntervalMs?: number | null;
+}
+
+export interface OutboxLoop {
+  // Call after an activity commit. Resolves when a drain that started after this call has finished.
+  kick(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+// First settles rows a previous process left dispatching (they become unknown and are never resent
+// automatically), then drains pending rows on every kick and on the backstop scan. Drains in one loop
+// run one at a time; across loops the store's atomic claim lets only one of them send a row.
+export async function startOutboxLoop(deps: OutboxLoopDeps): Promise<OutboxLoop> {
+  const report = (outcome: OutboxOutcome) => deps.onOutcome?.(outcome);
+  const recovered = await recoverInterruptedNotifications(deps.store);
+  if (recovered.length > 0) report({ kind: 'recovered', notificationIds: recovered });
+
+  let isStopped = false;
+  let running: Promise<void> = Promise.resolve();
+  let queued: Promise<void> | null = null;
+
+  async function drainPending(): Promise<void> {
+    let pendingIds: string[];
+    try {
+      pendingIds = await deps.store.listPendingNotifications();
+    } catch (error) {
+      report({ kind: 'scan_failed', reason: messageOf(error) });
+      return;
+    }
+    for (const notificationId of pendingIds) {
+      if (isStopped) return;
+      try {
+        const result = await dispatchNotification(notificationId, deps);
+        // Skipped means another loop claimed the row first; there is nothing to record.
+        if (result.outcome !== 'skipped') report({ kind: 'dispatched', notificationId, result });
+      } catch (error) {
+        report({ kind: 'dispatch_error', notificationId, reason: messageOf(error) });
+      }
+    }
+  }
+
+  // Kicks that arrive while a drain is waiting to start share it; a kick during a running drain queues
+  // one more, because its row may have been committed after that drain listed the pending rows.
+  function kick(): Promise<void> {
+    if (isStopped) return running;
+    if (queued !== null) return queued;
+    const next = running.then(() => {
+      queued = null;
+      return isStopped ? undefined : drainPending();
+    });
+    queued = next;
+    running = next;
+    return next;
+  }
+
+  const interval = deps.scanIntervalMs === undefined ? OUTBOX_SCAN_INTERVAL_MS : deps.scanIntervalMs;
+  const timer = interval === null ? null : setInterval(() => void kick(), interval);
+  void kick();
+
+  return {
+    kick,
+    async stop() {
+      isStopped = true;
+      if (timer !== null) clearInterval(timer);
+      await running;
+    },
+  };
+}
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
