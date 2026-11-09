@@ -419,7 +419,9 @@ describe('status codes', () => {
         assert.equal((await post(server, path, accept(7, 2))).status, 200, 'a request without an Origin header, such as an operator script, needs only the nonce');
         const inUrl = await send(server, { method: 'POST', path: `${path}?${SESSION_HEADER}=${NONCE}`, body: JSON.stringify(accept(8, 3)), headers: { origin: config.appOrigin } });
         assert.equal(inUrl.status, 403);
-        assert.equal(BootstrapSchema.parse(json(await send(server, { path: routePath('bootstrap') }))).nonce, NONCE);
+        const bootstrap = json(await send(server, { path: routePath('bootstrap') }));
+        assert.equal(BootstrapSchema.parse(bootstrap).nonce, NONCE);
+        assert.deepEqual([Reflect.get(Object(bootstrap), 'mode'), Reflect.get(Object(bootstrap), 'captureId')], ['live', null], 'the reply names live mode itself, not by schema default');
       });
     } finally {
       Object.assign(console, originals);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { z } from 'zod';
 import { createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
-import type { OperationSettlement } from '../src/engine.js';
+import type { ExplanationTurnInput, OperationSettlement } from '../src/engine.js';
 import { TOOL_SCHEMAS, ToolNameSchema, type ToolName, type ToolResult } from '../src/domain.js';
 import type { ToolContext } from '../src/tools.js';
 import {
@@ -506,6 +506,29 @@ describe('turns and model', () => {
     await stopping;
     assert.equal((await turn.done).status, 'interrupted');
     assert.deepEqual(s.server.child.signals, []);
+  });
+
+  test('steering through the engine port records the explanation revision from the engine input (mocked Codex)', async () => {
+    const s = setup({
+      script: (request, server) => {
+        if (request.method === 'turn/steer') return { turnId: TURN_ID };
+        return FakeAppServer.turnStartsWith(TURN_ID)(request, server);
+      },
+    });
+    const port = createRuntimePort({ runtime: s.runtime, settle: async () => undefined, closeVoice: async () => undefined });
+    await startedTurn(s);
+    const input: ExplanationTurnInput = {
+      explanationRevision: 7,
+      sourceId: 'speech_1',
+      explanation: 'I started at 8 and counted 5 more.',
+      inputMode: 'typed',
+      problem: { lhs: 8, rhs: 5 },
+      attempt: { start: 8, moves: [9, 10, 11, 12], answer: 12, hints: 0 },
+      question: null,
+    };
+    const steered = await port.steerTurn({ runId: RUN_ID, operationId: 'op_steer', cancellationEpoch: 0, phase: 'explanation', input });
+    assert.equal(steered, true);
+    assert.equal(s.store.ofType('turn.steered')[0]?.payload.explanationRevision, 7);
   });
 
   test('closing a run ends stdin and escalates only if the child does not exit (mocked Codex)', async () => {
