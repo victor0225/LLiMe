@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { z } from 'zod';
-import { createCodexRuntime, createServerRuntimePort, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
+import { createCodexRuntime, createIngestionStarter, createRuntimePort, createServerRuntimePort, RuntimeFailure, type CallTool, type CodexRuntime } from '../src/codex.js';
+import type { OperationSettlement } from '../src/engine.js';
 import { TOOL_SCHEMAS, ToolNameSchema, type ToolName, type ToolResult } from '../src/domain.js';
 import type { ToolContext } from '../src/tools.js';
 import {
@@ -463,6 +464,48 @@ describe('turns and model', () => {
     assert.equal(done.status, 'interrupted');
     assert.equal(done.error?.code, 'CANCELLED');
     assert.equal(s.store.ofType('tool.completed').length, 1);
+  });
+
+  test('the ingestion turn carries the saved lesson, student, links, hash and the revision after the runtime choice, and settles a blocked result (mocked Codex)', async () => {
+    const s = setup();
+    const settled: OperationSettlement[] = [];
+    const startIngestionTurn = createIngestionStarter({ runtime: s.runtime, store: s.store, settle: async (_runId, settlement) => void settled.push(settlement) });
+    await startIngestionTurn(RUN_ID);
+    await until(() => s.server.count('turn/start') === 1, 'turn/start');
+    const data = (s.store.ofType('runtime.input')[0]?.payload.input as { data: Record<string, unknown> }).data;
+    assert.deepEqual(data.lessonInput, { text: 'Today we add 8 and 5.', provenance: 'synthetic lesson transcript saved to the run inbox', contentHash: 'lesson-hash' });
+    assert.equal(data.student, 'student_7');
+    assert.equal(data.corpusHash, 'corpus-hash');
+    assert.equal((data.conceptLinks as unknown[]).length, 1);
+    // The runtime choice was recorded first, so the revision the model must quote is the bumped one.
+    assert.equal(data.revision, s.store.revision);
+    assert.equal(s.store.revision, 4);
+    s.server.notify('item/completed', { threadId: THREAD_ID, turnId: TURN_ID, completedAtMs: 1, item: { type: 'agentMessage', id: 'm1', text: finalJson({ status: 'blocked', summary: 'no overlap' }), phase: 'final_answer' } });
+    s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor(TURN_ID, 'completed') });
+    await until(() => settled.length === 1, 'settlement');
+    assert.deepEqual(settled[0], { operationId: settled[0]?.operationId, phase: 'ingestion', cancellationEpoch: 0, status: 'blocked' });
+  });
+
+  test('an ingestion turn that cannot start settles the run as failed instead of leaving it ingesting (mocked Codex)', async () => {
+    const s = setup({ script: FakeAppServer.turnStartsWith(TURN_ID, defaultAnswers({ 'account/read': { account: null, requiresOpenaiAuth: true, workspaceRouting: null } })) });
+    const settled: OperationSettlement[] = [];
+    const startIngestionTurn = createIngestionStarter({ runtime: s.runtime, store: s.store, settle: async (_runId, settlement) => void settled.push(settlement) });
+    await assert.rejects(startIngestionTurn(RUN_ID), (e: unknown) => e instanceof RuntimeFailure && e.body.code === 'AUTH_REQUIRED');
+    assert.equal(settled.length, 1);
+    assert.equal(settled[0]?.status, 'failed');
+    assert.equal(settled[0]?.code, 'AUTH_REQUIRED');
+  });
+
+  test('interrupting a run through the engine port ends the turn and closes its child (mocked Codex)', async () => {
+    const s = setup();
+    const port = createRuntimePort({ runtime: s.runtime, settle: async () => undefined, closeVoice: async () => undefined });
+    const turn = await startedTurn(s);
+    const stopping = port.interruptTurn(RUN_ID);
+    await until(() => s.server.child.stdin.writableEnded, 'stdin closed');
+    s.server.child.exitCleanly();
+    await stopping;
+    assert.equal((await turn.done).status, 'interrupted');
+    assert.deepEqual(s.server.child.signals, []);
   });
 
   test('closing a run ends stdin and escalates only if the child does not exit (mocked Codex)', async () => {
