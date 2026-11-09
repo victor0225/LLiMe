@@ -44,7 +44,12 @@ function sandbox() {
     writeFileSync(machineFile, `NEO4J_URI=bolt://127.0.0.1:17687\nNEO4J_USER=neo4j\nNEO4J_PASSWORD=${password}\n`, { mode: 0o600 });
     return password;
   };
-  return { dir, home, repo, git, run, machineDir, machineFile, writeMachineCredential, envFile: join(repo, '.env') };
+  const providerFile = join(machineDir, 'provider.env');
+  const writeProviderKey = (value: string, fileMode = 0o600) => {
+    writeFileSync(providerFile, `OPENAI_API_KEY=${value}\n`, { mode: fileMode });
+    chmodSync(providerFile, fileMode);
+  };
+  return { dir, home, repo, git, run, machineDir, machineFile, writeMachineCredential, providerFile, writeProviderKey, envFile: join(repo, '.env') };
 }
 
 const mode = (path: string) => (statSync(path).mode & 0o777).toString(8);
@@ -167,4 +172,63 @@ test('setup in a linked worktree keeps its own provider key', () => {
   writeFileSync(join(linked, '.env'), 'OPENAI_API_KEY=sk-own\n', { mode: 0o600 });
   assert.equal(s.run([], { cwd: linked }).status, 0);
   assert.equal(parseEnv(readFileSync(join(linked, '.env'), 'utf8')).OPENAI_API_KEY, 'sk-own');
+});
+
+test('setup in a fresh single clone takes the provider key from the machine provider file without printing it', () => {
+  const s = sandbox();
+  s.writeMachineCredential();
+  s.writeProviderKey('sk-fake-machine-key');
+  const result = s.run();
+  assert.equal(result.status, 0, result.output);
+  assert.equal(parseEnv(readFileSync(s.envFile, 'utf8')).OPENAI_API_KEY, 'sk-fake-machine-key');
+  assert.equal(mode(s.envFile), '600');
+  assert.ok(!result.output.includes('sk-fake-machine-key'));
+});
+
+test('setup prefers the main checkout provider key over the machine provider file', () => {
+  const s = sandbox();
+  s.writeMachineCredential();
+  s.writeProviderKey('sk-fake-machine-key');
+  writeFileSync(s.envFile, 'OPENAI_API_KEY=sk-main-checkout\n', { mode: 0o600 });
+  const linked = join(s.dir, 'linked');
+  s.git('worktree', 'add', '-q', '--detach', linked);
+  const result = s.run([], { cwd: linked });
+  assert.equal(result.status, 0, result.output);
+  assert.equal(parseEnv(readFileSync(join(linked, '.env'), 'utf8')).OPENAI_API_KEY, 'sk-main-checkout');
+  assert.ok(!result.output.includes('sk-main-checkout'));
+  assert.ok(!result.output.includes('sk-fake-machine-key'));
+});
+
+test('setup keeps a worktree provider key even when the machine provider file has another', () => {
+  const s = sandbox();
+  s.writeMachineCredential();
+  s.writeProviderKey('sk-fake-machine-key');
+  writeFileSync(s.envFile, 'OPENAI_API_KEY=sk-own\n', { mode: 0o600 });
+  const result = s.run();
+  assert.equal(result.status, 0, result.output);
+  assert.equal(parseEnv(readFileSync(s.envFile, 'utf8')).OPENAI_API_KEY, 'sk-own');
+  assert.ok(!result.output.includes('sk-fake-machine-key'));
+});
+
+test('setup without any provider key source succeeds without the key and names both sources', () => {
+  const s = sandbox();
+  s.writeMachineCredential();
+  const result = s.run();
+  assert.equal(result.status, 0, result.output);
+  assert.equal(parseEnv(readFileSync(s.envFile, 'utf8')).OPENAI_API_KEY, undefined);
+  assert.match(result.output, /OPENAI_API_KEY is not set/);
+  assert.match(result.output, /main checkout/);
+  assert.ok(result.output.includes(s.providerFile));
+});
+
+test('setup refuses a machine provider file readable by other users, writes nothing and prints no key', () => {
+  const s = sandbox();
+  s.writeMachineCredential();
+  s.writeProviderKey('sk-fake-machine-key', 0o644);
+  const result = s.run();
+  assert.equal(result.status, 1);
+  assert.ok(result.output.includes(s.providerFile));
+  assert.match(result.output, /accessible to other users/);
+  assert.ok(!existsSync(s.envFile));
+  assert.ok(!result.output.includes('sk-fake-machine-key'));
 });
