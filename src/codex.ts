@@ -133,13 +133,16 @@ support both arrays are empty. Keep the full decision evidence in the search res
 For clarification or retry,
 activitySpec is null (the app builds the plain retry). Publish exactly the kind and
 templateId named by the returned decision with publish_activity; never choose another
-activity, and do not force teaching. Never claim a retry was confirmed before the recorded retry succeeds.
+activity, and do not force teaching. Only an invitation carries todayConceptId and quotes, so every
+publish_activity in this phase sends todayConceptId: null and quotes: null.
+Never claim a retry was confirmed before the recorded retry succeeds.
 Never say a child has a permanent misconception.
 INPUT_JSON: {{observation, clarification, memory snapshot, revision}}`;
 
 const VERIFICATION_TEMPLATE = `PHASE: verification. Assess the supplied independentAttemptId with assess_attempt.
-Use only the returned observed rubric. Call commit_episode with that attempt ID and
-the actual support or retry attempt ID, or null if there was none. Record failure or
+Use only the returned observed rubric. Call commit_episode with that attempt ID,
+the actual support or retry attempt ID (or null if there was none), and the input
+revision as expectedRevision. Record failure or
 incomplete evidence honestly; do not convert a correct number into an unseen strategy.
 Retention is pending. Return only accepted activity/case/evidence IDs in the
 phase-result schema and a short observable summary.

@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { after, before, describe, test } from 'node:test';
 import { z } from 'zod';
+import { findOracleField } from '../src/codex.js';
 import { loadSeed, type LoadedSeed } from '../src/dataset.js';
 import type { ActivityContext, ActivitySpec, Attempt, Interpretation, MakeTenAttempt, Problem, RunPhase, SearchLearningCasesOutput, ToolResult } from '../src/domain.js';
 import { CATALOG_VERSION, TEMPLATE_KIND } from '../src/domain.js';
@@ -435,7 +436,7 @@ describe('run engine (stub runtime)', () => {
     assert.equal(ofType(await eventsOf(typed, typedBefore.seq), 'voice.delegated').length, 0);
   });
 
-  test('the verification turn reads its expectedRevision when it starts, so the runtime committing a thread first never makes commit_episode stale (stub runtime)', async () => {
+  test('the verification turn reads its revision when it starts, so the runtime committing a thread first never makes commit_episode stale (stub runtime)', async () => {
     const seen: { input?: VerificationTurnInput } = {};
     const { runtime } = stubRuntime(async (request) => {
       if (request.phase !== 'verification') return;
@@ -450,9 +451,21 @@ describe('run engine (stub runtime)', () => {
     const { run } = await send(engine, runId, { type: 'verify', attempt: makeTen((await problemsOf(runId)).independent) });
     const { input } = seen;
     assert.ok(input);
-    assert.equal(input.expectedRevision, run.revision + 1);
-    const committed = await tool(runId, 'commit_episode', { independentAttemptId: input.independentAttemptId, supportAttemptId: input.supportAttemptId, expectedRevision: input.expectedRevision });
+    assert.equal(input.revision, run.revision + 1);
+    const committed = await tool(runId, 'commit_episode', { independentAttemptId: input.independentAttemptId, supportAttemptId: input.supportAttemptId, expectedRevision: input.revision });
     assert.ok(committed.ok, JSON.stringify(committed));
+  });
+
+  test('the explanation and verification turn inputs pass the runtime guard against test-expectation keys (stub runtime)', async () => {
+    const { runtime, calls } = stubRuntime();
+    const engine = createEngine({ store, runtime });
+    const runId = await invitedRun();
+    await toVerify(engine, runId);
+    await send(engine, runId, { type: 'verify', attempt: makeTen((await problemsOf(runId)).independent) });
+    const turns = calls.flatMap((call) => (call.method === 'startTurn' && call.request ? [call.request] : []));
+    assert.deepEqual(turns.map((turn) => turn.phase), ['explanation', 'verification']);
+    const run = await store.getRun(runId);
+    for (const turn of turns) assert.equal(findOracleField(turn.phase === 'verification' ? turn.input(run) : turn.input), null, turn.phase);
   });
 
   test('a correction in PROCESSING or PRACTICE before submit bumps explanationRevision, cancellationEpoch and revision, emits operation.cancelled and state.committed and clears the activity; after submit, in VERIFY, terminal or stopped it is a 409 (stub runtime)', async () => {
