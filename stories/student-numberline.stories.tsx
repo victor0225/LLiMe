@@ -86,7 +86,8 @@ function runSnapshot(activity: Activity, phase: RunPhase, initial: Problem): Run
   });
 }
 
-type ServerReply = 'saved' | 'conflict';
+// `unavailable`: the server cannot confirm the command, as when the store behind it is down.
+type ServerReply = 'saved' | 'conflict' | 'unavailable';
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -109,6 +110,9 @@ function stubbedRoutes(initialRun: RunSnapshot, reply: ServerReply, { record, wa
       await waitForReply();
       if (reply === 'conflict') {
         return json(HTTP_STATUS.conflict, HttpErrorSchema.parse({ code: 'STALE_REVISION', message: 'The run changed before this command arrived.', retryable: false, revision: run.revision }));
+      }
+      if (reply === 'unavailable') {
+        return json(HTTP_STATUS.unavailable, HttpErrorSchema.parse({ code: 'RUNTIME_DISCONNECTED', message: 'The store is unavailable.', retryable: true }));
       }
       run = RunSnapshotSchema.parse({ ...run, revision: run.revision + 1 });
       return json(HTTP_STATUS.ok, run);
@@ -172,6 +176,10 @@ export const Initial: Story = {
 
 export const InitialConflict: Story = {
   args: { ...Initial.args, reply: 'conflict' },
+};
+
+export const InitialUnavailable: Story = {
+  args: { ...Initial.args, reply: 'unavailable' },
 };
 
 const OTHER_PAIR = ProblemSchema.parse({ lhs: 6, rhs: 6 });

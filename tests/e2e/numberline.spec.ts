@@ -114,6 +114,8 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
       await moveForward(page, 2);
       await expect(page.getByText(NUMBER_LINE_COPY.position(20))).toBeVisible();
       await expect(forward(page)).toBeDisabled();
+      // The disabled button cannot keep focus, so it moves to the current tick, not the page.
+      await expect(tick(page, 20)).toBeFocused();
       await expect(back(page)).toBeEnabled();
       await expectAccessible(page);
     });
@@ -212,6 +214,20 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
       const entries = await requests(page).allTextContents();
       const post = entries.findIndex((entry) => entry.startsWith(COMMAND_POST));
       expect(entries.slice(post + 1)).toContain(RUN_GET);
+      await expect(commandRequests(page)).toHaveCount(1);
+      await expectAccessible(page);
+    });
+
+    test('an unconfirmed check keeps the draft and says the save is being checked (stubbed route)', async ({ page }) => {
+      await open(page, 'initial-unavailable');
+      await tick(page, 8).click();
+      await moveForward(page, 4);
+      await check(page).click();
+      await expect(commandRequests(page)).toHaveCount(1);
+      await sendReply(page);
+      await expect(page.getByText(STUDENT_COPY.checkingSave)).toBeVisible();
+      await expect(page.getByText(NUMBER_LINE_COPY.position(12))).toBeVisible();
+      await expect(check(page)).toBeEnabled();
       await expect(commandRequests(page)).toHaveCount(1);
       await expectAccessible(page);
     });

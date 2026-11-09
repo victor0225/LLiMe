@@ -27,6 +27,9 @@ export type PracticeProps = {
 // Every number-line activity the child acts on. Other templates have their own screens.
 const NUMBER_LINE_TEMPLATES: ReadonlySet<TemplateId> = new Set(['initial_number_line', 'anchor_start_number_line', 'manipulation_retry', 'independent_number_line']);
 
+// A conflict means the run moved on: the screen returns to the draft and never resends by itself.
+const REQUEST_AFTER: Readonly<Record<SubmitResult, 'idle' | 'saved' | 'unconfirmed'>> = { saved: 'saved', conflict: 'idle', failed: 'unconfirmed' };
+
 // The line offers no help on request, so the child adds no hints of their own. The server adds the
 // helpers the accepted activity displayed, so a zero here can never hide them.
 const REQUESTED_HINTS = 0;
@@ -79,7 +82,9 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
   const titleId = useId();
   const reasonId = useId();
   const [draft, setDraft] = useState<NumberLineDraft>(EMPTY_DRAFT);
-  const [request, setRequest] = useState<'idle' | 'pending' | 'saved'>('idle');
+  // `unconfirmed`: the last check got no answer the screen can trust. The draft stays and the child
+  // may check again; a stale second command is rejected by the server's revision check.
+  const [request, setRequest] = useState<'idle' | 'pending' | 'saved' | 'unconfirmed'>('idle');
   const [showDraftReset, setShowDraftReset] = useState(() => readUnsentMarker() === activityKey(activity));
   const inFlight = useRef(false);
 
@@ -101,7 +106,8 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
   const showMoveCount = helpers.some((component) => component.type === 'JumpCounter');
   const commandType = SUBMIT_COMMAND_TYPES.find((type) => COMMAND_PHASES[type].includes(phase));
   const position = draftPosition(draft);
-  const canCheck = commandType !== undefined && draft.start !== null && request === 'idle';
+  const isLocked = request === 'pending' || request === 'saved';
+  const canCheck = commandType !== undefined && draft.start !== null && !isLocked;
   const question = problemQuestion(problem);
 
   const changeDraft = (next: NumberLineDraft) => {
@@ -116,7 +122,7 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
     setRequest('pending');
     const result = await submit({ type: commandType, attempt: { start: draft.start, moves: draft.moves, answer: position, hints: REQUESTED_HINTS } });
     inFlight.current = false;
-    setRequest(result === 'saved' ? 'saved' : 'idle');
+    setRequest(REQUEST_AFTER[result]);
   };
 
   return (
@@ -135,7 +141,7 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
       </div>
       <div className="nl-workspace">
         <p className="nl-equation">{question}</p>
-        <NumberLine draft={draft} onDraftChange={changeDraft} startMarker={startMarker} showMoveCount={showMoveCount} disabled={request !== 'idle'} />
+        <NumberLine draft={draft} onDraftChange={changeDraft} startMarker={startMarker} showMoveCount={showMoveCount} disabled={isLocked} />
         <div className="nl-submit">
           <button
             type="button"
@@ -150,6 +156,11 @@ function PracticeScreen({ activity, phase, voiceOff, submit }: PracticeProps) {
           {draft.start === null && (
             <p id={reasonId} className="p-helper nl-reason">
               {NUMBER_LINE_COPY.chooseStart}
+            </p>
+          )}
+          {request === 'unconfirmed' && (
+            <p className="p-status nl-notice" role="status">
+              {STUDENT_COPY.checkingSave}
             </p>
           )}
         </div>
