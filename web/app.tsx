@@ -1,7 +1,13 @@
+import { type ComponentType, lazy, Suspense } from 'react';
 import { STUDENT_COPY } from '@core/copy';
 
-// Root of every surface. Screens join here by URL path as their lanes deliver them.
-export function App() {
+// One entry per surface, keyed by URL path. Each surface loads only when its path is opened, so a page
+// never pays for another surface's code. Lanes add their own line here.
+const SURFACES: Readonly<Record<string, ComponentType>> = {
+  '/backend': lazy(() => import('./backend/LearningMemoryScene').then((module) => ({ default: module.BackendSurface }))),
+};
+
+function Waiting() {
   return (
     <main
       style={{
@@ -16,5 +22,17 @@ export function App() {
       <h1 style={{ fontSize: 'var(--p-font-heading)', lineHeight: 'var(--p-line-heading)' }}>{STUDENT_COPY.waitingTitle}</h1>
       <p>{STUDENT_COPY.waitingBody}</p>
     </main>
+  );
+}
+
+// Root of every surface. Unknown paths and '/' show the waiting screen.
+export function App() {
+  const Surface = SURFACES[window.location.pathname];
+  return Surface ? (
+    <Suspense fallback={null}>
+      <Surface />
+    </Suspense>
+  ) : (
+    <Waiting />
   );
 }
