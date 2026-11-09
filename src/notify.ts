@@ -3,9 +3,11 @@
 // fail without touching the activity: its store port has no activity operation to call.
 import { spawn } from 'node:child_process';
 import { z } from 'zod';
+import { repoRoot } from './config.js';
 import { NOTIFICATION_COPY } from './copy.js';
 import { NotificationOutboxSchema, NotificationPayloadSchema } from './domain.js';
 import { EVENT_PAYLOAD_SCHEMAS, type EventPayload } from './events.js';
+import { hasInboxLesson } from './inbox.js';
 
 export const DEFAULT_BUNDLE_ID = 'com.llime.demo';
 
@@ -249,7 +251,8 @@ export interface OutboxLoopDeps extends NotifyDeps {
   store: OutboxStore;
   // Whether this server owns a run. Every worktree and test suite on a computer shares one database,
   // so the loop recovers and sends only rows of its own runs, never another server's or a test's.
-  ownsRun: (runId: string) => Promise<boolean>;
+  // By default a server owns the runs whose lesson reached the inbox of the checkout it runs from.
+  ownsRun?: (runId: string) => Promise<boolean>;
   onOutcome?: (outcome: OutboxOutcome) => void;
   // null leaves only explicit kicks, so a test controls every drain.
   scanIntervalMs?: number | null;
@@ -267,6 +270,7 @@ export interface OutboxLoop {
 export async function startOutboxLoop(deps: OutboxLoopDeps): Promise<OutboxLoop> {
   const report = (outcome: OutboxOutcome) => deps.onOutcome?.(outcome);
   const { store } = deps;
+  const ownsRun = deps.ownsRun ?? ((runId: string) => hasInboxLesson(runId, { rootDir: repoRoot }));
   // A run's ownership never changes once it has an outbox row, so each run is asked about once.
   const ownership = new Map<string, boolean>();
   const ownedOnly = async (notificationIds: string[]): Promise<string[]> => {
@@ -276,7 +280,7 @@ export async function startOutboxLoop(deps: OutboxLoopDeps): Promise<OutboxLoop>
       if (row === null) continue;
       let isOwned = ownership.get(row.runId);
       if (isOwned === undefined) {
-        isOwned = await deps.ownsRun(row.runId);
+        isOwned = await ownsRun(row.runId);
         ownership.set(row.runId, isOwned);
       }
       if (isOwned) owned.push(notificationId);

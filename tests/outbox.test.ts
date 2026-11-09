@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { type NotificationOutbox, NotificationOutboxSchema } from '../src/domain.js';
 import type { EventPayload } from '../src/events.js';
@@ -97,6 +98,18 @@ describe('outbox loop (stubbed simctl)', () => {
     assert.deepEqual(simctl.pushes, ['ntf_ours']);
     assert.deepEqual(outbox.row('ntf_theirs_waiting'), outboxRow({ notificationId: 'ntf_theirs_waiting', runId: 'run_other_worktree' }));
     assert.equal(outbox.row('ntf_theirs_dispatching')?.status, 'dispatching');
+  });
+
+  test('by default a run whose lesson never reached this checkout\'s inbox is not owned', async () => {
+    const outbox = memoryOutbox([outboxRow({ runId: `run_${randomUUID()}` })]);
+    const simctl = stubSimctl();
+
+    const loop = await startOutboxLoop({ store: outbox.store, runSimctl: simctl.runSimctl, config, scanIntervalMs: null });
+    await loop.kick();
+    await loop.stop();
+
+    assert.deepEqual(simctl.pushes, []);
+    assert.equal(outbox.row('ntf_1')?.status, 'pending');
   });
 
   test('a committed pending row is dispatched once, even with two loops running', async () => {
