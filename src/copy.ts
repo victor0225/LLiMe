@@ -169,7 +169,6 @@ export const EXPLAIN_COPY = {
   // can no longer change this run's evidence.
   correctionClosed: 'This can’t be changed now. To explain it again, start a new run.',
   voiceConnecting: 'Starting voice…',
-  voiceReconnecting: 'Reconnecting voice…',
   // Voice dropped: speech in flight may be lost, so the child is asked to repeat it, never told it was kept.
   voiceDisconnectedBody: 'I may have missed some of that. Reconnect and say it again, or type instead.',
   microphoneDeniedTitle: 'Microphone isn’t allowed',

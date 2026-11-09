@@ -4,8 +4,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Request, type Route } from '@playwright/test';
 import { z } from 'zod';
 import { repoRoot, loadConfig } from '../../src/config.js';
-import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected } from '../../src/copy.js';
+import { ACTIVITY_COPY, EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY, VOICE_CONTROL_COPY, VOICE_STATUS_COPY, firstNumberSelected, problemQuestion } from '../../src/copy.js';
 import {
+  ActivitySchema,
   CommandSchema,
   EXPLANATION_MAX_CHARS,
   InterpretationMeaningSchema,
@@ -17,7 +18,8 @@ import {
   type SavedAttempt,
 } from '../../src/domain.js';
 import { EventSchema, RunSnapshotSchema, type RunEvent, type RunSnapshot } from '../../src/events.js';
-import { BootstrapSchema, ROUTES, routePath } from '../../src/routes.js';
+import { BootstrapSchema, ROUTES, VoiceCommandSchema, routePath } from '../../src/routes.js';
+import { makeTenIndependent } from '../../src/ui/activity-fixtures.js';
 
 const { storybookOrigin } = loadConfig();
 const IPAD_VIEWPORTS = [
@@ -135,8 +137,8 @@ async function openStory(page: Page, id: string) {
   await expect(page.locator('#storybook-root main')).toBeVisible();
 }
 
-async function expectNoAxeViolations(page: Page) {
-  const { violations } = await new AxeBuilder({ page }).include('#storybook-root').analyze();
+async function expectNoAxeViolations(page: Page, root = '#storybook-root') {
+  const { violations } = await new AxeBuilder({ page }).include(root).analyze();
   expect(violations.map((violation) => `${violation.id}: ${violation.nodes.map((node) => node.target.join(' ')).join(', ')}`)).toEqual([]);
 }
 
@@ -233,6 +235,31 @@ for (const viewport of IPAD_VIEWPORTS) {
       await expectNoAxeViolations(page);
     });
 
+    test('the real voice client, with getUserMedia denied by the browser, shows the denied state and keeps Type instead (stubbed route)', async ({ page }) => {
+      // Instrumented browser boundary: the permission prompt is refused, as a child or parent might.
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'mediaDevices', {
+          configurable: true,
+          value: { getUserMedia: () => Promise.reject(new DOMException('Permission denied', 'NotAllowedError')) },
+        });
+      });
+      await stubRun(page, { snapshot: runSnapshot({}), events: [] });
+      const voiceRequests: string[] = [];
+      page.on('request', (request) => {
+        if (new URL(request.url()).pathname.includes('/voice/')) voiceRequests.push(request.url());
+      });
+      await openStory(page, 'student-explain-flow--from-server-with-voice');
+      await page.getByRole('button', { name: VOICE_CONTROL_COPY.enable }).click();
+      await expect(page.getByRole('status').first()).toHaveText(EXPLAIN_COPY.microphoneDeniedTitle);
+      await expect(page.getByText(EXPLAIN_COPY.microphoneDeniedBody)).toBeVisible();
+      await expect(page.getByRole('button', { name: VOICE_CONTROL_COPY.typeInstead })).toBeVisible();
+      await expect(page.getByRole('button', { name: VOICE_CONTROL_COPY.reconnect })).toHaveCount(0);
+      expect(await visibleText(page)).not.toContain(VOICE_STATUS_COPY.listening);
+      // No session is requested without a microphone.
+      expect(voiceRequests).toEqual([]);
+      await expectNoAxeViolations(page);
+    });
+
     test('a long caption wraps with no page horizontal overflow at 834 px and at 320/390 px, and shows no tool names (UI05)', async ({ page }) => {
       await openStory(page, 'student-explain--long-caption');
       const caption = page.locator('[data-speaker="you"] p');
@@ -294,14 +321,14 @@ for (const viewport of IPAD_VIEWPORTS) {
       await expect(typeInstead).toBeVisible();
 
       await reconnect.click();
-      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['reconnect']);
+      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['start']);
       // The press asks for a reconnect; the row still says the connection is lost until it is back.
       await expect(page.getByRole('status').first()).toHaveText(VOICE_STATUS_COPY.disconnected);
       await expect(page.getByLabel(STUDENT_COPY.explanationLabel)).toHaveCount(0);
 
       await typeInstead.click();
       await expect(page.getByLabel(STUDENT_COPY.explanationLabel)).toBeVisible();
-      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['reconnect']);
+      expect(await page.evaluate<string[]>('globalThis.storyVoiceControlCalls')).toEqual(['start']);
       const text = await visibleText(page);
       expect(text).not.toContain(VOICE_STATUS_COPY.listening);
       expect(text).not.toContain(STUDENT_COPY.disconnected);
@@ -409,6 +436,86 @@ for (const viewport of IPAD_VIEWPORTS) {
         // Axe includes the WCAG text-contrast rule.
         await expectNoAxeViolations(page);
       }
+    });
+
+    test('the composed /student page walks a run from the wrong-answer question through Thinking to the committed success, and Done sends nothing (stubbed route)', async ({ page }) => {
+      const state = { snapshot: runSnapshot({ seq: 3 }), events: [] as RunEvent[] };
+      await stubRun(page, state);
+      const processing = runEvent(4, 'state.committed', { phase: 'PROCESSING', revision: 5, caseIds: [] });
+      const commands: Command[] = [];
+      await page.route(pathIs(routePath('runCommand', { runId: RUN_ID })), (route) => {
+        commands.push(CommandSchema.parse(route.request().postDataJSON()));
+        state.events = [processing];
+        state.snapshot = runSnapshot({ phase: 'PROCESSING', revision: 5, seq: 4, execution: { throughSeq: 4, events: [processing] } });
+        return route.fulfill({ json: state.snapshot });
+      });
+
+      await page.goto(`/student?runId=${encodeURIComponent(RUN_ID)}`);
+      const heading = page.getByRole('heading', { level: 1 });
+      await expect(heading).toHaveText(STUDENT_COPY.howDidYouGet(12));
+      await expect(page.getByText(problemQuestion(problem))).toBeVisible();
+      // This server offers no voice, so the labeled typed fallback is open from the start.
+      await page.getByLabel(STUDENT_COPY.explanationLabel).fill('  I counted eight first. ');
+      await page.getByRole('button', { name: STUDENT_COPY.sendExplanation }).click();
+      await expect(heading).toHaveText(STUDENT_COPY.interpreting);
+      expect(commands).toEqual([expect.objectContaining({ type: 'explain', text: 'I counted eight first.', revision: 4 })]);
+      expect(await page.locator('body').innerText()).not.toContain(OUTCOME_COPY.completeTitle);
+      await expectNoAxeViolations(page, 'body');
+
+      const outcome = runEvent(5, 'outcome.committed', {
+        queryId: 'query_run',
+        persistedCaseId: 'case_run',
+        strategy: 'make_ten',
+        outcome: 'independent',
+        saved: true,
+        nodes: [],
+        edges: [],
+        source: { id: 'run', text: 'This run' },
+      });
+      const complete = runEvent(6, 'state.committed', { phase: 'COMPLETE', revision: 6, caseIds: ['case_run'] });
+      state.events = [processing, outcome, complete];
+      state.snapshot = runSnapshot({ phase: 'COMPLETE', revision: 6, seq: 6, attempts: [initialAttempt, independentAttempt], execution: { throughSeq: 6, events: [processing, outcome, complete] } });
+      await expect(heading).toHaveText(OUTCOME_COPY.completeTitle);
+      await expectNoAxeViolations(page, 'body');
+
+      const posts: string[] = [];
+      page.on('request', (request) => {
+        if (request.method() === 'POST') posts.push(request.url());
+      });
+      await page.getByRole('button', { name: EXPLAIN_COPY.done }).click();
+      await expect(heading).toHaveText(STUDENT_COPY.doneCollapsed);
+      expect(posts).toEqual([]);
+    });
+
+    test('the composed /student page mounts the make-ten independent check with one Start problem, ready at once without voice, and acknowledges the render once (stubbed route)', async ({ page }) => {
+      const activity = ActivitySchema.parse({
+        id: makeTenIndependent.spec.activityId,
+        revision: makeTenIndependent.spec.revision,
+        runId: RUN_ID,
+        kind: 'independent',
+        templateId: 'independent_make_ten',
+        strategy: 'make_ten',
+        problem: independentProblem,
+        ...ACTIVITY_COPY.independent_make_ten(independentProblem),
+        activitySpec: makeTenIndependent.spec,
+        specHash: 'synthetic-spec-hash',
+        helperCount: 0,
+        evidenceIds: [],
+        decisionSummary: '',
+      });
+      const state = { snapshot: runSnapshot({ phase: 'VERIFY', activity, seq: 3 }), events: [] as RunEvent[] };
+      await stubRun(page, state);
+      const receipts: unknown[] = [];
+      await page.route(pathIs(routePath('voiceCommand', { runId: RUN_ID })), (route) => {
+        receipts.push(VoiceCommandSchema.parse(route.request().postDataJSON()));
+        return route.fulfill({ json: state.snapshot });
+      });
+      await page.goto(`/student?runId=${encodeURIComponent(RUN_ID)}`);
+      const start = page.getByRole('button', { name: STUDENT_COPY.startProblem });
+      await expect(start).toHaveCount(1);
+      await expect(start).toBeEnabled();
+      await expect.poll(() => receipts.length).toBe(1);
+      expect(receipts[0]).toMatchObject({ type: 'activity_rendered', activityId: activity.id, activityRevision: activity.revision, voiceSessionId: null });
     });
 
     test('every explain and outcome story renders without errors, overflow or accessibility violations (stubbed route)', async ({ page, request }) => {

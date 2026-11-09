@@ -1,11 +1,16 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { STUDENT_COPY, VOICE_STATUS_COPY } from '@core/copy';
-import type { Activity, Command } from '@core/domain';
+import { type Activity, type Command, RunCreateInputSchema, type TemplateId } from '@core/domain';
 import type { RunEvent, RunSnapshot } from '@core/events';
-import { HTTP_STATUS, NotificationOpenedInputSchema, ROUTES, routePath } from '@core/routes';
+import { BootstrapSchema, HTTP_STATUS, NotificationOpenedInputSchema, ROUTES, routePath, SESSION_HEADER } from '@core/routes';
 import { createEventStore, EVENT_POLL_INTERVAL_MS, type EventStore, RunRequestError, useRunEvents } from '../lib/event-store';
+import { browserVoiceEnv, createCorrectionPlayback, createVoiceClient, eventStoreVoiceApi, useVoice, type VoiceClient, type VoiceView } from '../voice';
+import { ActivityView, type NumberLineSlot } from '../activity/ActivityView';
+import { ExplainFlow, isExplainFlowRun, VoiceStatus } from './Explanation';
 import { DeferredInvitation, Invitation } from './Invitation';
 import { Mascot } from './Mascot';
+import { ActivityUnavailable } from './Outcome';
+import { Practice } from './Practice';
 import '../styles/student.css';
 
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -33,7 +38,8 @@ export type StudentSlot = {
 
 export type StudentAppProps = {
   readonly runId: string | null;
-  // Mounted for every phase after the invitation (and for a stopped run).
+  // Mounted for every phase after the invitation (and for a stopped run). Without it the app composes
+  // its own screens; stories pass one to show a single screen.
   readonly activity?: (slot: StudentSlot) => ReactNode;
   // Shown when a notification's activity cannot open.
   readonly unavailable?: (reason: UnavailableReason) => ReactNode;
@@ -89,8 +95,9 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
   const saveUnconfirmed = unansweredRevision !== null && run?.revision === unansweredRevision;
   const connection = view.status === 'live' || view.status === 'loading' ? 'live' : 'paused';
   const voiceOff = useAudioGateClosed(runId, run?.phase === 'VERIFY');
+  const voice = useRunVoice(store, runId, run);
 
-  if (openedUnavailable) return <StudentFrame>{unavailable ? unavailable(openedUnavailable) : <RunUnavailableCard />}</StudentFrame>;
+  if (openedUnavailable) return <StudentFrame>{unavailable ? unavailable(openedUnavailable) : <ActivityUnavailable />}</StudentFrame>;
   if (!run) {
     if (view.status === 'failed') return <RunUnavailable />;
     return (
@@ -107,13 +114,19 @@ function StudentRun({ store, runId, activity, unavailable }: StudentRunProps) {
   const slot: StudentSlot = { run, events: view.events, connection, saveUnconfirmed, voiceOff, submit };
   return (
     <StudentFrame>
-      <RunScreen slot={slot} isPending={isPending} activity={activity} />
+      {activity ? (
+        <RunScreen slot={slot} isPending={isPending} activity={activity} hasPreMountGate />
+      ) : (
+        <RunScreen slot={slot} isPending={isPending} activity={(current) => <ComposedActivity slot={current} store={store} voice={voice} />} hasPreMountGate={false} />
+      )}
       <ConnectionStatus connection={connection} saveUnconfirmed={saveUnconfirmed} />
     </StudentFrame>
   );
 }
 
-function RunScreen({ slot, isPending, activity }: { slot: StudentSlot; isPending: boolean; activity: StudentAppProps['activity'] }) {
+// `hasPreMountGate`: a screen passed in by a story gets the server-gate Start before it mounts; the
+// composed page uses the generated activity's own Start instead.
+function RunScreen({ slot, isPending, activity, hasPreMountGate }: { slot: StudentSlot; isPending: boolean; activity: StudentAppProps['activity']; hasPreMountGate: boolean }) {
   const { run } = slot;
   const [deferredId, setDeferredId] = useState<string | null>(null);
 
@@ -141,6 +154,7 @@ function RunScreen({ slot, isPending, activity }: { slot: StudentSlot; isPending
       );
     }
     case 'VERIFY':
+      if (!hasPreMountGate) return <>{activity?.(slot)}</>;
       return <IndependentGate slot={slot} activity={activity} />;
     default:
       return <>{activity?.(slot)}</>;
@@ -205,6 +219,168 @@ function ConnectionStatus({ connection, saveUnconfirmed }: { connection: Student
       {message}
     </p>
   );
+}
+
+// ---------------------------------------------------------------------------------------------
+// The screen for each phase after the invitation.
+
+// Activities with a generated spec mount through the activity host, which validates the spec, sends
+// the render receipt and owns the independent Start. The initial attempt and the plain retry are
+// app-owned number-line screens without a spec.
+const GENERATED_TEMPLATES: ReadonlySet<TemplateId> = new Set(['anchor_start_number_line', 'independent_number_line', 'make_ten_blocks', 'independent_make_ten']);
+const APP_NUMBER_LINE_TEMPLATES: ReadonlySet<TemplateId> = new Set(['initial_number_line', 'manipulation_retry']);
+
+// `view` is null when this server offers no voice; the client still exists to tear audio down.
+type RunVoice = { view: VoiceView | null; client: VoiceClient; controls: VoiceControlsForRun; independentStart: 'waiting' | 'ready' };
+type VoiceControlsForRun = Pick<VoiceClient, 'start' | 'toggleMute' | 'end' | 'interruptPlayback'>;
+
+
+function ComposedActivity({ slot, store, voice }: { slot: StudentSlot; store: EventStore; voice: RunVoice | null }) {
+  const { run } = slot;
+  const shownVoice = voice?.view ?? null;
+  const controls = voice?.controls ?? SILENT_VOICE;
+  if (isExplainFlowRun(run)) return <ExplainFlow store={store} voice={shownVoice} voiceControls={controls} startNewRun={startNewRun} />;
+  const activity = run.activity;
+  if (activity === null) return null;
+  // During support the tutor may still be talking, so the child keeps Mute and End voice; voice is
+  // offered fresh only at the explanation step.
+  const voiceRow = shownVoice !== null && run.phase === 'PRACTICE' && shownVoice.phase !== 'idle' && <VoiceStatus voice={shownVoice} controls={controls} offerStart={false} />;
+  const independentStart = voice?.independentStart ?? 'ready';
+  // In the independent check "voice is off" is shown only once teardown finished (or no audio ran).
+  const voiceOff = run.phase === 'VERIFY' ? independentStart === 'ready' : slot.voiceOff;
+  const practice: NumberLineSlot = (shown) => <Practice activity={shown} phase={run.phase} voiceOff={voiceOff} submit={slot.submit} />;
+  if (GENERATED_TEMPLATES.has(activity.templateId)) {
+    const commandType = run.phase === 'VERIFY' ? 'verify' : 'practice';
+    return (
+      <>
+        {voiceRow}
+        <ActivityView
+          activity={activity}
+          store={store}
+          voiceSessionId={shownVoice?.voiceSessionId ?? null}
+          numberLine={practice}
+          independentStart={independentStart}
+          onSubmit={(_target, attempt) => void slot.submit({ type: commandType, attempt })}
+        />
+      </>
+    );
+  }
+  if (!APP_NUMBER_LINE_TEMPLATES.has(activity.templateId)) return null;
+  return (
+    <>
+      {voiceRow}
+      {practice(activity)}
+    </>
+  );
+}
+
+// Controls for a run without voice; no voice control is shown then, so none is ever pressed.
+const SILENT_VOICE = { start: async () => {}, toggleMute: () => {}, end: async () => {}, interruptPlayback: () => {} };
+
+// Creates a run and returns its ID; the caller decides whether to open it.
+export async function createRun(): Promise<string> {
+  const bootstrap = await fetch(routePath('bootstrap'), { headers: { accept: 'application/json' } });
+  if (!bootstrap.ok) throw new Error(`The app could not be reached (HTTP ${bootstrap.status})`);
+  const { nonce } = BootstrapSchema.parse(await bootstrap.json());
+  const response = await fetch(routePath('createRun'), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', [SESSION_HEADER]: nonce },
+    body: JSON.stringify(RunCreateInputSchema.parse({})),
+  });
+  if (response.status !== ROUTES.createRun.status) throw new Error(`The run was not created (HTTP ${response.status})`);
+  return ROUTES.createRun.response.parse(await response.json()).id;
+}
+
+async function startNewRun(): Promise<void> {
+  const runId = await createRun();
+  window.location.assign(`${window.location.pathname}?runId=${encodeURIComponent(runId)}`);
+}
+
+// One voice client per run, offered only when this server has voice configured for live input. The
+// client always exists so that teardown before the independent check also covers a session that
+// is no longer shown.
+function useRunVoice(store: EventStore, runId: string | null, run: RunSnapshot | null): RunVoice | null {
+  const [isOffered, setOffered] = useState(false);
+  useEffect(() => {
+    let isCurrent = true;
+    fetch(routePath('bootstrap'), { headers: { accept: 'application/json' } })
+      .then(async (response) => BootstrapSchema.safeParse(response.ok ? await response.json() : null))
+      .then((bootstrap) => isCurrent && setOffered(bootstrap.success && bootstrap.data.voice === 'configured_unverified' && bootstrap.data.inputMode === 'live'))
+      // Unreachable: typing stays available and voice is simply not offered.
+      .catch(() => isCurrent && setOffered(false));
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+  const client = useMemo(() => createVoiceClient({ env: browserVoiceEnv(), api: eventStoreVoiceApi(store, runId ?? '') }), [store, runId]);
+  // Leaving the run releases the microphone and closes the session.
+  useEffect(() => () => void client.end(), [client]);
+  const view = useVoice(client);
+  const isIndependent = run?.phase === 'VERIFY';
+  const independentStart = useIndependentTeardown(client, view, isIndependent);
+  const controls = useCorrectionPlayback(client, run);
+  if (runId === null) return null;
+  return { view: isOffered ? view : null, client, controls, independentStart };
+}
+
+// A correction makes what the tutor was saying stale: playback stops at once and resumes only when
+// the replacement for the newest correction is on screen.
+function useCorrectionPlayback(client: VoiceClient, run: RunSnapshot | null): VoiceControlsForRun {
+  const playback = useMemo(() => createCorrectionPlayback(client), [client]);
+  const revision = run?.explanationRevision ?? 0;
+  const latestRevision = useRef(revision);
+  latestRevision.current = revision;
+  const superseded = run !== null && [...run.execution.events].some((event) => event.type === 'operation.cancelled' && event.payload.reason === 'superseded' && event.payload.cancellationEpoch === run.cancellationEpoch);
+  useEffect(() => {
+    if (superseded) playback.correctionStarted(revision);
+  }, [playback, superseded, revision]);
+  const shownActivity = run?.activity && (run.phase === 'PRACTICE' || run.phase === 'CLARIFY') ? `${run.activity.id}:${run.activity.revision}` : null;
+  useEffect(() => {
+    if (shownActivity !== null) playback.replacementRendered(revision);
+  }, [playback, shownActivity, revision]);
+  return useMemo(
+    () => ({
+      start: client.start,
+      toggleMute: client.toggleMute,
+      end: client.end,
+      // A typed correction becomes the next explanation revision.
+      interruptPlayback: () => playback.correctionStarted(latestRevision.current + 1),
+    }),
+    [client, playback],
+  );
+}
+
+// The tutor's handover may still be playing when the independent check arrives. Once its transcript
+// has stopped growing for a moment, or at the latest after the cap, microphone and playback are torn
+// down and the server records it. The check's Start waits for that record; with no audio it is ready.
+const HANDOVER_SETTLE_MS = 1500;
+const HANDOVER_CAP_MS = 8000;
+
+function useIndependentTeardown(client: VoiceClient, view: VoiceView, isIndependent: boolean): 'waiting' | 'ready' {
+  const since = useRef<number | null>(null);
+  const [teardown, setTeardown] = useState<'none' | 'running' | 'done' | 'failed'>('none');
+  const hasAudio = view.phase === 'starting' || view.phase === 'connecting' || view.phase === 'live' || view.phase === 'ending';
+  useEffect(() => {
+    if (isIndependent) return;
+    since.current = null;
+    setTeardown('none');
+  }, [isIndependent]);
+  useEffect(() => {
+    if (!isIndependent || !hasAudio || teardown !== 'none') return;
+    since.current ??= Date.now();
+    const remaining = HANDOVER_CAP_MS - (Date.now() - since.current);
+    const timer = setTimeout(() => {
+      setTeardown('running');
+      client.teardownForIndependentWork().then(
+        () => setTeardown('done'),
+        // Without the server's record the check stays closed rather than risking spoken help.
+        () => setTeardown('failed'),
+      );
+    }, Math.max(0, Math.min(HANDOVER_SETTLE_MS, remaining)));
+    return () => clearTimeout(timer);
+  }, [client, isIndependent, hasAudio, teardown, view.captions.output]);
+  if (!isIndependent) return 'waiting';
+  return teardown === 'done' || (teardown === 'none' && !hasAudio) ? 'ready' : 'waiting';
 }
 
 // ---------------------------------------------------------------------------------------------

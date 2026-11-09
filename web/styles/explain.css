@@ -63,7 +63,7 @@
 .ex-voice-status { display: flex; align-items: center; gap: var(--p-space-1); min-height: var(--p-target-min); margin: 0; font-weight: 700; }
 .ex-voice-status:empty { display: none; }
 .ex-voice-mark { width: 14px; height: 14px; border: 2px solid var(--p-text); border-radius: 50%; }
-.ex-voice[data-session="live"][data-microphone="on"] .ex-voice-mark { background: var(--p-text); }
+.ex-voice[data-status="listening"] .ex-voice-mark { background: var(--p-text); }
 .ex-voice-controls { display: flex; flex-wrap: wrap; gap: var(--p-space-1); }
 
 /* Captions wrap inside the column; long words break instead of widening the page. */
