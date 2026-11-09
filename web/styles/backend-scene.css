@@ -136,3 +136,19 @@
 .graph-camera-toggle { position: absolute; right: 24px; bottom: 24px; min-height: 44px; padding: 0 18px; border: 1px solid var(--muted); border-radius: 6px; background: var(--ground); color: var(--ink); font: 600 16px system-ui, sans-serif; cursor: pointer; }
 .graph-camera-toggle:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .graph-failure { padding: 24px; color: var(--ink); }
+
+/* iPad widths: keep the whole operation title on one line beside the source label. */
+@media (max-width: 1180px) {
+  .lm-header { gap: 16px; padding: 0 20px; }
+  .lm-brand { font-size: 17px; }
+  .lm-operation { font-size: 18px; }
+  .lm-source { font-size: 12px; padding: 4px 8px; }
+  .lm-raw { padding: 0 20px; font-size: 14px; }
+}
+/* Portrait: the source label wraps under the title instead of squeezing it; it is never hidden. */
+@media (max-width: 800px) {
+  .learning-memory { grid-template-rows: auto minmax(0, 1fr) 64px; }
+  .lm-header { flex-wrap: wrap; row-gap: 4px; padding: 8px 20px; }
+  .lm-operation { flex: 1 1 calc(100% - 80px); }
+  .lm-source { margin-left: 0; }
+}
