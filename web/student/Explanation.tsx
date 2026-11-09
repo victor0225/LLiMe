@@ -5,6 +5,7 @@ import type { RunEvent, RunSnapshot } from '@core/events';
 import { sendRenderReceipt } from '../activity/ActivityView';
 import { useRunEvents, type EventStore } from '../lib/event-store';
 import type { VoiceClient, VoiceView } from '../voice';
+import { Mascot } from './Mascot';
 import { ConnectionNotice, Outcome, outcomeView, type StartNewRun } from './Outcome';
 import '../styles/explain.css';
 
@@ -314,6 +315,7 @@ export function Explanation({ question, problem, answer, voice, voiceControls, s
   return (
     <section className="ex ex-screen" aria-labelledby={headingId}>
       <div className="ex-guide">
+        <Mascot state="listening" size={140} />
         {intro && <p className="p-speech ex-intro">{intro}</p>}
         <h1 id={headingId} className="ex-title">
           {question}

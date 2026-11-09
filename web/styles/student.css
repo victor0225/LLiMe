@@ -75,3 +75,28 @@
   .student-actions { flex-direction: column; }
   .student-primary { width: 100%; }
 }
+
+/* Character art: square, uncropped, never covering numbers or controls. */
+.student-character { display: block; flex-shrink: 0; max-width: 100%; height: auto; aspect-ratio: 1; object-fit: contain; user-select: none; }
+.student-invitation .student-character { margin: calc(-1 * var(--p-space-2)) 0; }
+@media (prefers-reduced-motion: no-preference) {
+  .student-character[data-motion="on"] { animation: student-character-in 420ms ease-out 1; }
+}
+@keyframes student-character-in { from { opacity: 0; transform: translateY(8px) scale(0.97); } to { opacity: 1; transform: none; } }
+
+/* Micro icons as masks, so they take the label colour. Decorative: every button keeps its text. */
+.student-invitation .p-button[data-variant="secondary"]::before,
+.nl-check::before {
+  content: "";
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  background: currentColor;
+  mask: var(--student-icon) center / contain no-repeat;
+}
+.student-invitation .p-button[data-variant="secondary"] { --student-icon: url('../assets/micro/later.svg'); }
+.nl-check { --student-icon: url('../assets/micro/check.svg'); }
+
+@media (max-width: 900px) {
+  .student-invitation .student-character { width: 180px; margin: 0; }
+}

@@ -103,3 +103,20 @@
 .ex-correction-closed { display: flex; flex-direction: column; align-items: flex-start; gap: var(--p-space-1); }
 .ex-connection { max-width: 1160px; margin: var(--p-space-2) auto 0; }
 .ex-retry { display: flex; flex-direction: column; gap: var(--p-space-2); }
+
+/* Character art in the guide column and on the outcome card. */
+.ex-guide .student-character { margin-bottom: calc(-1 * var(--p-space-2)); }
+.ex-outcome-card .student-character { margin: calc(-1 * var(--p-space-3)) auto 0; }
+@media (max-width: 999px) {
+  .ex-guide .student-character { width: 96px; }
+}
+
+/* Listening shows a microphone instead of the plain dot. */
+.ex-voice[data-status="listening"] .ex-voice-mark {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 0;
+  background: var(--p-text);
+  mask: url('../assets/micro/microphone.svg') center / contain no-repeat;
+}

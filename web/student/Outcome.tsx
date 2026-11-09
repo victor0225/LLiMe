@@ -2,6 +2,7 @@ import { useId, useRef, useState, type ReactNode } from 'react';
 import { EXPLAIN_COPY, OUTCOME_COPY, STUDENT_COPY } from '@core/copy';
 import type { Assessment, Outcome as OutcomeValue } from '@core/domain';
 import type { RunEvent, RunEventOf, RunSnapshot } from '@core/events';
+import { Mascot } from './Mascot';
 import '../styles/explain.css';
 
 // After a failed support activity the run may continue once; a second failure ends the run with a
@@ -116,6 +117,7 @@ function OutcomeScreen({ title, body, tone, children }: { title: string; body?: 
   return (
     <section className="ex ex-outcome" aria-labelledby={headingId} data-tone={tone}>
       <div className="p-card ex-outcome-card" aria-live="polite">
+        <Mascot state="encouragement" size={160} />
         <h1 id={headingId} className="ex-title">
           {title}
         </h1>
