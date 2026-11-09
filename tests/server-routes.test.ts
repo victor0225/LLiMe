@@ -596,6 +596,18 @@ describe('notification opened', () => {
       assert.equal(world.calls.filter((c) => c.startsWith('store.appendEvents')).length, 0);
     }, world);
   });
+
+  test('a repeat tap on an already opened invitation after the run moved past it is 409 and writes nothing (stub store)', async () => {
+    const { world, offer } = invitedWorld();
+    await withServer(async (server) => {
+      assert.equal((await tap(server, offer, 35)).status, 200);
+      world.store.commit(RUN, runState({ phase: 'INITIAL', invitation: offer }));
+      const writes = world.calls.filter((c) => c.startsWith('store.appendEvents')).length;
+      const stale = await tap(server, offer, 36);
+      assert.deepEqual([stale.status, errorOf(stale).code, errorOf(stale).revision], [409, 'CONFLICT', 2]);
+      assert.equal(world.calls.filter((c) => c.startsWith('store.appendEvents')).length, writes);
+    }, world);
+  });
 });
 
 describe('static files', () => {

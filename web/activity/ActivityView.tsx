@@ -201,11 +201,6 @@ export function ActivityView({ activity, store, voiceSessionId, numberLine, inde
 
   return (
     <div className="activity-view">
-      {state.failed ? (
-        <p className="p-status activity-failed" data-tone="error" role="status">
-          {STUDENT_COPY.activityOpenFailed}
-        </p>
-      ) : null}
       {current !== null && mounted !== null ? (
         <article className="activity-card" aria-labelledby={ownsHeader ? titleId : undefined} data-activity-id={current.activity.id} data-activity-revision={current.activity.revision}>
           {ownsHeader ? (
@@ -231,6 +226,12 @@ export function ActivityView({ activity, store, voiceSessionId, numberLine, inde
             </MountedActivityContext.Provider>
           </fieldset>
         </article>
+      ) : null}
+      {/* After the card, so a rejected replacement never moves the workspace mid-attempt. */}
+      {state.failed ? (
+        <p className="p-status activity-failed" data-tone="error" role="status">
+          {STUDENT_COPY.activityOpenFailed}
+        </p>
       ) : null}
     </div>
   );
