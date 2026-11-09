@@ -23,6 +23,7 @@ import {
   type ToolResult,
   ToolResultSchema,
 } from './domain.js';
+import type { OperationSettlement, TurnRequest } from './engine.js';
 import { RUNTIME_MESSAGE_MAX_CHARS, type RunEvent } from './events.js';
 import type { InitializeParams, v2 } from './generated/codex/index.js';
 import type { JsonValue } from './generated/codex/serde_json/JsonValue.js';
@@ -451,6 +452,9 @@ type TurnState = {
   cancelAck: (() => void) | null;
   finish: (result: TurnResult) => void;
   done: Promise<TurnResult>;
+  // Resolves once turn/start was answered (or failed), so an early tool call can find its turn.
+  ready: Promise<void>;
+  markReady: () => void;
 };
 
 type Session = {
@@ -701,6 +705,8 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
   function newTurnState(session: Session, request: StartTurnRequest, epoch: number): TurnState {
     let finish: (result: TurnResult) => void = () => undefined;
     const done = new Promise<TurnResult>((resolve) => (finish = resolve));
+    let markReady: () => void = () => undefined;
+    const ready = new Promise<void>((resolve) => (markReady = resolve));
     return {
       threadId: session.threadId,
       turnId: null,
@@ -716,6 +722,8 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
       cancelAck: null,
       finish,
       done,
+      ready,
+      markReady,
     };
   }
 
@@ -745,10 +753,12 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
       turn.turnId ??= turnId;
       session.turns.set(turn.turnId, turn);
       // An interrupt requested while turn/start was in flight could not name the turn yet.
+      turn.markReady();
       if (turn.failure) void interruptTurn(session, turn, turn.failure);
       return { threadId: session.threadId, turnId: turn.turnId, operationId: turn.operationId, done: turn.done };
     } catch (error) {
       turn.cancelDeadline();
+      turn.markReady();
       if (session.current === turn) session.current = null;
       if (error instanceof RuntimeFailure) throw error;
       throw fail('RUNTIME_DISCONNECTED', sanitize(error instanceof Error ? error.message : String(error), sourceEnv), true);
@@ -969,11 +979,19 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
   type Call = { requestId: string | number; callId: string; tool: string; threadId: string; turnId: string; args: unknown };
 
   async function executeToolCall(session: Session, call: Call): Promise<ToolReply> {
-    const turn = session.turns.get(call.turnId) ?? session.current;
+    // A call runs only inside a live turn of this thread. An unknown or settled turn (a late call
+    // from a cancelled or finished turn) is refused and leaves no trace in the run's events.
+    let turn = session.turns.get(call.turnId);
+    if (!turn && session.current?.turnId === null) {
+      await session.current.ready;
+      turn = session.turns.get(call.turnId);
+    }
     const ids = { threadId: call.threadId, turnId: call.turnId, callId: call.callId, itemId: call.callId, serverRequestId: call.requestId };
     const startedAt = clock.now();
     const elapsed = () => Math.max(0, clock.now() - startedAt);
     const reply = (success: boolean, body: object): ToolReply => ({ success, text: JSON.stringify(body) });
+    const staleReply = (tool: string): ToolReply => reply(false, { ok: false, tool, error: failure('CANCELLED', 'This turn is no longer active; the tool was not run'), contextCommit: null });
+    if (!turn || turn.settled) return staleReply(call.tool);
 
     const name = ToolNameSchema.safeParse(call.tool);
     if (!name.success) {
@@ -982,7 +1000,7 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
         { type: 'tool.started', payload: { ...ids, name: call.tool, arguments: call.args, attempt: 1 } },
         { type: 'tool.failed', payload: { ...ids, name: call.tool, error, contextCommit: null, elapsedMs: elapsed(), attempt: 1 } },
       ]);
-      if (turn) void interruptTurn(session, turn, error);
+      void interruptTurn(session, turn, error);
       return reply(false, { ok: false, tool: call.tool, error, contextCommit: null });
     }
     const tool = name.data;
@@ -1000,16 +1018,17 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
       return refuse(failure('INVALID_INPUT', input.error.issues.map((i) => `${i.path.join('.') || 'arguments'}: ${i.message}`).join('; ')));
     }
     const run = await store.getRun(session.runId);
-    // The tool context comes from the thread binding and stored run state, never from model arguments.
-    if (run.state.stopped || (turn && run.state.cancellationEpoch !== turn.epoch)) {
+    // The epoch is checked on every call against the epoch the turn was started in.
+    if (run.state.stopped || run.state.cancellationEpoch !== turn.epoch) {
       return refuse(failure('CANCELLED', 'This operation was superseded; the tool was not run', false));
     }
+    // The tool context comes from the thread binding and stored run state, never from model arguments.
     const context: ToolContext = {
       runId: session.runId,
       studentId: run.state.studentId,
       corpusHash: run.state.corpusHash,
       phase: run.state.phase,
-      cancellationEpoch: run.state.cancellationEpoch,
+      cancellationEpoch: turn.epoch,
       revision: run.revision,
       threadId: call.threadId,
       turnId: call.turnId,
@@ -1048,11 +1067,44 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
   // -------------------------------------------------------------------------------------------
   // Steering
 
+  // turn.steered and the voice operation's move to `steered` commit together. A repeat of the same
+  // steer replays its receipt, and a steer for a superseded epoch writes nothing.
+  async function recordSteer(session: Session, turn: TurnState, expectedTurnId: string, request: SteerRequest) {
+    const operationId = request.operationId ?? turn.operationId;
+    for (let attempt = 1; ; attempt += 1) {
+      const run = await store.getRun(request.runId);
+      if (run.state.stopped || (request.cancellationEpoch !== undefined && run.state.cancellationEpoch !== request.cancellationEpoch)) return;
+      const payload = { threadId: session.threadId, expectedTurnId, operationId, explanationRevision: request.explanationRevision, cancellationEpoch: run.state.cancellationEpoch };
+      try {
+        await store.transition({
+          runId: request.runId,
+          commandKey: `turn_steered:${operationId}:${request.explanationRevision}`,
+          body: payload,
+          expectedRevision: run.revision,
+          resultSchema: z.object({ operationId: z.string() }),
+          apply: (context) => ({
+            state: context.state,
+            events: [{ type: 'turn.steered', payload }],
+            voiceOperations: [{ kind: 'status', operationId, status: 'steered', expected: ['started'], onMismatch: 'skip' }],
+            result: { operationId },
+          }),
+        });
+        return;
+      } catch (error) {
+        // Another write moved the revision between the read and the commit: read again once.
+        if (!(error instanceof DomainError) || error.code !== 'STALE_REVISION' || attempt >= 2) throw error;
+      }
+    }
+  }
+
   async function trySteer(request: SteerRequest): Promise<string | null> {
     const session = sessions.get(request.runId);
     const turn = session?.current;
     if (!session || !turn || turn.stale || turn.turnId === null) return null;
-    const data = typeof request.input === 'function' ? request.input(await store.getRun(request.runId)) : request.input;
+    const run = await store.getRun(request.runId);
+    // A steer for a superseded epoch is neither sent nor recorded.
+    if (run.state.stopped || (request.cancellationEpoch !== undefined && run.state.cancellationEpoch !== request.cancellationEpoch)) return null;
+    const data = typeof request.input === 'function' ? request.input(run) : request.input;
     const { turnText, instructions } = checkedInstructions(request.phase, data);
     try {
       const params: v2.TurnSteerParams = { threadId: session.threadId, input: [{ type: 'text', text: turnText, text_elements: [] }], expectedTurnId: turn.turnId };
@@ -1063,11 +1115,8 @@ export function createCodexRuntime(deps: CodexRuntimeDeps): CodexRuntime {
       turn.stale = true;
       return null;
     }
-    const run = await store.getRun(request.runId);
-    await emit(session, [
-      runtimeInputEvent(session, request.phase, data, instructions),
-      { type: 'turn.steered', payload: { threadId: session.threadId, expectedTurnId: turn.turnId, operationId: turn.operationId, explanationRevision: request.explanationRevision, cancellationEpoch: run.state.cancellationEpoch } },
-    ]);
+    await emit(session, [runtimeInputEvent(session, request.phase, data, instructions)]);
+    await recordSteer(session, turn, turn.turnId, request);
     return turn.turnId;
   }
 
@@ -1159,24 +1208,19 @@ function withDeadline<T>(work: Promise<T>, ms: number, clock: Clock): Promise<T 
 // ---------------------------------------------------------------------------------------------
 // Ports for the rest of the application
 
-export type OperationSettlement = {
-  operationId: string;
-  phase: RuntimePhase;
-  cancellationEpoch: number;
-  status: 'completed' | 'blocked' | 'failed';
-  code?: ErrorCode;
-  message?: string;
-};
-
 // Closes the loop after a turn: if the turn ended without the effect its phase requires, the engine
 // moves the run (NO_MATCH for a blocked ingestion, ERROR for a failure). It does nothing when the
 // required effect was committed, so calling it after every turn is safe.
 export type SettleOperation = (runId: string, settlement: OperationSettlement) => Promise<unknown>;
 
+// The engine records a closed set of failure codes; any other cause is reported as a lost runtime.
+const SETTLEMENT_CODES: readonly NonNullable<OperationSettlement['code']>[] = ['MODEL_TIMEOUT', 'RUNTIME_DISCONNECTED', 'AUTH_REQUIRED', 'UNKNOWN_TOOL', 'VALIDATION_FAILED'];
+const settlementCode = (code: ErrorCode): NonNullable<OperationSettlement['code']> => SETTLEMENT_CODES.find((known) => known === code) ?? 'RUNTIME_DISCONNECTED';
+
 export function settlementFor(result: TurnResult, phase: RuntimePhase, cancellationEpoch: number): OperationSettlement {
   const base = { operationId: result.operationId, phase, cancellationEpoch };
   if (result.status !== 'completed' || result.error) {
-    return { ...base, status: 'failed', code: result.error?.code ?? 'RUNTIME_DISCONNECTED', message: result.error?.message ?? 'The agent turn did not complete' };
+    return { ...base, status: 'failed', code: settlementCode(result.error?.code ?? 'RUNTIME_DISCONNECTED'), message: result.error?.message ?? 'The agent turn did not complete' };
   }
   return { ...base, status: result.final?.status === 'blocked' ? 'blocked' : 'completed' };
 }
@@ -1189,8 +1233,6 @@ async function settleWhenDone(runtime: { done: Promise<TurnResult> }, runId: str
     report(error);
   }
 }
-
-export type TurnRequest = { runId: string; operationId: string; cancellationEpoch: number; phase: 'explanation' | 'verification'; input: object };
 
 // The surface the learning engine drives for explanation and verification turns.
 export function createRuntimePort(options: { runtime: CodexRuntime; settle: SettleOperation; closeVoice: (runId: string) => Promise<void>; onError?: (error: unknown) => void }) {

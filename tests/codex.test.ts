@@ -320,6 +320,8 @@ describe('turns and model', () => {
     assert.equal(events[0]?.payload.expectedTurnId, 'turn_1');
     assert.equal(events[0]?.payload.explanationRevision, 2);
     assert.equal(s.server.count('turn/start'), 1);
+    // The voice operation moves to steered in the same transition as turn.steered.
+    assert.deepEqual(s.store.voiceChanges, [{ kind: 'status', operationId: events[0]?.payload.operationId, status: 'steered', expected: ['started'], onMismatch: 'skip' }]);
 
     // The turn completes; a later steer has no active turn and starts a new one in the same thread.
     s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor('turn_1', 'completed') });
@@ -338,6 +340,37 @@ describe('turns and model', () => {
     assert.equal(s.server.count('turn/steer'), 2);
     assert.equal(s.store.ofType('turn.steered').length, 1);
     assert.equal(s.server.count('thread/start'), 1);
+  });
+
+  test('a steer for a superseded cancellation epoch is neither sent nor recorded (mocked Codex)', async () => {
+    const s = setup();
+    await startedTurn(s);
+    s.store.state = runState({ cancellationEpoch: 1 });
+    const steered = await s.runtime.trySteer({ runId: RUN_ID, phase: 'explanation', input: { text: 'late' }, explanationRevision: 5, operationId: 'op_late', cancellationEpoch: 0 });
+    assert.equal(steered, null);
+    assert.equal(s.server.count('turn/steer'), 0);
+    assert.equal(s.store.ofType('turn.steered').length, 0);
+    assert.deepEqual(s.store.voiceChanges, []);
+  });
+
+  test('a late tool call from a settled turn is refused and writes nothing (mocked Codex)', async () => {
+    const s = setup();
+    const turn = await startedTurn(s);
+    s.server.notify('turn/completed', { threadId: THREAD_ID, turn: turnFor(TURN_ID, 'interrupted') });
+    await turn.done;
+    const eventsBefore = s.store.events.length;
+    const stateBefore = JSON.stringify(s.store.state);
+    const late = await s.server.request('item/tool/call', callParams('call_late', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }), 'rpc-late');
+    assert.equal(late.id, 'rpc-late');
+    const text = (late.result as { success: boolean; contentItems: { text: string }[] }).contentItems[0]?.text ?? '';
+    assert.equal((late.result as { success: boolean }).success, false);
+    assert.equal(toolReplyText(text).error?.code, 'CANCELLED');
+    // A call naming a turn this thread never ran is refused the same way.
+    const unknown = await s.server.request('item/tool/call', { ...callParams('call_ghost', 'assess_attempt', { attemptId: 'attempt_1', criterion: 'initial' }), turnId: 'turn_ghost' });
+    assert.equal(toolReplyText((unknown.result as { contentItems: { text: string }[] }).contentItems[0]?.text ?? '').error?.code, 'CANCELLED');
+    assert.equal(s.calls.length, 0);
+    assert.equal(s.store.events.length, eventsBefore);
+    assert.equal(JSON.stringify(s.store.state), stateBefore);
   });
 
   test('at 90 s the turn is interrupted and committed effects stay (mocked Codex)', async () => {
