@@ -61,18 +61,18 @@ private struct OfflineView: View {
 
     var body: some View {
         VStack(spacing: ShellStyle.spacing) {
-            Text(ShellCopy.offlineTitle)
+            Text(ShellCopy.text.offlineTitle)
                 .font(.system(size: ShellStyle.headingSize, weight: .bold, design: .rounded))
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("offline-title")
             if isHoldingActivity {
-                Text(ShellCopy.offlineBody)
+                Text(ShellCopy.text.offlineBody)
                     .font(.system(size: ShellStyle.bodySize, design: .rounded))
                     .foregroundStyle(ShellStyle.muted)
                     .accessibilityIdentifier("offline-body")
             }
             Button(action: retry) {
-                Text(ShellCopy.retry)
+                Text(ShellCopy.text.retry)
                     .font(.system(size: ShellStyle.bodySize, weight: .semibold, design: .rounded))
                     .frame(minWidth: ShellStyle.studentTarget * 3, minHeight: ShellStyle.studentTarget)
             }

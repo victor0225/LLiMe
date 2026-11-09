@@ -11,8 +11,20 @@ final class ContractDriftTests: XCTestCase {
 
     func test_the_shell_copy_matches_the_shared_copy_module() throws {
         let block = try section(of: "src/copy.ts", from: "export const SHELL_COPY = {", to: "} as const;")
-        let shared = Dictionary(uniqueKeysWithValues: matches(of: #"(\w+): '((?:[^'\\]|\\.)*)'"#, in: block).map { ($0[0], $0[1].replacingOccurrences(of: "\\'", with: "'")) })
-        let native = ["offlineTitle": ShellCopy.offlineTitle, "offlineBody": ShellCopy.offlineBody, "retry": ShellCopy.retry]
+        var shared: [String: String] = [:]
+        for line in block.split(separator: "\n").map({ String($0.split(separator: "//", maxSplits: 1, omittingEmptySubsequences: false)[0]) }) {
+            guard let key = matches(of: #"^\s*(\w+)\s*:"#, in: line).first?.first else { continue }
+            // Only a plain single-quoted literal can be mirrored; anything else must fail, not be skipped.
+            let value = try XCTUnwrap(matches(of: #"^\s*\w+\s*:\s*'((?:[^'\\]|\\.)*)',?\s*$"#, in: line).first?.first, "SHELL_COPY.\(key) is not a plain string literal")
+            XCTAssertNil(shared[key], "SHELL_COPY.\(key) appears twice")
+            shared[key] = value.replacingOccurrences(of: "\\'", with: "'")
+        }
+        var native: [String: String] = [:]
+        for child in Mirror(reflecting: ShellCopy.text).children {
+            let label = try XCTUnwrap(child.label)
+            native[label] = try XCTUnwrap(child.value as? String, "ShellCopy.\(label) is not text")
+        }
+        XCTAssertFalse(shared.isEmpty)
         XCTAssertEqual(native, shared)
     }
 

@@ -24,6 +24,7 @@ final class ShellModel: NSObject {
     @ObservationIgnored private var router = TapRouter()
     @ObservationIgnored private var destinationLoad: (navigation: WKNavigation, tap: NotificationTap)?
     @ObservationIgnored private var isProbing = false
+    @ObservationIgnored private var reconnectTask: Task<Void, Never>?
     @ObservationIgnored private var microphoneObservation: NSKeyValueObservation?
 
     init(origin: Result<URL, ShellOriginError>) {
@@ -40,8 +41,11 @@ final class ShellModel: NSObject {
         webView.isInspectable = true
         webView.navigationDelegate = self
         webView.uiDelegate = self
-        microphoneObservation = webView.observe(\.microphoneCaptureState, options: [.new]) { _, change in
-            ShellLog.write("webview.microphone", change.newValue.map(Self.describe) ?? "unknown")
+        // The change record does not carry this enum's new value, so read it from the web view. WebKit
+        // reports capture changes on the main thread.
+        microphoneObservation = webView.observe(\.microphoneCaptureState) { webView, _ in
+            let state = MainActor.assumeIsolated { webView.microphoneCaptureState }
+            ShellLog.write("webview.microphone", Self.describe(state))
         }
     }
 
@@ -98,7 +102,6 @@ final class ShellModel: NSObject {
 
     private func openPendingTap() async {
         guard case .success(let origin) = origin, router.isWebViewMounted, router.pending != nil, !isProbing else { return }
-        connection = .connecting
         isProbing = true
         let isReachable = await BackendProbe.isReachable(origin)
         isProbing = false
@@ -112,6 +115,7 @@ final class ShellModel: NSObject {
             return
         }
         ShellLog.write("notification.open", destination.absoluteString)
+        connection = .connecting
         if let navigation = webView.load(URLRequest(url: destination)) {
             destinationLoad = (navigation, tap)
         }
@@ -119,8 +123,24 @@ final class ShellModel: NSObject {
 
     private func goOffline() {
         let isHoldingActivity = router.pending != nil
-        ShellLog.write("shell.offline", "holdingActivity=\(isHoldingActivity)")
-        connection = .offline(isHoldingActivity: isHoldingActivity)
+        let offline = Connection.offline(isHoldingActivity: isHoldingActivity)
+        if connection != offline { ShellLog.write("shell.offline", "holdingActivity=\(isHoldingActivity)") }
+        connection = offline
+        if isHoldingActivity { keepReconnecting() }
+    }
+
+    /// While a tapped activity waits offline, the shell keeps looking for the backend so the activity
+    /// opens once the connection is back, as the offline screen says. Retry checks at once.
+    private func keepReconnecting() {
+        guard reconnectTask == nil else { return }
+        reconnectTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.reconnectInterval)
+                guard let self, case .offline(isHoldingActivity: true) = self.connection else { break }
+                await self.openPendingTap()
+            }
+            self?.reconnectTask = nil
+        }
     }
 
     private func navigationFailed(_ navigation: WKNavigation?, _ error: Error) {
@@ -133,6 +153,10 @@ final class ShellModel: NSObject {
         }
         goOffline()
     }
+
+    // Often enough that the activity appears soon after the backend restarts; each check is one
+    // loopback request.
+    private static let reconnectInterval = Duration.seconds(3)
 
     // MARK: Descriptions for the log
 
