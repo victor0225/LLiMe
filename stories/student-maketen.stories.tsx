@@ -163,7 +163,15 @@ function createStoryServer(initial: Activity | null, onVoiceCommand: (body: unkn
   };
 }
 
-function Harness({ initial, numberLine = NumberLineProbe, deliveries = [] }: { initial: Activity | null; numberLine?: NumberLineSlot; deliveries?: { label: string; activity: Activity }[] }): ReactNode {
+type HarnessProps = {
+  initial: Activity | null;
+  numberLine?: NumberLineSlot;
+  deliveries?: { label: string; activity: Activity }[];
+  // Stories have no voice session, so an independent start is allowed unless a story waits on purpose.
+  independentStart?: 'waiting' | 'ready';
+};
+
+function Harness({ initial, numberLine = NumberLineProbe, deliveries = [], independentStart = 'ready' }: HarnessProps): ReactNode {
   const [log, setLog] = useState<LogEntry[]>([]);
   const [server] = useState(() => createStoryServer(initial, (body) => setLog((entries) => [...entries, { kind: 'activity_rendered', detail: body }])));
   const { run } = useRunEvents(server.store);
@@ -180,6 +188,7 @@ function Harness({ initial, numberLine = NumberLineProbe, deliveries = [] }: { i
           store={server.store}
           voiceSessionId={null}
           numberLine={numberLine}
+          independentStart={independentStart}
           onSubmit={(target, attempt) => setLog((entries) => [...entries, { kind: 'submit', detail: { target, attempt } }])}
         />
       )}
@@ -224,6 +233,7 @@ export const Support: Story = { args: { initial: support } };
 export const SupportPear: Story = { args: { initial: storyActivity(makeTenSupport, 'make_ten_blocks', { spec: withAppearance(makeTenSupport.spec, 'pear') }) } };
 export const SupportDot: Story = { args: { initial: storyActivity(makeTenSupport, 'make_ten_blocks', { spec: withAppearance(makeTenSupport.spec, 'dot') }) } };
 export const Independent: Story = { args: { initial: independent } };
+export const IndependentWaiting: Story = { args: { initial: independent, independentStart: 'waiting' } };
 export const HostReplacements: Story = { args: { initial: support, numberLine: BrokenNumberLine, deliveries: DELIVERIES } };
 export const HostNumberLine: Story = { args: { initial: storyActivity(numberLineSupport, 'anchor_start_number_line') } };
 export const HostNumberLineIndependent: Story = { args: { initial: storyActivity(numberLineIndependent, 'independent_number_line') } };

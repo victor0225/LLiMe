@@ -41,6 +41,9 @@ export type ActivityViewProps = {
   // The live voice session to name in the receipt, or null without one.
   voiceSessionId: string | null;
   numberLine: NumberLineSlot;
+  // An independent activity mounts with its controls disabled; Start problem enables them, and it is
+  // offered only once the screen reports `ready` (voice torn down, or no voice session at all).
+  independentStart: 'waiting' | 'ready';
   onSubmit: (target: SubmitTarget, attempt: AnyAttempt) => void;
 };
 
@@ -167,10 +170,12 @@ class RenderBoundary extends Component<{ children: ReactNode }, { failed: boolea
   }
 }
 
-export function ActivityView({ activity, store, voiceSessionId, numberLine, onSubmit }: ActivityViewProps): ReactNode {
+export function ActivityView({ activity, store, voiceSessionId, numberLine, independentStart, onSubmit }: ActivityViewProps): ReactNode {
   const [state, setState] = useState<HostState>(() => receive(EMPTY_HOST, activity));
   if (activity !== state.seen) setState(receive(state, activity));
   const titleId = useId();
+  const [startedKey, setStartedKey] = useState<string | null>(null);
+  const controls = useRef<HTMLFieldSetElement>(null);
   const mountedKey = useRef<string | null>(null);
   const acknowledged = useRef(new Set<string>());
   const { current } = state;
@@ -199,6 +204,14 @@ export function ActivityView({ activity, store, voiceSessionId, numberLine, onSu
     setState((latest) => (latest.current?.key === current.key ? { ...latest, current: latest.previous, previous: null, failed: true } : latest));
   }, [current]);
 
+  const isIndependent = current?.spec.phase === 'independent';
+  const started = current !== null && (!isIndependent || startedKey === current.key);
+
+  // Pressing Start removes the button, so hand keyboard focus to the first control it enabled.
+  useEffect(() => {
+    if (isIndependent && started) controls.current?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled)')?.focus();
+  }, [isIndependent, started]);
+
   return (
     <div className="activity-view">
       {state.failed ? (
@@ -212,13 +225,20 @@ export function ActivityView({ activity, store, voiceSessionId, numberLine, onSu
             {current.activity.title}
           </h2>
           <p className="activity-problem">{current.activity.body}</p>
-          <MountedActivityContext.Provider value={mounted}>
-            <RenderBoundary key={current.key}>
-              <JSONUIProvider registry={registry}>
-                <Renderer spec={current.renderSpec} registry={registry} />
-              </JSONUIProvider>
-            </RenderBoundary>
-          </MountedActivityContext.Provider>
+          {started ? null : (
+            <button type="button" className="p-button activity-start" disabled={independentStart !== 'ready'} onClick={() => setStartedKey(current.key)}>
+              {STUDENT_COPY.startProblem}
+            </button>
+          )}
+          <fieldset ref={controls} className="activity-controls" disabled={!started}>
+            <MountedActivityContext.Provider value={mounted}>
+              <RenderBoundary key={current.key}>
+                <JSONUIProvider registry={registry}>
+                  <Renderer spec={current.renderSpec} registry={registry} />
+                </JSONUIProvider>
+              </RenderBoundary>
+            </MountedActivityContext.Provider>
+          </fieldset>
         </article>
       ) : null}
     </div>

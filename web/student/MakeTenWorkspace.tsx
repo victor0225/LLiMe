@@ -61,7 +61,7 @@ function layoutOf(second: number, placements: readonly Placement[]): Layout {
 export function equationLines(first: number, second: number, inBox: number, leftOver: number): string[] {
   if (inBox === 0 && leftOver === 0) return [MAKE_TEN_COPY.equationStart(first, second)];
   const boxTotal = first + inBox;
-  const lines = [boxTotal === TEN_FRAME_SLOTS ? MAKE_TEN_COPY.equationBoxFull(first, inBox) : MAKE_TEN_COPY.equationBox(first, inBox)];
+  const lines = [boxTotal === TEN_FRAME_SLOTS ? MAKE_TEN_COPY.equationBoxFull(first, inBox, TEN_FRAME_SLOTS) : MAKE_TEN_COPY.equationBox(first, inBox)];
   if (leftOver > 0) lines.push(MAKE_TEN_COPY.equationLeftOver(boxTotal, leftOver));
   return lines;
 }

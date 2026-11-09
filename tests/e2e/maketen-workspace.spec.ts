@@ -184,7 +184,10 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
         await expect(page.getByRole('button', { name })).toBeVisible();
       }
       await expectConservedCounts(page, INDEPENDENT);
+      await expect(objectButton(page, 't0')).toBeDisabled();
       await expectAccessible(page);
+      await page.getByRole('button', { name: STUDENT_COPY.startProblem }).click();
+      await expect(objectButton(page, 't0')).toBeEnabled();
 
       const moves = makeTenMoves(INDEPENDENT);
       for (const { objectId, to } of moves) await move(page, objectId, to);

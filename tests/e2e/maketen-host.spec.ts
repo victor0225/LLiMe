@@ -88,6 +88,16 @@ for (const [orientation, viewport] of [['landscape', LANDSCAPE], ['portrait', PO
       await expectAccessible(page);
     });
 
+    test('an independent activity is acknowledged with its controls disabled until the start is allowed', async ({ page }) => {
+      await openStory(page, 'independent-waiting');
+      await expectMounted(page, makeTenIndependent.context);
+      await expect(page.getByRole('button', { name: STUDENT_COPY.startProblem })).toBeDisabled();
+      await expect(page.locator('button[data-object-id="t0"]')).toBeDisabled();
+      await expect(page.getByLabel(STUDENT_COPY.yourAnswer)).toBeDisabled();
+      await expect.poll(() => receipts(page)).toEqual([storedReceipt(makeTenIndependent.context)]);
+      await expectAccessible(page);
+    });
+
     test('a NumberLine spec with StartMarker and JumpCounter mounts the number-line slot with them', async ({ page }) => {
       await openStory(page, 'host-number-line');
       await expectMounted(page, numberLineSupport.context);

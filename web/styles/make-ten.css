@@ -7,6 +7,8 @@
 .activity-title { margin: 0; font-size: var(--p-font-heading); line-height: var(--p-line-heading); }
 .activity-problem { margin: var(--p-space-1) 0 0; font-size: var(--p-font-math); font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .activity-failed { margin: 0 0 var(--p-space-2); }
+.activity-start { margin-top: var(--p-space-2); min-height: 64px; }
+.activity-controls { min-width: 0; margin: 0; padding: 0; border: 0; }
 
 .mt-notice { margin: var(--p-space-2) 0 0; }
 .mt-board { display: flex; flex-wrap: wrap; gap: var(--p-space-2); margin: var(--p-space-2) 0; align-items: flex-start; }

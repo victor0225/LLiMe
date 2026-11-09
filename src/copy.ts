@@ -103,7 +103,8 @@ export const MAKE_TEN_COPY = {
   // The full sum is never stated; the child types it.
   equationStart: (first: number, second: number) => sum({ lhs: first, rhs: second }),
   equationBox: (first: number, inBox: number) => sum({ lhs: first, rhs: inBox }),
-  equationBoxFull: (first: number, inBox: number) => `${sum({ lhs: first, rhs: inBox })} = ${first + inBox}`,
+  // Used only when the box is full; it prints the box size and never adds the operands itself.
+  equationBoxFull: (first: number, inBox: number, boxSize: number) => `${sum({ lhs: first, rhs: inBox })} = ${boxSize}`,
   equationLeftOver: (boxTotal: number, leftOver: number) => problemQuestion({ lhs: boxTotal, rhs: leftOver }),
 } as const;
 
