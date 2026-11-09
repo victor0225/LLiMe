@@ -41,11 +41,9 @@ final class ShellModel: NSObject {
         webView.isInspectable = true
         webView.navigationDelegate = self
         webView.uiDelegate = self
-        // The change record does not carry this enum's new value, so read it from the web view. WebKit
-        // reports capture changes on the main thread.
+        // The change record does not carry this enum's new value, so read it from the web view.
         microphoneObservation = webView.observe(\.microphoneCaptureState) { webView, _ in
-            let state = MainActor.assumeIsolated { webView.microphoneCaptureState }
-            ShellLog.write("webview.microphone", Self.describe(state))
+            Task { @MainActor in ShellLog.write("webview.microphone", Self.describe(webView.microphoneCaptureState)) }
         }
     }
 
@@ -145,8 +143,9 @@ final class ShellModel: NSObject {
 
     private func navigationFailed(_ navigation: WKNavigation?, _ error: Error) {
         ShellLog.write("webview.load.failed", error.localizedDescription)
-        // A newer navigation replacing this one is not a connection problem.
-        if (error as? URLError)?.code == .cancelled { return }
+        // Only a failure to reach the backend is a connection problem; a navigation replaced by a newer
+        // one or refused by the origin policy is not.
+        guard let code = (error as? URLError)?.code, Self.connectionFailures.contains(code) else { return }
         if let load = destinationLoad, load.navigation === navigation {
             destinationLoad = nil
             router.backendProbed(isReachable: false)
@@ -157,6 +156,7 @@ final class ShellModel: NSObject {
     // Often enough that the activity appears soon after the backend restarts; each check is one
     // loopback request.
     private static let reconnectInterval = Duration.seconds(3)
+    private static let connectionFailures: Set<URLError.Code> = [.cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .notConnectedToInternet, .timedOut]
 
     // MARK: Descriptions for the log
 
@@ -164,7 +164,16 @@ final class ShellModel: NSObject {
         "notificationId=\(tap.notificationId) runId=\(tap.runId) activityId=\(tap.activityId) activityRevision=\(tap.activityRevision)"
     }
 
-    nonisolated private static func describe(_ state: WKMediaCaptureState) -> String {
+    private static func describe(_ type: WKMediaCaptureType) -> String {
+        switch type {
+        case .camera: "camera"
+        case .microphone: "microphone"
+        case .cameraAndMicrophone: "cameraAndMicrophone"
+        @unknown default: "unknown"
+        }
+    }
+
+    private static func describe(_ state: WKMediaCaptureState) -> String {
         switch state {
         case .none: "none"
         case .active: "active"
@@ -233,7 +242,7 @@ extension ShellModel: WKUIDelegate {
             false
         }
         let decision: WKPermissionDecision = isConfiguredPage && frame.isMainFrame && type == .microphone ? .prompt : .deny
-        ShellLog.write("webview.media-capture", "origin=\(requester) mainFrame=\(frame.isMainFrame) type=\(type.rawValue) decision=\(decision == .prompt ? "prompt" : "deny")")
+        ShellLog.write("webview.media-capture", "origin=\(requester) mainFrame=\(frame.isMainFrame) type=\(Self.describe(type)) decision=\(decision == .prompt ? "prompt" : "deny")")
         decisionHandler(decision)
     }
 }
