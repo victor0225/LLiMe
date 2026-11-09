@@ -17,6 +17,7 @@
     "test:e2e": "playwright test",
     "setup:env": "node scripts/setup-env.mjs",
     "db:up": "docker compose -p llime-local up -d --wait",
+    "doctor": "tsx scripts/doctor.ts",
     "dataset": "tsx scripts/dataset.ts",
     "seed": "tsx scripts/seed.ts",
     "live:codex": "tsx scripts/live-codex.ts",
