@@ -1,6 +1,9 @@
+/// <reference types="vite/client" />
 // Live adapter: turns the server's saved run events into the ordered view events the projection reads,
 // and follows one run through the shared event store. Reads only this app's own polling routes.
 import { useEffect, useMemo, useState } from 'react';
+import { CaseSchema, type LearningCase, type Problem } from '@core/domain';
+import { z } from 'zod';
 import type { EventType, RunEvent } from '@core/events';
 import { createEventStore, type EventStore, type RunView } from '../lib/event-store.js';
 import { advancePast, type CorpusIndex, createProjection, project, PROJECTED_EVENT_TYPES, type ProjectedEventType, type ProjectionSnapshot, ProjectionRejectedError, type ViewEvent } from './event-projection.js';
@@ -89,8 +92,12 @@ export interface LiveRun {
   readonly snapshot: ProjectionSnapshot;
   readonly status: RunView['status'];
   readonly error: string | null;
-  // Elapsed time of the last event the view applied, shown as `+N.Ns` on the footer.
+  // The last event the view applied, with its real elapsed time, for the footer line.
   readonly raw: ViewEvent | null;
+  // From the saved run state, for wording the scene cannot take from events.
+  readonly problem: Problem | null;
+  readonly corpusHash: string | null;
+  readonly lessonText: string | null;
 }
 
 // Follows one run. The snapshot is rebuilt from the store's full event list whenever it grows, so a store
@@ -109,5 +116,39 @@ export function useLiveRun(runId: string, corpus: CorpusIndex | null, store?: Ev
     };
   }, [own]);
   const snapshot = useMemo(() => foldViewEvents(runId, corpus, adaptRunEvents(view.events)), [runId, corpus, view.events]);
-  return { snapshot, status: view.status, error: view.error, raw: snapshot.raw };
+  return { snapshot, status: view.status, error: view.error, raw: snapshot.raw, problem: view.run?.selectedProblems?.initial ?? null, corpusHash: view.run?.corpusHash ?? null, lessonText: view.run?.lesson?.text ?? null };
+}
+
+// The pinned corpus the search ran over, loaded on demand so the main bundle stays small. The scene draws
+// every branch from it; it never decides anything.
+const corpusFiles = (): Record<string, () => Promise<unknown>> => import.meta.glob('../../data/seed/cases.json', { import: 'default' });
+const manifestFiles = (): Record<string, () => Promise<unknown>> => import.meta.glob('../../data/seed/manifest.json', { import: 'default' });
+
+export interface Corpus {
+  readonly cases: readonly LearningCase[];
+  // The hash a run records when it pins this corpus.
+  readonly corpusHash: string;
+}
+
+export async function loadCorpus(): Promise<Corpus> {
+  const [cases] = Object.values(corpusFiles());
+  const [manifest] = Object.values(manifestFiles());
+  if (!cases || !manifest) throw new Error('The case corpus is not part of this build');
+  const { sha256 } = z.object({ sha256: z.string() }).parse(await manifest());
+  return { cases: CaseSchema.array().parse(await cases()), corpusHash: sha256 };
+}
+
+export function useCorpus(): { corpus: Corpus | null; error: string | null } {
+  const [state, setState] = useState<{ corpus: Corpus | null; error: string | null }>({ corpus: null, error: null });
+  useEffect(() => {
+    let live = true;
+    loadCorpus().then(
+      (corpus) => live && setState({ corpus, error: null }),
+      (error: unknown) => live && setState({ corpus: null, error: error instanceof Error ? error.message : String(error) }),
+    );
+    return () => {
+      live = false;
+    };
+  }, []);
+  return state;
 }

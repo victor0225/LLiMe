@@ -5,7 +5,7 @@
 // Two rules shape everything here. The scene shows what the search module decided (`admitted`,
 // `decision.groups`, `scores`) and never recomputes it, and the query graph grows only through events the
 // server committed, so a rejected or foreign event leaves the snapshot exactly as it was.
-import type { ConceptLink, Decision, ErrorCode, GraphEdge, GraphNode, LearningCase, Outcome, SearchResult, Strategy } from '@core/domain';
+import type { ConceptLink, Decision, ErrorCode, GraphEdge, GraphNode, LearningCase, MemorySummary, NodeType, Outcome, SearchResult, Strategy } from '@core/domain';
 import { validateCase } from '@core/domain';
 import type { EventPayload, EventType } from '@core/events';
 import { hypothesisText } from './learning-copy.js';
@@ -68,6 +68,7 @@ export interface MemoryRetrieval {
   readonly caseIds: readonly string[];
   readonly links: readonly ConceptLink[];
   readonly conceptIds: readonly string[];
+  readonly summaries: readonly MemorySummary[];
 }
 
 export interface CommittedOutcome {
@@ -97,6 +98,8 @@ export interface ProjectionSnapshot {
   // Fixed by the first graph.updated; later graphs must match.
   readonly queryId: string | null;
   readonly graph: LearningCase | null;
+  // Node types the latest graph.updated added, for the footer line.
+  readonly addedNodeTypes: readonly NodeType[];
   readonly memory: MemoryRetrieval | null;
   readonly search: SearchResult | null;
   readonly searching: boolean;
@@ -109,7 +112,7 @@ export interface ProjectionSnapshot {
 }
 
 export function createProjection(runId: string, corpus: CorpusIndex | null = null): ProjectionSnapshot {
-  return { runId, sequence: -1, corpus, queryId: null, graph: null, memory: null, search: null, searching: false, outcome: null, status: 'active', failure: null, agentEvents: [], raw: null };
+  return { runId, sequence: -1, corpus, queryId: null, graph: null, addedNodeTypes: [], memory: null, search: null, searching: false, outcome: null, status: 'active', failure: null, agentEvents: [], raw: null };
 }
 
 const reject = (message: string): never => {
@@ -195,15 +198,17 @@ const isProjected = (type: string): type is ProjectedEventType => (PROJECTED_EVE
 function apply(current: ProjectionSnapshot, event: ViewEvent): ProjectionSnapshot {
   switch (event.type) {
     case 'memory.retrieved': {
-      const { caseIds, links, conceptIds } = event.payload;
+      const { caseIds, links, conceptIds, summaries } = event.payload;
       const corpus = current.corpus;
       if (corpus && caseIds.some((id) => !corpus.caseIds.has(id))) reject('Retrieved memory names a case that does not exist');
-      return { ...current, memory: { caseIds, links, conceptIds } };
+      return { ...current, memory: { caseIds, links, conceptIds, summaries } };
     }
     case 'graph.updated': {
       checkGraph(event.payload.graph, current);
       // A rebuilt graph invalidates any earlier search, so a result never outlives the graph it matched.
-      return { ...current, queryId: event.payload.graph.id, graph: event.payload.graph, search: null, searching: false, status: 'active', failure: null };
+      const known = new Set(current.graph?.nodes.map((n) => n.id));
+      const addedNodeTypes = event.payload.graph.nodes.filter((n) => !known.has(n.id)).map((n) => n.type);
+      return { ...current, queryId: event.payload.graph.id, graph: event.payload.graph, addedNodeTypes, search: null, searching: false, status: 'active', failure: null };
     }
     case 'search.started': {
       if (!current.graph || event.payload.queryId !== current.queryId) reject('The search belongs to another query');
