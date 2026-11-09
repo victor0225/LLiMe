@@ -26,6 +26,18 @@ describe('playback during a correction', () => {
     assert.equal(playback.isInterrupted, false);
   });
 
+  test('a correction observed only as a newer revision and epoch (no cancelled operation) interrupts playback once and its replacement resumes it (stub voice client)', () => {
+    const { calls, client } = stubClient();
+    const playback = createCorrectionPlayback(client);
+    playback.runObserved({ explanationRevision: 1, cancellationEpoch: 0 });
+    assert.deepEqual(calls, [], 'the first snapshot only sets the baseline');
+    playback.runObserved({ explanationRevision: 2, cancellationEpoch: 1 });
+    playback.runObserved({ explanationRevision: 2, cancellationEpoch: 1 });
+    assert.deepEqual(calls, ['interruptPlayback']);
+    assert.equal(playback.replacementRendered(2), true);
+    assert.deepEqual(calls, ['interruptPlayback', 'resumePlayback']);
+  });
+
   test('a second correction before the replacement keeps playback off until the newest replacement (stub voice client)', () => {
     const { calls, client } = stubClient();
     const playback = createCorrectionPlayback(client);

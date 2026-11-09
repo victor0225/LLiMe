@@ -36,6 +36,8 @@ export type EventStore = {
   // actually sent, with the latest run, so it reads the current revision; it returns null to drop
   // an action whose target (activity, revision or voice session) is no longer current.
   sendRunCommand: <N extends RunMutation>(name: N, buildBody: (run: RunSnapshot) => MutationBody<N> | null, params?: ExtraParams) => Promise<MutationResult<N> | null>;
+  // Reads another JSON route through this store's fetch, so a fixture store never reaches the network.
+  readJson: (path: string) => Promise<unknown>;
 };
 
 // An error answer from the server. `body` is null when the answer was not a shared error body,
@@ -180,6 +182,7 @@ export function createEventStore(runId: string, { fetch: request = fetch, schedu
       queue = result.catch(() => undefined);
       return result;
     },
+    readJson: getJson,
   };
 }
 
