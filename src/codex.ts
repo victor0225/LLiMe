@@ -142,7 +142,8 @@ INPUT_JSON: {{observation, clarification, memory snapshot, revision}}`;
 const VERIFICATION_TEMPLATE = `PHASE: verification. Assess the supplied independentAttemptId with assess_attempt.
 Use only the returned observed rubric. Call commit_episode with that attempt ID,
 the actual support or retry attempt ID (or null if there was none), and the input
-revision as expectedRevision. Record failure or
+revision as expectedRevision. If commit_episode reports a stale revision, call it once more
+with the same attempt IDs and the revision the error reports. Record failure or
 incomplete evidence honestly; do not convert a correct number into an unseen strategy.
 Retention is pending. Return only accepted activity/case/evidence IDs in the
 phase-result schema and a short observable summary.

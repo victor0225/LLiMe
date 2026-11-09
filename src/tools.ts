@@ -651,7 +651,7 @@ async function practicedStrategies(current: TransitionContext): Promise<Strategy
 export async function commitEpisode(store: Store, context: ToolContext, rawInput: unknown): Promise<ToolResult> {
   return runTool('commit_episode', async () => {
     const input = parseInput(CommitEpisodeInputSchema, rawInput);
-    const { result } = await store.transition({
+    const committed = store.transition({
       runId: context.runId,
       commandKey: `commit_episode:${input.independentAttemptId}`,
       // The receipt is keyed by the attempts; a repeat with a newer revision still returns it.
@@ -688,6 +688,12 @@ export async function commitEpisode(store: Store, context: ToolContext, rawInput
           result: (written) => ({ caseId: episode.id, strategy: episode.strategy, outcome, retention: 'pending' as const, newRevision: revision, eventSeq: written.find((e) => e.type === 'outcome.committed')?.seq ?? current.seq + 1 }),
         };
       },
+    });
+    // Voice records and other commands move the revision while the turn runs. The model retries with
+    // the reported revision, and the apply above checks the run again; nothing is overridden.
+    const { result } = await committed.catch((error: unknown) => {
+      if (error instanceof DomainError && error.code === 'STALE_REVISION') throw new DomainError('STALE_REVISION', `${error.message}; call commit_episode again with expectedRevision ${error.revision}`, { revision: error.revision });
+      throw error;
     });
     return { ok: true, tool: 'commit_episode', data: result };
   });
