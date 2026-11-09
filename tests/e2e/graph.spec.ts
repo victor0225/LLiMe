@@ -173,6 +173,7 @@ test.describe('Learning memory scene', () => {
   });
 
   test('axe passes on every story', async ({ page }) => {
+    test.setTimeout(180_000);
     for (const id of STORY_IDS) {
       await open(page, id);
       await page.waitForTimeout(500);

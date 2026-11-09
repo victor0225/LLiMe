@@ -150,5 +150,5 @@ export function rawLine(event: ViewEvent | null, added: readonly NodeType[] = []
   return { type: event.type, fields: event.elapsedMs === undefined ? fields : [...fields, `+${(event.elapsedMs / 1000).toFixed(1)}s`] };
 }
 
-export const MISSING_RUN = 'Open this page with ?run=<run id> to follow a run.';
+export const MISSING_RUN = 'Open this page with ?runId=<run id> to follow a run.';
 export const CORPUS_MISMATCH = 'This run searched a different case corpus than the one bundled with this page, so its result cannot be drawn.';

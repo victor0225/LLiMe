@@ -552,8 +552,7 @@ function LiveRunView({ runId, corpus, index }: { runId: string; corpus: Corpus; 
   return <LearningMemoryScene snapshot={snapshot} reveal={reveal} rawEvent={raw} source="live" cases={corpus.cases} problem={problem} lessonText={lessonText} />;
 }
 
-// The page behind /backend?run=<run id>.
-export function BackendSurface() {
-  const runId = new URLSearchParams(window.location.search).get('run');
+// The page behind /backend?runId=<run id>.
+export function BackendSurface({ runId }: { runId: string | null }) {
   return runId ? <LiveBackendScene runId={runId} /> : <p role="alert">{MISSING_RUN}</p>;
 }
